@@ -287,10 +287,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | 0.7.5 | dev | Browser automation, settings pages, hardware abstraction, firmware restructure |
 | 0.7.6 | dev | Chat infrastructure, plugin/skill refactor, MCP integration, PngTuber |
 | 0.7.7 | 2026-08-11 | Theme system & marketplace enhancement, auth & security hardening |
+| 0.8.0 | 2026-09-12 | Desktop Electron shell, JSON→SQLite row-based storage, plugin/skill system, cross-platform packaging |
+| 0.8.1 | 2026-09-16 | Cloud access (device flow/PKCE), log hub, memory subsystem hardening |
 
 ---
 
-[Unreleased]: https://github.com/LuminousCX/LuomiNest/compare/v0.7.7...HEAD
+[Unreleased]: https://github.com/LuminousCX/LuomiNest/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/LuminousCX/LuomiNest/releases/tag/v0.8.1
+[0.8.0]: https://github.com/LuminousCX/LuomiNest/releases/tag/v0.8.0
 [0.7.7]: https://github.com/LuminousCX/LuomiNest/releases/tag/v0.7.7
 [0.7.4]: https://github.com/LuminousCX/LuomiNest/releases/tag/v0.7.4
 [0.7.0]: https://github.com/LuminousCX/LuomiNest/releases/tag/0.7.0

@@ -168,7 +168,7 @@ cd LuomiNest/backend
 
 # Install dependencies (uv recommended)
 pip install uv
-uv sync --group dev
+pip install -e ".[dev]"
 
 # Configure environment variables
 cp config/.env.example config/.env
@@ -428,7 +428,9 @@ By contributing, you agree your contributions will be licensed under the [GNU AG
 
 - Check [Issues](https://github.com/LuminousCX/LuomiNest/issues)
 - Join [Discussions](https://github.com/LuminousCX/LuomiNest/discussions)
-- Read [Documentation](文档/README.md)
+- Documentation: the 文档/ directory ships with the local workspace only
+  (it is excluded from the repository via .gitignore), so it is not browsable
+  on GitHub. Refer to it in your local checkout.
 
 ---
 

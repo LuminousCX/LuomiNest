@@ -65,7 +65,7 @@ help:
 	@echo ""
 	@echo "Platform-Specific Build:"
 	@echo "  make build-win            - Build Windows unpacked app (electron-builder)"
-	@echo "  make build-linux          - Build Linux packages (AppImage + deb + tar.gz)"
+	@echo "  make build-linux          - Build Linux packages (AppImage + deb)"
 	@echo "  make build-mac            - Build macOS DMG + zip"
 	@echo ""
 	@echo "Quality Commands:"
@@ -213,7 +213,7 @@ build-win: prepare-backend
 	@echo "Output: $(FRONTEND_DIR)/release/dist/"
 
 build-linux: prepare-backend
-	@echo "[Frontend] Building Linux packages (AppImage + deb + tar.gz)..."
+	@echo "[Frontend] Building Linux packages (AppImage + deb)..."
 	cd $(FRONTEND_DIR) && $(PNPM) run build:linux
 	@echo "Output: $(FRONTEND_DIR)/release/dist/"
 
@@ -223,7 +223,7 @@ build-mac: prepare-backend
 	@echo "Output: $(FRONTEND_DIR)/release/dist/"
 
 package:
-	@echo "[Package] Building & packaging installer for current platform (Inno Setup)..."
+	@echo "[Package] Building & packaging installer for current platform (electron-builder NSIS)..."
 ifeq ($(OS),Windows_NT)
 	pwsh -NoProfile -ExecutionPolicy Bypass -File $(PROJECT_ROOT)/build-all.ps1
 else

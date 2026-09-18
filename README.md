@@ -10,7 +10,7 @@
 [![Version](https://img.shields.io/badge/version-0.8.0-green.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D.svg?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
-[![Electron](https://img.shields.io/badge/Electron-41-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
+[![Electron](https://img.shields.io/badge/Electron-44-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![CodeRabbit](https://img.shields.io/endpoint?url=https://coderabbit.ai/api/badges/LuminousCX/LuomiNest&label=CodeRabbit)](https://coderabbit.ai)
 [![GitHub Stars](https://img.shields.io/github/stars/LuminousCX/LuomiNest?style=social)](https://github.com/LuminousCX/LuomiNest/stargazers)
@@ -57,7 +57,7 @@ LuomiNest 是一个开源的**分布式多用户关系型 AI 智能体平台**�
 
 | 层级 | 技术选型 |
 |------|---------|
-| **前端** | Electron 41 + Vue 3 + TypeScript + Pinia + PixiJS (Live2D) |
+| **前端** | Electron 44 + Vue 3 + TypeScript + Pinia + PixiJS (Live2D) |
 | **后端** | Python 3.12+ + FastAPI + Uvicorn + SQLAlchemy 2 (async) + APScheduler |
 | **存储** | SQLite (SQLAlchemy ORM, WAL 单库) + JSON 缓存；PostgreSQL / Redis 为云端化预留 |
 | **通信** | WebSocket + MQTT + HTTP/REST + SSE 流式响应 |
@@ -147,10 +147,10 @@ pnpm build
 cd docker
 
 # 开发环境（backend + PostgreSQL + Redis + MQTT；后端当前使用 SQLite，pg/redis 为预留）
-docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 # 生产环境
-docker compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 </details>
@@ -161,12 +161,12 @@ docker compose -f docker-compose.prod.yml up -d
 LuomiNest/
 ├── backend/                     # Python 后端服务
 │   ├── app/
-│   │   ├── api/v1/endpoints/    # REST API 端点（23 个模块）
+│   │   ├── api/v1/endpoints/    # REST API 端点（24 个模块）
 │   │   ├── api/ws/              # WebSocket（浏览器自动化、Avatar 驱动）
 │   │   ├── core/                # 配置、容器、端口、工具、工作流引擎、Agent 编排、调度器
 │   │   ├── domains/             # 领域逻辑（社交、群聊、AI-AI 对话）
 │   │   ├── engines/             # 引擎（记忆）
-│   │   ├── infrastructure/      # 基础设施（数据库 27 表、备份、MQTT、同步、适配器）
+│   │   ├── infrastructure/      # 基础设施（数据库 28 表、备份、MQTT、同步、适配器）
 │   │   ├── runtime/             # 运行时（平台适配器 ×13、插件、技能、Provider）
 │   │   ├── security/            # 安全（JWT、内部鉴权、RBAC、沙箱、审计、速率限制）
 │   │   └── services/            # 业务服务
@@ -185,7 +185,6 @@ LuomiNest/
 ├── firmware/                    # ESP32 嵌入式固件
 │   └── embedded/esp32-p4/       # ESP32-P4 主控（组件化：app / bsp / drivers）
 │
-├── cloud/                       # 可选云服务（独立部署，默认不启用）
 ├── templates/                   # 插件开发模板
 └── docker/                      # Docker 部署配置
 ```
@@ -247,7 +246,7 @@ The product bets on three things: **memory (it remembers you), companionship (it
 - **Theme System** — Preset themes and appearance settings, registry source management and extension marketplace
 - **IoT Smart Control** — MQTT device communication, ESP32-P4 hardware terminals, unified devices / scenes / rooms / automations view
 - **Desktop Client** — Electron app with built-in browser, desktop pet, Live2D avatar workshop, and console terminal
-- **Security** — JWT / token dual-mode authentication, RBAC (defined), local sandbox, command guard, rate limiting, audit logs, 24h scheduled backup
+- **Security** — JWT / token dual-mode authentication, RBAC (planned), local sandbox, command guard, rate limiting, audit logs, 24h scheduled backup
 - **Privacy First** — All dialogue and memory data stored locally in a single SQLite database; sensitive config AES-encrypted
 
 ## Quick Start
