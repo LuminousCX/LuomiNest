@@ -396,16 +396,34 @@ class VectorStore:
     def _rank_candidates(
         self, query_vec: np.ndarray, candidates: set[str], min_score: float
     ) -> list[tuple[str, float]]:
-        """逐候选余弦打分并降序排序（纯 CPU，放到线程避免阻塞事件循环）。"""
-        results = []
+        """批量余弦打分并降序排序（纯 CPU，放到线程避免阻塞事件循环）。
+
+        候选向量堆叠 (n,d) 矩阵单次 matmul（审计 B5-1）：旧实现逐候选 Python 级
+        np.dot，1 万条 50-100ms、10 万条秒级；堆叠后 10-100× 提升。
+        维度不匹配条目跳过（模型切换后的残留向量，加载侧已过滤，此处兜底）。
+        """
+        q = np.asarray(query_vec, dtype=np.float32)
+        q_norm = float(np.linalg.norm(q))
+        if q_norm == 0.0 or not candidates:
+            return []
+
+        fids: list[str] = []
+        vecs: list[np.ndarray] = []
         for fid in candidates:
             entry = self._cache.get(fid)
-            if entry is None:
+            if entry is None or entry.vector.shape != q.shape:
                 continue
-            score = self._cosine(query_vec, entry.vector)
-            if score >= min_score:
-                results.append((fid, score))
+            fids.append(fid)
+            vecs.append(entry.vector)
+        if not vecs:
+            return []
 
+        matrix = np.vstack(vecs)
+        denom = np.linalg.norm(matrix, axis=1) * q_norm
+        # 零向量余弦恒 0（与 _cosine 除零保护语义一致），仍参与 min_score 过滤
+        denom[denom == 0.0] = 1.0
+        scores = (matrix @ q) / denom
+        results = [(fid, float(score)) for fid, score in zip(fids, scores) if score >= min_score]
         results.sort(key=lambda x: x[1], reverse=True)
         return results
 
@@ -432,12 +450,22 @@ class VectorStore:
     def _best_match(
         self, query_vec: np.ndarray, candidates: set[str], threshold: float
     ) -> str | None:
+        q = np.asarray(query_vec, dtype=np.float32)
+        q_norm = float(np.linalg.norm(q))
+        if q_norm == 0.0:
+            return None
         best_score, best_id = 0.0, None
         for fid in candidates:
             entry = self._cache.get(fid)
             if entry is None:
                 continue
-            score = self._cosine(query_vec, entry.vector)
+            vec = entry.vector
+            # 形状守卫（审计 B5-1）：维度不匹配的残留向量跳过，防 np.dot 抛 ValueError
+            if vec.shape != q.shape:
+                continue
+            # 零向量余弦恒 0（除零保护语义），不会通过 threshold>0 的判重
+            norm = float(np.linalg.norm(vec))
+            score = float(np.dot(q, vec) / (q_norm * norm)) if norm > 0.0 else 0.0
             if score >= threshold and score > best_score:
                 best_score, best_id = score, fid
         return best_id

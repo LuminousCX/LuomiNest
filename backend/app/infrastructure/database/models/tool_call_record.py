@@ -17,7 +17,9 @@ class ToolCallRecordORM(Base):
     __tablename__ = "tool_call_records"
 
     record_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    session_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    # 复合索引 ix_tool_call_records_session_created 的前缀已覆盖 session_id 查询，
+    # 不再单列建索引（审计 B5-6）
+    session_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     conversation_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     tool_name: Mapped[str] = mapped_column(String(128), default="", index=True)
     arguments_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

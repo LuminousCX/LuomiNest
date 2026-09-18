@@ -3,7 +3,7 @@
 - 消息已拆至 conversation_messages 独立表（见 conversation_message.py），
   本表仅存对话元数据；search_text 由 repository 在消息写入时增量维护
   （FTS5 预留扩展点）。
-- 旧库若仍存在 messages 列，由 engine._migrate_columns 回填到
+- 旧库若仍存在 messages 列，由 engine._migrate_columns_sync 回填到
   conversation_messages 表后 DROP（幂等）。
 - deleted_at 非空表示软删除（回收站）。
 - chat_mode 标记对话模式（normal/standard），切换模式需新建对话以隔离上下文。
@@ -14,7 +14,7 @@
 """
 from typing import Optional
 
-from sqlalchemy import Boolean, String, Text
+from sqlalchemy import Boolean, Index, Boolean, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base
@@ -42,3 +42,8 @@ class Conversation(Base):
     deleted_at: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     created_at: Mapped[str] = mapped_column(String(64), default="")
     updated_at: Mapped[str] = mapped_column(String(64), default="", index=True)
+
+
+# 会话列表主路径：deleted_at+is_hidden+domain 过滤后按 updated_at 排序
+# （审计 B5-6：补 (deleted_at, updated_at) 复合索引）
+Index("ix_conversations_deleted_updated", Conversation.deleted_at, Conversation.updated_at)

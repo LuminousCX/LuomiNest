@@ -302,6 +302,19 @@ def _migrate_columns_sync(sync_conn) -> None:
                 "CREATE INDEX ix_conversations_user_key ON conversations(user_key)",
                 "conversations table: added ix_conversations_user_key index",
             )
+        # 会话列表主路径复合索引（审计 B5-6）：deleted_at 过滤 + updated_at 排序
+        if "ix_conversations_deleted_updated" not in existing_indexes:
+            _alter_safe(
+                "CREATE INDEX ix_conversations_deleted_updated ON conversations(deleted_at, updated_at)",
+                "conversations table: added ix_conversations_deleted_updated index",
+            )
+        # 冗余索引清理（审计 B5-6）：session_id 单列索引是 (session_id, created_at) 前缀
+        # 的完全冗余；模型侧已删除定义，此处兜底清理存量库
+        if "tool_call_records" in inspector.get_table_names():
+            tcr_indexes = {ix["name"] for ix in inspector.get_indexes("tool_call_records")}
+            if "ix_tool_call_records_session_id" in tcr_indexes:
+                sync_conn.execute(text("DROP INDEX IF EXISTS ix_tool_call_records_session_id"))
+                logger.info("[DB] Migrated tool_call_records table: dropped redundant ix_tool_call_records_session_id")
 
     # 记忆蒸馏游标列（memory_profiles，Phase 4 防多 worker/重启重复蒸馏）
     if "memory_profiles" in inspector.get_table_names():

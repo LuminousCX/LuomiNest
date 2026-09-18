@@ -79,17 +79,25 @@ class BaseRepository:
     # ── Write ──
 
     def save(self, key: str, data: dict) -> dict:
-        """upsert：存在则更新全部字段，不存在则插入。"""
+        """upsert：存在则更新全部字段，不存在则插入。
+
+        单语句 INSERT ... ON CONFLICT DO UPDATE（审计 B5-4）：原 get→insert/update
+        两步为 check-then-act，并发同键时第二个 commit 抛 UNIQUE 冲突。
+        """
         with sync_session_factory() as session:
-            obj = session.get(self.model, key)
-            if obj is None:
-                obj = self.model(**{self.pk: key})
-                session.add(obj)
-            for k, v in data.items():
-                if k != self.pk:
-                    setattr(obj, k, v)
+            values = {self.pk: key}
+            values.update({k: v for k, v in data.items() if k != self.pk})
+            update_set = {k: v for k, v in values.items() if k != self.pk}
+            session.execute(
+                build_upsert_stmt(
+                    self.model,
+                    index_elements=[self.pk],
+                    values=values,
+                    update_set=update_set,
+                )
+            )
             session.commit()
-            session.refresh(obj)
+            obj = session.get(self.model, key)
             return orm_to_dict(obj)
 
     @staticmethod

@@ -25,6 +25,10 @@ from app.infrastructure.database.models.conversation_message import Conversation
 from app.infrastructure.database.repositories.base import BaseRepository, orm_to_dict, utcnow_iso
 from app.infrastructure.database.session import sync_session_factory
 
+# search_text 拼接列长度上限（审计 B5-2）：超过后只保留尾部，防长会话
+# 每次追加整行重写 MB 级文本；FTS5 外部内容表为长期方案
+_SEARCH_TEXT_MAX_CHARS = 100_000
+
 
 def _msg_text(message: dict) -> str:
     """消息的纯文本内容（搜索/索引用；content 可能非字符串）。"""
@@ -162,16 +166,19 @@ class ConversationRepository(BaseRepository):
             if session.get(Conversation, conversation_id) is None:
                 return False
             session.add(self._message_row(conversation_id, message))
+            # search_text 防无界增长（审计 B5-2）：超过上限只保留尾部，
+            # 避免长会话每次追加整行重写 MB 级文本（FTS5 外部内容表为长期方案）
             session.execute(
                 text(
                     "UPDATE conversations SET "
                     "search_text = CASE WHEN COALESCE(search_text, '') = '' "
-                    "  THEN :content ELSE search_text || ' ' || :content END, "
+                    "  THEN :content ELSE substr(search_text || ' ' || :content, -:tail) END, "
                     "last_message = :last, updated_at = :now "
                     "WHERE id = :key"
                 ),
                 {
                     "content": content,
+                    "tail": _SEARCH_TEXT_MAX_CHARS,
                     "last": content[:50] or None,
                     "now": utcnow_iso(),
                     "key": conversation_id,
@@ -194,11 +201,17 @@ class ConversationRepository(BaseRepository):
                 text(
                     "UPDATE conversations SET "
                     "search_text = CASE WHEN COALESCE(search_text, '') = '' "
-                    "  THEN :tail ELSE search_text || ' ' || :tail END, "
+                    "  THEN :tail ELSE substr(search_text || ' ' || :tail, -:max_chars) END, "
                     "last_message = :last, updated_at = :now "
                     "WHERE id = :key"
                 ),
-                {"tail": _build_search_text(messages), "last": last, "now": utcnow_iso(), "key": conversation_id},
+                {
+                    "tail": _build_search_text(messages),
+                    "max_chars": _SEARCH_TEXT_MAX_CHARS,
+                    "last": last,
+                    "now": utcnow_iso(),
+                    "key": conversation_id,
+                },
             )
             session.commit()
             return True

@@ -19,6 +19,12 @@ def get_token_path(data_dir: str) -> Path:
     return Path(data_dir) / "config" / TOKEN_FILE_NAME
 
 
+# 认证热路径缓存（审计 B5-5）：中间件每请求调用 load_auth_token，
+# 原实现无条件 read_text 是纯 IO 浪费；按 stat().st_mtime_ns 缓存文件内容，
+# 运行期轮换 token（外部改写文件）自动生效。
+_token_cache: dict[str, tuple[int, str]] = {}  # token 文件路径 -> (mtime_ns, token)
+
+
 def load_auth_token() -> str | None:
     """加载认证令牌。
 
@@ -30,12 +36,23 @@ def load_auth_token() -> str | None:
         return env_token
 
     from app.core.config import settings
+
     token_path = get_token_path(settings.DATA_DIR)
-    if token_path.exists():
-        existing = token_path.read_text(encoding="utf-8").strip()
-        if existing:
-            return existing
-    return None
+    path_key = str(token_path)
+    try:
+        mtime_ns = token_path.stat().st_mtime_ns
+    except OSError:
+        return None
+    cached = _token_cache.get(path_key)
+    if cached is not None and cached[0] == mtime_ns:
+        return cached[1]
+    try:
+        token = token_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if token:
+        _token_cache[path_key] = (mtime_ns, token)
+    return token
 
 
 def generate_and_save_token(data_dir: str) -> str:
