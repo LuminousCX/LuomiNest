@@ -93,15 +93,21 @@ _SHELL_METACHARACTERS: set[str] = {"|", ">", "<", "`", ";"}
 # Windows 命令分隔符
 _WINDOWS_SEPARATORS: set[str] = {"&", "&&"}
 
-# 复合命令分隔符（用于 allow_shell_meta 模式下拆分子命令逐段审计）
-_COMPOUND_SEPARATORS: tuple[str, ...] = ("&&", "||", ";")
+# 命令替换标记：shell 会先执行其中任意代码再拼接结果，无法拆段白名单化，
+# 任何模式下（含 allow_shell_meta）一律拒绝
+_COMMAND_SUBSTITUTION_PATTERNS: tuple[str, ...] = ("`", "$(")
+
+# 复合命令分隔符（用于 allow_shell_meta 模式下拆分子命令逐段审计）。
+# 含 | 管道：管道右侧同样必须过白名单（"git log | sh" 的 sh 段不做校验即可执行是历史漏洞）。
+# 注意顺序：双字符分隔符必须在单字符（|）之前匹配，避免 "||" 被拆成两个 "|"。
+_COMPOUND_SEPARATORS: tuple[str, ...] = ("&&", "||", ";", "|")
 
 
 def _split_compound_command(cmd: str) -> list[str]:
-    """按复合分隔符拆分命令（引号感知），返回子命令列表。
+    """按复合分隔符（&& || ; |）拆分命令（引号感知），返回子命令列表。
 
     仅对 ``allow_shell_meta=True`` 的场景有意义：即使允许管道/重定向，
-    也要把 ``a && b`` / ``a; b`` 拆开逐段做危险模式审计。
+    也要把 ``a && b`` / ``a; b`` / ``a | b`` 拆开逐段做完整安全审计。
 
     Args:
         cmd: 原始命令字符串。
@@ -252,6 +258,10 @@ class CommandValidator:
     def validate_command(self, cmd: str) -> None:
         """验证命令是否安全，不安全则抛出 SandboxPermissionError。
 
+        shell 模式（allow_shell_meta）下按复合分隔符（&& || ; |）拆分子命令，
+        每段完整执行危险模式+黑白名单+路径检查——历史漏洞：仅首段做白名单校验，
+        ``git status; powershell -c <任意>`` 式复合命令可绕过白名单交给 shell 执行。
+
         Args:
             cmd: 待验证的命令字符串。
 
@@ -266,28 +276,33 @@ class CommandValidator:
         # 1. Shell 元字符检测（默认禁止管道/重定向/命令替换）
         if not self.allow_shell_meta:
             self._check_shell_metacharacters(cmd_stripped)
+        # 命令替换（反引号/$()）任何模式下都拒绝：其中的任意代码无法拆段白名单化
+        self._check_command_substitution(cmd_stripped)
 
         # 2. 危险命令正则检测：整条命令先扫一遍，
         #    若允许 shell 元字符，再按复合分隔符拆分逐段审计（最严重者胜出）
         self._check_dangerous_patterns(cmd_stripped)
         if self.allow_shell_meta:
-            for sub_cmd in _split_compound_command(cmd_stripped):
-                if sub_cmd:
-                    self._check_dangerous_patterns(sub_cmd)
+            segments = [s for s in _split_compound_command(cmd_stripped) if s] or [cmd_stripped]
+        else:
+            segments = [cmd_stripped]
 
-        # 3. 解析命令并检查命令黑白名单
-        parts = self._parse_command(cmd_stripped)
-        if not parts:
-            raise SandboxPermissionError("命令解析结果为空", operation="validate_command")
+        # 3. 逐段完整审计：解析 + 黑白名单 + 路径检查（复合子命令段与首段同级严格）
+        for segment in segments:
+            if segment != cmd_stripped:
+                self._check_dangerous_patterns(segment)
+            parts = self._parse_command(segment)
+            if not parts:
+                raise SandboxPermissionError("命令解析结果为空", operation="validate_command")
 
-        self._check_command_allowlist(parts)
+            self._check_command_allowlist(parts)
 
-        # 4. 路径遍历检测（扫描所有参数）
-        self._check_path_traversal(parts)
+            # 4. 路径遍历检测（扫描所有参数）
+            self._check_path_traversal(parts)
 
-        # 5. 绝对路径白名单 + 敏感段检测（含虚拟路径 /mnt/workspace/...）
-        self._check_absolute_paths(parts)
-        self._check_virtual_paths(parts)
+            # 5. 绝对路径白名单 + 敏感段检测（含虚拟路径 /mnt/workspace/...）
+            self._check_absolute_paths(parts)
+            self._check_virtual_paths(parts)
 
     def validate_path(self, path: str) -> Path:
         """验证路径是否在允许范围内，返回解析后的绝对路径。
@@ -407,6 +422,19 @@ class CommandValidator:
                 raise SandboxPermissionError(
                     f"命令匹配危险模式: {pattern.pattern}",
                     operation="dangerous_command",
+                )
+
+    def _check_command_substitution(self, cmd: str) -> None:
+        """检测命令替换（反引号 / $()）。
+
+        命令替换内的任意代码由 shell 先执行后再拼接，无法拆段白名单化，
+        任何模式下（含 allow_shell_meta）一律拒绝。
+        """
+        for pattern in _COMMAND_SUBSTITUTION_PATTERNS:
+            if pattern in cmd:
+                raise SandboxPermissionError(
+                    f"命令包含命令替换（{pattern}...），沙盒不允许执行",
+                    operation="shell_substitution",
                 )
 
     def _parse_command(self, cmd: str) -> list[str]:
