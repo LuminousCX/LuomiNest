@@ -8,6 +8,7 @@ from app.core.constants.colors import DEFAULT_AGENT_COLOR
 from app.core.utils import utc_now, ok
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.engines.memory.store import remove_agent_memory
+from app.engines.memory.memory_engine import remove_engine
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -161,5 +162,7 @@ async def delete_agent(
     # 旧文件布局记忆目录清理（收口到 store.remove_agent_memory，rmtree 前存在性判断与原行为一致）
     if remove_agent_memory(agent_id):
         logger.info(f"[API] DELETE /agents/{agent_id} - Memory directory removed")
+    # 清引擎注册表缓存（否则再次 get_memory_engine 会复用已被删 agent 的引擎）
+    remove_engine(agent_id)
     
     return ok({"deleted": True})

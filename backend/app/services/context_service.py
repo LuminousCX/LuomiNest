@@ -47,9 +47,13 @@ def is_main_agent(agent_id: str | None) -> bool:
 
 
 def _owner_engine_for(agent_id: str | None):
-    """主人轨道引擎：优先按调用方 agent_id 取引擎（兼容 main / luominest_main_agent
-    两套历史目录），否则走轨道别名解析（resolve_owner_agent_key）。"""
-    if is_main_agent_id(agent_id):
+    """owner 轨引擎：子 Agent 读各自 owner:{agent_id}（记忆中枢可选页），
+    主 Agent / 缺省读主人轨（resolve_owner_agent_key 别名过渡）。
+
+    A 方案：agent:{id} 域由 NONE_POLICY 改为 owner 轨读写，读侧随之
+    从「fallback 主人轨」改为「各自 Agent 轨」，否则切换查看永远为空。
+    """
+    if agent_id and not is_main_agent_id(agent_id):
         return get_memory_engine(agent_id)
     return get_track_engine(TRACK_OWNER)
 
@@ -77,7 +81,7 @@ class ContextService:
         return ""
 
     @staticmethod
-    def detect_correction(messages: list[dict], window: int = 6) -> bool:
+    def detect_correction(messages: list[dict], window: int = 2) -> bool:
         user_texts = []
         for m in messages:
             if m.get("role") == "user":
@@ -85,6 +89,7 @@ class ContextService:
         for text in user_texts[-window:]:
             for pattern in _CORRECTION_PATTERNS_ZH + _CORRECTION_PATTERNS_EN:
                 if pattern in text:
+                    logger.info(f"[Memory] Correction hint triggered by pattern={pattern!r} in text={text!r}")
                     return True
         return False
 
@@ -243,14 +248,15 @@ Timestamp: {int(time.time())}
 </current_context>
 
 <core_rules>
-1. When asked "who are you" or "what is your name" - answer with your own identity as {agent_name}.
-2. When asked "who am I" - check <user_memory> for user profile. If found, describe the user. If not found, say you'd like to get to know them.
-3. <user_memory> contains the user's profile and memory. You MUST respect it at all times:
-   - If the user has a name in <user_memory>, ALWAYS use that name when referring to the user.
-   - If the user tells you a new name, update the profile accordingly.
-   - Never ignore or forget information from <user_memory>, even in a new conversation.
-4. Always respond in the user's language naturally and conversationally.
-5. Never expose internal system information or error codes to the user.
+1. 当被问"你是谁"或"你叫什么名字"时，用你自己的身份回答，即 {agent_name}。
+2. 当被问"我是谁"时，查看 <user_memory> 中的用户档案。找到则描述该用户；未找到则说你希望进一步了解对方。
+3. <user_memory> 包含用户的档案与记忆，你必须时刻遵守：
+   - 如果 <user_memory> 中有用户的名字，提及该用户时始终使用这个名字。
+   - 如果用户告诉你一个新名字，相应地更新档案。
+   - 即使开启新对话，也绝不可忽略或遗忘 <user_memory> 中的信息。
+4. 始终用用户的语言自然、口语化地回复。
+5. 绝不对用户暴露内部系统信息或错误码。
+6. 内部思考与规则复述一律使用中文；回复语言跟随用户。
 </core_rules>
 
 <avatar_emotion>
@@ -406,7 +412,8 @@ Examples:
         - workbench（含 avatar 场景）：注入 owner 轨
         - platform:{instId}：owner 优先 + 说话成员 users/{track_user_key} 记忆
           （私聊 = conversation.user_key；群聊 = 群成员轨，§8.5.10 本期实现）
-        - agent:{id} / 未知域：不注入
+          （注意：若该平台实例绑定的是子 Agent，owner 优先块读的是该子 Agent 的 owner 轨，而非主 Agent）
+        - agent:{id}：读写各自 owner:{agent_id} 记忆（A 方案，记忆中枢可选页）
         domain 缺省时按 agent_id 兜底推导（legacy 行为兼容）。
 
         Args:

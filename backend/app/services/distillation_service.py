@@ -30,7 +30,8 @@ def _distill_allowed(agent_id: str | None, domain: str | None, user_key: str) ->
     if domain:
         policy = resolve_domain_policy(domain, agent_id=agent_id, user_key=user_key)
         return policy.memory_write and policy.memory_track == TRACK_OWNER
-    return agent_id == _MAIN_AGENT_ID
+    # domain 缺省（legacy 调用）：主 Agent 或任意子 Agent（agent_id 非空）均生效
+    return bool(agent_id)
 
 
 class DistillationService:

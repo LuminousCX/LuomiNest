@@ -10,6 +10,7 @@ _FACT_EXTRACT_PROMPT = """你是一个记忆提取助手。从用户消息中提
    - 每条事实必须有明确的类别
    - 置信度：0.9-1.0（明确陈述）、0.7-0.8（强暗示）、0.5-0.6（推断模式）
    - 如果是纠正之前的信息，使用 correction 类别，并在 source_error 中记录之前的错误信息
+   - 例外：名字/身份类信息的变更（如用户告知新名字、更正自己的称呼）一律只走 profile_name，绝不得写入 correction 或任何 facts；correction 仅用于做法/偏好类纠正（如"别用表格回复我"）
 
 类别：
 - preference: 用户偏好（喜欢/不喜欢什么）
@@ -40,13 +41,13 @@ _FACT_EXTRACT_PROMPT = """你是一个记忆提取助手。从用户消息中提
 
 用户消息：{message}"""
 
-_CORRECTION_HINT = "特别注意：用户在最近的对话中表达了纠正/不满，请以 correction 类别、confidence >= 0.95 记录正确做法，并在 source_error 中记录之前的错误信息。"
+_CORRECTION_HINT = "特别注意：用户在最近的对话中表达了纠正/不满，请以 correction 类别、confidence >= 0.95 记录正确做法，并在 source_error 中记录之前的错误信息。注意：名字/身份/事实性信息的纠正不适用本 hint，仍走 profile_name；correction 仅用于做法/偏好类纠正。"
 
 _REINFORCEMENT_HINT = "特别注意：用户在最近的对话中确认了某个信息，请以 preference 或 behavior 类别、confidence >= 0.9 记录确认的做法。"
 
 _CORRECTION_PATTERNS_ZH = [
-    "不对", "你理解错了", "你理解有误", "不是这样的", "错了",
-    "重试", "重新来", "换一种", "改用", "别这样",
+    "你理解错了", "你理解有误", "不是这样的", "这样不对",
+    "重新来", "换一种", "别这样",
 ]
 
 _CORRECTION_PATTERNS_EN = [

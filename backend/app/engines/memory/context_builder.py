@@ -2,7 +2,7 @@ from datetime import datetime
 
 from app.core.utils import utc_now_dt
 
-from .models import FactItem, MemoryData, FACT_SCOPE_AGENT, FACT_SCOPE_CONVERSATION, summaries_to_markdown
+from .models import FactItem, MemoryData, FACT_SCOPE_AGENT, FACT_SCOPE_CONVERSATION, FACT_CATEGORY_LABELS, summaries_to_markdown
 from .store import MemoryStore
 from .fact_manager import _extract_content_words
 
@@ -11,6 +11,8 @@ class ContextBuilder:
     """上下文组装：按预算优先级将记忆注入 LLM prompt。"""
 
     MAX_INJECTION_CHARS = 4000
+    # 注入闸门：置信度低于此值的事实不进上下文（与提取标尺下限 0.5 对齐，低于即异常产出）
+    CONFIDENCE_INJECT_FLOOR = 0.5
 
     def __init__(self, store: MemoryStore):
         self._store = store
@@ -67,6 +69,8 @@ class ContextBuilder:
                 continue
             if f.category not in FACT_SCOPE_AGENT:
                 continue
+            if f.confidence < self.CONFIDENCE_INJECT_FLOOR:
+                continue
             if f.expires_at:
                 try:
                     exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
@@ -80,6 +84,8 @@ class ContextBuilder:
             conv_data = conversation_store.load_data()
             for f in conv_data.facts:
                 if not f.is_latest:
+                    continue
+                if f.confidence < self.CONFIDENCE_INJECT_FLOOR:
                     continue
                 if f.expires_at:
                     try:
@@ -116,7 +122,9 @@ class ContextBuilder:
             fact_lines = []
             truncated = False
             for fact in all_facts:
-                line = f"- [{fact.category}|{fact.confidence:.1f}] {fact.content}"
+                line = f"- [{FACT_CATEGORY_LABELS.get(fact.category, fact.category)}|{fact.confidence:.1f}] {fact.content}"
+                if fact.category == "correction":
+                    line += " (仅代表用户对做法/偏好的纠正，与档案冲突时以档案为准)"
                 if fact.source_error:
                     line += f" (避免: {fact.source_error})"
                 if used_chars + len(line) + 20 > budget:

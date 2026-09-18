@@ -138,6 +138,8 @@ class MemoryExtractor:
 
             if profile_name:
                 old_name = data.profile.name
+                if old_name and old_name != profile_name:
+                    data.profile.previous_name = old_name
                 data.profile.name = profile_name
                 data.profile.updated_at = utc_now()
                 updates["name"] = profile_name

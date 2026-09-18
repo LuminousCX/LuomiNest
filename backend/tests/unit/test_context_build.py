@@ -92,3 +92,28 @@ async def test_inject_memory_builds_user_memory_block(_init_test_db, monkeypatch
 
     # 清理，避免污染全局引擎注册表中的主 Agent 记忆
     engine.reset_all()
+
+
+async def test_low_confidence_fact_not_injected(engine):
+    """置信度 < 0.5 的事实不进上下文（读侧闸门，与提取标尺下限对齐）。"""
+    data = engine.load_data()
+    data.profile.name = "小明"
+    data.facts.append(FactItem(content="我叫小黑", category="correction", confidence=0.3))
+    engine.save_data(data)
+
+    ctx = engine.build_context_sync(query="")
+
+    assert "小黑" not in ctx
+
+
+async def test_high_confidence_correction_injected_with_note(engine):
+    """高置信度 correction 正常注入，且带「与档案冲突以档案为准」标注。"""
+    data = engine.load_data()
+    data.profile.name = "小明"
+    data.facts.append(FactItem(content="别用表格回复我", category="correction", confidence=0.95))
+    engine.save_data(data)
+
+    ctx = engine.build_context_sync(query="")
+
+    assert "别用表格回复我" in ctx
+    assert "以档案为准" in ctx

@@ -120,11 +120,13 @@ class TestResolveDomainPolicyBackwardCompat:
         policy = resolve_domain_policy("", agent_id="luominest_main_agent")
         assert policy.memory_track == TRACK_OWNER
 
-    def test_agent_domain_no_memory(self):
+    def test_agent_domain_owner_track_memory(self):
+        # A 方案：子 Agent 对话域读写各自 owner:{agent_id} 记忆（记忆中枢可选页）
         policy = resolve_domain_policy("agent:helper")
-        assert policy.memory_read is False
-        assert policy.memory_write is False
-        assert policy.memory_track is None
+        assert policy.memory_read is True
+        assert policy.memory_write is True
+        assert policy.memory_track == TRACK_OWNER
+        assert policy.tool_profile == "agent"
 
     def test_unknown_domain_conservative(self):
         policy = resolve_domain_policy("weird:domain")

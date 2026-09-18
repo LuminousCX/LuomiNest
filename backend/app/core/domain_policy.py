@@ -195,7 +195,7 @@ def resolve_domain_policy(
     §9 记忆策略矩阵：
 
     - workbench（含 scene=avatar）：owner 轨，读 ✅ 写 ✅
-    - agent:{id}：无记忆（现状 MEMORY_ACCESS_NONE）
+    - agent:{id}：owner 轨，读 ✅ 写 ✅（各自 owner:{agent_id} 记忆，记忆中枢可选页）
     - platform:{instId}：读 ✅（owner 优先 + 该用户/说话成员记忆）；
       写受 platform_memory_write 开关控制（默认 ❌），写入 users/{track_user_key}/
       （私聊 = conversation.user_key；群聊 = {platform}_{instId}_{sender_id}，
@@ -240,5 +240,5 @@ def resolve_domain_policy(
             track_user_key=effective_user_key,
         )
 
-    # agent:{id} 或未知 domain：无记忆权限
-    return NONE_POLICY
+    # agent:{id}：子 Agent 对话读写各自 owner:{agent_id} 记忆（A 方案，记忆中枢可选页）
+    return DomainPolicy(KIND_AGENT, True, True, TRACK_OWNER, TOOL_PROFILE_AGENT)

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.utils import ok
+from app.core.domain_policy import MAIN_AGENT_ID
 from app.engines.memory import get_memory_engine
 from app.engines.memory.memory_engine import FactItem, FACT_CATEGORIES, remove_engine
 from app.engines.memory.store import OWNER_PREFIX
@@ -237,7 +238,8 @@ async def list_memory_agents(agents_store=Depends(get_agents_store)):
 
     for owner_key in owner_keys:
         agent_id = owner_key[len(OWNER_PREFIX):]
-        if agent_id == "_default":
+        # 主工作台与迁移遗留占位符排除（前端已固定置顶「主工作台」项）
+        if agent_id in ("_default", "main", MAIN_AGENT_ID):
             continue
         agent = await agents_store.get_async(agent_id)
         name = agent.get("name", agent_id) if agent else agent_id
