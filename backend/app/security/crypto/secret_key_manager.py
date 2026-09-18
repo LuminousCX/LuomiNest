@@ -6,8 +6,9 @@
 
 安全特性：
 1. 文件内容为密文（非明文），即使文件被复制也无法直接读取
-2. 绑定机器指纹，文件被复制到其他机器时解密失败
-3. 兼容旧版明文格式，启动时自动检测并迁移为加密格式
+2. 绑定机器指纹 + 随机盐 PBKDF2 高迭代拉伸，数据目录外带无法离线还原密钥
+   （旧版为无盐 SHA256 直派生，MachineGuid/machine-id 世界可读即秒破——已带迁移自动升级）
+3. 兼容旧版明文格式与旧版 SHA256 密文格式，启动时自动检测并迁移为 KDF 加密格式
 """
 import base64
 import hashlib
@@ -18,11 +19,19 @@ import uuid as uuid_mod
 from pathlib import Path
 
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from loguru import logger
 
 DEFAULT_PLACEHOLDER = "change-me-in-production"
 SECRET_KEY_FILE_NAME = "secret_key"
 JWT_SECRET_KEY_FILE_NAME = "jwt_secret_key"
+
+# PBKDF2-HMAC-SHA256 迭代次数（OWASP 推荐）与盐长度。
+# 机器指纹来源（MachineGuid/machine-id）世界可读，无盐直派生可被离线秒破，
+# 高迭代拉伸 + 随机盐是数据目录外带场景下的核心防线。
+_KDF_ITERATIONS = 600_000
+_KDF_SALT_BYTES = 32
 
 
 def _diagnostic_name(file_name: str) -> str:
@@ -102,9 +111,44 @@ def _get_machine_fingerprint() -> str:
 
 
 def _derive_machine_key(fingerprint: str) -> bytes:
-    """从机器指纹派生 Fernet 密钥（用于加密/解密 SECRET_KEY 文件）。"""
+    """旧版派生：SHA256(指纹) 直派生 Fernet 密钥。
+
+    仅用于兼容读取升级前的旧密文（成功读取后会立即迁移到 PBKDF2 格式）。
+    """
     digest = hashlib.sha256(fingerprint.encode("utf-8")).digest()
     return base64.urlsafe_b64encode(digest)
+
+
+def _kdf_salt_path(data_dir: str, file_name: str) -> Path:
+    """返回 KDF 盐文件路径（每个密钥文件独立盐）。"""
+    return Path(data_dir) / "config" / f"{file_name}.kdf-salt"
+
+
+def _load_or_create_kdf_salt(data_dir: str, file_name: str) -> bytes:
+    """加载或生成本密钥文件的 KDF 随机盐（与密钥文件同级存储，0600）。"""
+    salt_path = _kdf_salt_path(data_dir, file_name)
+    if salt_path.exists():
+        salt = salt_path.read_bytes()
+        if len(salt) >= 16:
+            return salt
+    salt = os.urandom(_KDF_SALT_BYTES)
+    salt_path.write_bytes(salt)
+    try:
+        os.chmod(salt_path, stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:
+        pass
+    return salt
+
+
+def _derive_kdf_key(fingerprint: str, salt: bytes) -> bytes:
+    """新版派生：PBKDF2-HMAC-SHA256（随机盐 + 高迭代）拉伸机器指纹为 Fernet 密钥。"""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=_KDF_ITERATIONS,
+    )
+    return base64.urlsafe_b64encode(kdf.derive(fingerprint.encode("utf-8")))
 
 
 def _is_valid_fernet_key(key_str: str) -> bool:
@@ -122,15 +166,20 @@ def _is_valid_fernet_key(key_str: str) -> bool:
 
 
 def load_or_create_secret_key(data_dir: str, file_name: str = SECRET_KEY_FILE_NAME) -> str:
-    """加载或生成持久化密钥（机器指纹绑定加密存储）。
+    """加载或生成持久化密钥（机器指纹绑定 + PBKDF2 加盐拉伸存储）。
 
     流程：
-    1. 文件存在 → 尝试用机器指纹解密
-    2. 解密失败 → 尝试作为旧版明文读取（兼容迁移），验证后加密覆写
-    3. 明文也不合法 → 抛出 RuntimeError
-    4. 文件不存在 → 生成新密钥，加密后写入文件（0600）
+    1. 文件存在 → 用 PBKDF2+盐 派生密钥尝试解密（当前格式）
+    2. 解密失败 → 尝试旧版 SHA256 直派生密文兼容读取，成功则立即用新 KDF 重加密覆写（迁移）
+    3. 仍失败 → 尝试作为旧版明文读取（兼容迁移），验证后加密覆写
+    4. 明文也不合法 → 抛出 RuntimeError
+    5. 文件不存在 → 生成新密钥，用新 KDF 加密后写入文件（0600）
 
-    注意：若机器硬件变更导致指纹变化，且文件不是旧明文格式，解密会失败并抛出 RuntimeError。
+    数据兼容说明：升级前存储的旧格式（SHA256 直派生密文）会在首次加载时自动迁移，
+    用户无感知，全部 API Key 保持可解密。盐文件（{file}.kdf-salt）丢失等同机器指纹变更，
+    需删除密钥文件重新生成（已加密的 API Key 需重新输入）。
+
+    注意：若机器硬件变更导致指纹变化，解密会失败并抛出 RuntimeError。
     此时需删除密钥文件重新生成（已加密的 API Key 需重新输入）。
 
     Args:
@@ -142,27 +191,47 @@ def load_or_create_secret_key(data_dir: str, file_name: str = SECRET_KEY_FILE_NA
     name = _diagnostic_name(file_name)
 
     fingerprint = _get_machine_fingerprint()
-    machine_key = _derive_machine_key(fingerprint)
-    machine_fernet = Fernet(machine_key)
+
+    def _kdf_fernet() -> Fernet:
+        return Fernet(_derive_kdf_key(fingerprint, _load_or_create_kdf_salt(data_dir, file_name)))
+
+    machine_fernet_legacy = Fernet(_derive_machine_key(fingerprint))
 
     if key_path.exists():
         raw = key_path.read_bytes()
         if raw:
-            # 1. 尝试作为密文解密（新版格式）
+            # 1. 尝试按当前格式（PBKDF2+盐）解密
             try:
-                secret_key = machine_fernet.decrypt(raw).decode("utf-8").strip()
+                secret_key = _kdf_fernet().decrypt(raw).decode("utf-8").strip()
                 if secret_key:
                     return secret_key
             except Exception as e:
-                # 预期回退路径：可能是旧版明文格式或密文已损坏，继续走明文兼容迁移分支
-                logger.debug(f"[SecretKey] 密文解密失败，将尝试旧版明文兼容读取: {e}")
+                # 预期回退路径：旧版 SHA256 直派生密文或明文格式
+                logger.debug(f"[SecretKey] KDF 密文解密失败，尝试旧版兼容读取: {e}")
 
-            # 2. 尝试作为旧版明文读取（兼容迁移）
+            # 2. 旧版 SHA256 直派生密文：解出后立即用新 KDF 重加密落盘（自动迁移）
+            try:
+                secret_key = machine_fernet_legacy.decrypt(raw).decode("utf-8").strip()
+                if secret_key:
+                    encrypted = _kdf_fernet().encrypt(secret_key.encode("utf-8"))
+                    key_path.write_bytes(encrypted)
+                    try:
+                        os.chmod(key_path, stat.S_IRUSR | stat.S_IWUSR)
+                    except OSError:
+                        pass
+                    logger.success(
+                        f"[SecretKey] 已将旧版 SHA256 直派生密文迁移为 PBKDF2+盐 格式（{name}）"
+                    )
+                    return secret_key
+            except Exception:
+                pass
+
+            # 3. 尝试作为旧版明文读取（兼容迁移）
             try:
                 plaintext = raw.decode("utf-8").strip()
                 if plaintext and _is_valid_fernet_key(plaintext):
                     # 旧明文格式：用机器指纹加密后覆写，完成迁移
-                    encrypted = machine_fernet.encrypt(plaintext.encode("utf-8"))
+                    encrypted = _kdf_fernet().encrypt(plaintext.encode("utf-8"))
                     key_path.write_bytes(encrypted)
                     try:
                         os.chmod(key_path, stat.S_IRUSR | stat.S_IWUSR)
@@ -177,7 +246,7 @@ def load_or_create_secret_key(data_dir: str, file_name: str = SECRET_KEY_FILE_NA
                 # 旧版明文解析失败：继续走后续统一错误处理（既非有效密文也非有效明文）
                 pass
 
-            # 3. 既非有效密文也非有效明文
+            # 4. 既非有效密文也非有效明文
             logger.error(
                 f"[SecretKey] 无法解密 {key_path}（机器指纹不匹配或文件损坏）。"
                 "若硬件已变更，删除该文件后重启可重新生成（已加密的 API Key 需重新输入）。"
@@ -187,9 +256,9 @@ def load_or_create_secret_key(data_dir: str, file_name: str = SECRET_KEY_FILE_NA
                 f"请删除 {key_path} 后重启应用。"
             )
 
-    # 4. 文件不存在或为空：生成新密钥并用机器指纹加密后存储
+    # 5. 文件不存在或为空：生成新密钥并用新 KDF 加密后存储
     new_key = Fernet.generate_key().decode("utf-8")
-    encrypted = machine_fernet.encrypt(new_key.encode("utf-8"))
+    encrypted = _kdf_fernet().encrypt(new_key.encode("utf-8"))
     key_path.write_bytes(encrypted)
     try:
         os.chmod(key_path, stat.S_IRUSR | stat.S_IWUSR)
