@@ -4,6 +4,7 @@
 注册顺序与 schema 见 register_tools.register_internal_tools。
 """
 
+import asyncio
 import json
 from typing import Any
 
@@ -214,7 +215,8 @@ async def _memory_promote_conversation_facts(args: dict[str, Any]) -> WorkflowTa
 async def _memory_clear_facts(args: dict[str, Any]) -> WorkflowTaskResult:
     """清空所有事实"""
     engine = _require_memory_engine()
-    engine.clear_facts()
+    async with engine.write_lock:
+        await asyncio.to_thread(engine.clear_facts)
 
     logger.info("[Workflow:memory.clear_facts] all facts cleared")
     return WorkflowTaskResult(
@@ -265,7 +267,8 @@ async def _memory_create_fact(args: dict[str, Any]) -> WorkflowTaskResult:
         confidence=confidence,
         source="workflow",
     )
-    engine.add_fact(fact)
+    async with engine.write_lock:
+        await engine.remember_fact(fact)
 
     emitter = _get_emitter()
     if emitter:
@@ -304,7 +307,13 @@ async def _memory_update_fact(args: dict[str, Any]) -> WorkflowTaskResult:
         )
 
     engine = _require_memory_engine()
-    success = engine.update_fact(fact_id, content, category, confidence)
+    async with engine.write_lock:
+        success = await asyncio.to_thread(engine.update_fact, fact_id, content, category, confidence)
+        if success:
+            data = await asyncio.to_thread(engine.load_data)
+            fact = next((f for f in data.facts if f.id == fact_id), None)
+            if fact is not None:
+                await engine.sync_fact_vector(fact)
     if not success:
         return WorkflowTaskResult(success=False, error=f"事实 {fact_id} 不存在")
 
@@ -333,7 +342,10 @@ async def _memory_delete_fact(args: dict[str, Any]) -> WorkflowTaskResult:
         return WorkflowTaskResult(success=False, error="Missing required parameter: fact_id")
 
     engine = _require_memory_engine()
-    success = engine.remove_fact(fact_id)
+    async with engine.write_lock:
+        success = await asyncio.to_thread(engine.remove_fact, fact_id)
+        if success:
+            await engine.forget_fact_vector(fact_id)
     if not success:
         return WorkflowTaskResult(success=False, error=f"事实 {fact_id} 不存在")
 
@@ -422,13 +434,16 @@ async def _memory_get_profile(args: dict[str, Any]) -> WorkflowTaskResult:
 
 @_wf_catch("memory.distill")
 async def _memory_distill(args: dict[str, Any]) -> WorkflowTaskResult:
-    """蒸馏对话为记忆"""
+    """蒸馏对话为记忆（统一走 DistillationService 单管道）。"""
     messages = args.get("messages", [])
     if not messages:
         return WorkflowTaskResult(success=False, error="Missing required parameter: messages")
 
-    engine = _require_memory_engine()
-    result = await engine.distill_conversation(messages)
+    from app.services.distillation_service import distillation_service
+
+    agent_id = args.get("agent_id") or None
+    conversation_id = args.get("conversation_id") or None
+    success = await distillation_service.distill_and_merge(agent_id, conversation_id, messages)
 
     emitter = _get_emitter()
     if emitter:
@@ -436,12 +451,12 @@ async def _memory_distill(args: dict[str, Any]) -> WorkflowTaskResult:
             module="memory",
             action="distilled",
             success=True,
-            output="对话已蒸馏为记忆" if result else "无需蒸馏",
-            metadata={"has_change": bool(result)},
+            output="对话已蒸馏为记忆" if success else "无需蒸馏",
+            metadata={"has_change": bool(success)},
         )
 
     return WorkflowTaskResult(
         success=True,
-        output=result or "对话无需蒸馏",
-        metadata={"has_change": bool(result)},
+        output="对话已蒸馏为记忆" if success else "对话无需蒸馏",
+        metadata={"has_change": bool(success)},
     )

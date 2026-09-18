@@ -1,11 +1,14 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.utils import ok
+from app.core.domain_policy import MAIN_AGENT_ID
 from app.engines.memory import get_memory_engine
-from app.engines.memory.memory_engine import FactItem, FACT_CATEGORIES, _engines
-from app.engines.memory.store import OWNER_PREFIX, owner_key_for, remove_agent_memory
+from app.engines.memory.memory_engine import FactItem, FACT_CATEGORIES, remove_engine
+from app.engines.memory.store import OWNER_PREFIX
 from app.api.v1.deps import get_agents_store, get_conversation_store
 
 router = APIRouter(prefix="/memory", tags=["Memory"])
@@ -19,10 +22,6 @@ class AppendRequest(BaseModel):
 
 class UpdateContentRequest(BaseModel):
     content: str = Field(..., min_length=1)
-
-
-class DistillRequest(BaseModel):
-    messages: list[dict] = Field(..., min_length=1)
 
 
 class CreateFactRequest(BaseModel):
@@ -47,20 +46,6 @@ async def get_memory(agent_id: str | None = None):
         "profile": engine.parse_profile(),
         "facts": [f.model_dump() for f in data.facts],
     })
-
-
-@router.put("/")
-async def update_memory(request: UpdateContentRequest, agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
-    engine.save_memory(request.content)
-    return ok()
-
-
-@router.get("/data")
-async def get_memory_data(agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
-    data = engine.load_data()
-    return ok(json_compat(data.model_dump()))
 
 
 @router.get("/knowledge")
@@ -91,15 +76,6 @@ async def update_summary(request: UpdateContentRequest, agent_id: str | None = N
     engine = get_memory_engine(agent_id)
     engine.save_summary(request.content)
     return ok()
-
-
-@router.post("/distill")
-async def distill_conversation(request: DistillRequest, agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
-    result = await engine.distill_conversation(request.messages)
-    if result:
-        return ok({"summary": result, "changed": True})
-    return ok({"changed": False})
 
 
 @router.get("/facts")
@@ -161,14 +137,20 @@ async def create_fact(request: CreateFactRequest, agent_id: str | None = None):
         source_error=request.source_error,
         source="manual",
     )
-    engine.add_fact(fact)
+    # 引擎写锁：与蒸馏/画像更新的读-改-写序列互斥，避免并发覆盖
+    async with engine.write_lock:
+        await engine.remember_fact(fact)
     return ok({"fact": fact.model_dump()})
 
 
 @router.delete("/facts/{fact_id}")
 async def delete_fact(fact_id: str, agent_id: str | None = None):
     engine = get_memory_engine(agent_id)
-    if engine.remove_fact(fact_id):
+    async with engine.write_lock:
+        removed = await asyncio.to_thread(engine.remove_fact, fact_id)
+        if removed:
+            await engine.forget_fact_vector(fact_id)
+    if removed:
         return ok()
     raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
 
@@ -178,7 +160,16 @@ async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | 
     if request.category is not None and request.category not in FACT_CATEGORIES:
         raise BadRequestError(f"Invalid category. Must be one of: {FACT_CATEGORIES}", code="MEMORY_CATEGORY_INVALID")
     engine = get_memory_engine(agent_id)
-    if engine.update_fact(fact_id, request.content, request.category, request.confidence):
+    async with engine.write_lock:
+        updated = await asyncio.to_thread(
+            engine.update_fact, fact_id, request.content, request.category, request.confidence
+        )
+        if updated:
+            data = await asyncio.to_thread(engine.load_data)
+            fact = next((f for f in data.facts if f.id == fact_id), None)
+            if fact is not None:
+                await engine.sync_fact_vector(fact)
+    if updated:
         return ok()
     raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
 
@@ -216,74 +207,8 @@ async def list_conversation_dailies(
         conv = conversation_store.get(conv_id)
         title = conv.get("title", "New Conversation") if conv else "Unknown"
         result.append({"id": conv_id, "title": title})
-    
+
     return ok({"conversations": result})
-
-
-@router.get("/recent-facts")
-async def get_recent_facts(agent_id: str | None = None, since: float = 30):
-    """获取最近 N 秒内新增的事实（用于聊天中展示记忆提取结果）。"""
-    from datetime import datetime, timedelta
-
-    from app.core.utils import utc_now_dt
-
-    engine = get_memory_engine(agent_id)
-    data = engine.load_data()
-    cutoff = utc_now_dt() - timedelta(seconds=since)
-    recent = []
-    for f in data.facts:
-        try:
-            created = datetime.fromisoformat(f.created_at.replace("Z", "+00:00"))
-            if created >= cutoff:
-                recent.append(f.model_dump())
-        except (ValueError, TypeError):
-            pass
-    return ok({"facts": recent})
-
-
-@router.get("/inject")
-async def get_injection_content(agent_id: str | None = None, conversation_id: str | None = None, query: str | None = None):
-    engine = get_memory_engine(agent_id)
-    content = engine.build_context(query=query or "", conversation_id=conversation_id)
-    return ok({"content": content, "has_memory": bool(content.strip())})
-
-
-@router.get("/profile")
-async def get_profile(agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
-    return ok(engine.parse_profile())
-
-
-@router.get("/debug/inject")
-async def debug_inject(agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
-    ctx = engine.build_context()
-    data = engine.load_data()
-    return ok({
-        "memory_file": str(engine._memory_file()),
-        # 记忆已迁入 SQLite（memory_profiles/memory_facts 表）；文件路径仅作兼容展示
-        "memory_exists": bool(data.profile.name or data.facts),
-        "knowledge_exists": bool(engine.load_knowledge().strip()),
-        "daily_count": len(engine.list_dailies()),
-        "fact_count": len(data.facts),
-        "context_length": len(ctx),
-        "context_preview": ctx[:500] if ctx else "",
-    })
-
-
-@router.get("/health")
-async def memory_health(agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
-    data = engine.load_data()
-    return ok({
-        "status": "ok" if data.profile.name else "warning",
-        "profile": engine.parse_profile(),
-        "fact_count": len(data.facts),
-        # 记忆已迁入 SQLite 单库；字段语义改为"是否存在记忆数据"
-        "memory_file_exists": bool(data.profile.name or data.facts),
-        "knowledge_exists": bool(engine.load_knowledge().strip()),
-        "daily_files": engine.list_dailies(),
-    })
 
 
 @router.get("/agents")
@@ -313,7 +238,8 @@ async def list_memory_agents(agents_store=Depends(get_agents_store)):
 
     for owner_key in owner_keys:
         agent_id = owner_key[len(OWNER_PREFIX):]
-        if agent_id == "_default":
+        # 主工作台与迁移遗留占位符排除（前端已固定置顶「主工作台」项）
+        if agent_id in ("_default", "main", MAIN_AGENT_ID):
             continue
         agent = await agents_store.get_async(agent_id)
         name = agent.get("name", agent_id) if agent else agent_id
@@ -328,54 +254,12 @@ async def list_memory_agents(agents_store=Depends(get_agents_store)):
     return ok({"agents": result})
 
 
-@router.get("/agents/{agent_id}/stats")
-async def get_agent_memory_stats(agent_id: str):
-    engine = get_memory_engine(agent_id)
-    data = engine.load_data()
-    return ok({
-        "fact_count": len(data.facts),
-        "has_profile": bool(data.profile.name),
-        "has_knowledge": bool(engine.load_knowledge().strip()),
-        "has_summary": any(s.summary for s in [
-            data.summaries.user_profile, data.summaries.preferences,
-            data.summaries.recent_state, data.summaries.timeline,
-        ]),
-        "daily_count": len(engine.list_dailies()),
-    })
-
-
-@router.delete("/agents/{agent_id}")
-async def delete_agent_memory(agent_id: str):
-    """删除指定 Agent 的全部记忆（SQLite 行 + 旧文件布局），含对话级数据与向量索引。"""
-    from sqlalchemy import delete as sa_delete
-
-    from app.infrastructure.database.models.memory import (
-        MemoryDaily,
-        MemoryFact,
-        MemoryKnowledge,
-        MemoryProfile,
-        MemorySummary,
-        MemoryVector,
-    )
-    from app.infrastructure.database.session import sync_session_factory
-
-    owner_key = owner_key_for(agent_id)
-    with sync_session_factory() as session:
-        for table in (MemoryFact, MemorySummary, MemoryProfile, MemoryKnowledge, MemoryDaily, MemoryVector):
-            session.execute(sa_delete(table).where(table.owner_key == owner_key))
-        session.commit()
-    # 清理旧文件布局（迁移前遗留，兼容保留）
-    remove_agent_memory(agent_id)
-    key = agent_id
-    _engines.pop(key, None)
-    return ok()
-
-
 @router.delete("/facts")
 async def clear_facts(agent_id: str | None = None):
     """清空所有事实"""
     engine = get_memory_engine(agent_id)
-    engine.clear_facts()
+    async with engine.write_lock:
+        await asyncio.to_thread(engine.clear_facts)
     return ok()
 
 
@@ -417,16 +301,5 @@ async def reset_all_memory(
     conversation_store.delete_by_agent_id(agent_id or "_default")
     
     # 清除缓存
-    key = agent_id or "_default"
-    _engines.pop(key, None)
+    remove_engine(agent_id)
     return ok()
-
-
-def json_compat(obj):
-    if isinstance(obj, dict):
-        return {k: json_compat(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [json_compat(v) for v in obj]
-    if isinstance(obj, float):
-        return round(obj, 4)
-    return obj

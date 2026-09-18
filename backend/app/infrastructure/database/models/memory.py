@@ -35,6 +35,8 @@ class MemoryProfile(Base):
     # 静态事实 / 动态上下文（JSON 列表，对应 ProfileData.static_facts / dynamic_context）
     static_facts: Mapped[list] = mapped_column(JSON, default=list)
     dynamic_context: Mapped[list] = mapped_column(JSON, default=list)
+    # 蒸馏游标（对应 ProfileData.distilled_turns，防多 worker/重启重复蒸馏）
+    distilled_turns: Mapped[int] = mapped_column(Integer, default=0)
     updated_at: Mapped[str] = mapped_column(String(64), default="")
 
 

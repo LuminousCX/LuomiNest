@@ -7,6 +7,16 @@ from app.core.utils import utc_now
 
 FACT_CATEGORIES = ("preference", "knowledge", "context", "behavior", "goal", "correction")
 
+# 事实类别中文显示名（注入上下文时用中文，避免模型复述英文 slug）
+FACT_CATEGORY_LABELS = {
+    "preference": "偏好",
+    "knowledge": "知识",
+    "context": "背景",
+    "behavior": "行为",
+    "goal": "目标",
+    "correction": "纠正",
+}
+
 # 事实作用域：Agent级共享 vs 对话级隔离
 FACT_SCOPE_AGENT = {"preference", "knowledge", "correction"}
 FACT_SCOPE_CONVERSATION = {"context", "behavior", "goal"}
@@ -23,10 +33,14 @@ _SUMMARY_SECTION_MAP = {
 class ProfileData(BaseModel):
     name: str = ""
     updated_at: str = ""
+    # 最近一次改名前的老名字（可回滚：改名若被误触发，可从此字段恢复）
+    previous_name: str = ""
     # Static: 长期稳定的事实（很少变化，如职业、技能、偏好）
     static_facts: list[str] = Field(default_factory=list)
     # Dynamic: 近期上下文和临时状态（频繁更新，如正在做的项目、短期计划）
     dynamic_context: list[str] = Field(default_factory=list)
+    # 蒸馏游标：本 owner_key + conversation_id 上次蒸馏时的完整轮次数（防多 worker/重启重复蒸馏）
+    distilled_turns: int = 0
 
 
 class ArchivedFact(BaseModel):

@@ -47,6 +47,8 @@ async def shutdown_memory() -> None:
         try:
             if engine._vector_manager is not None:
                 engine._vector_manager.save()
+                # 关闭向量库与 embedding 连接池（长生命周期 httpx client）
+                await engine._vector_manager.aclose()
         except Exception as e:
             logger.error(f"[Memory] Failed to persist engine data during shutdown: {e}")
 

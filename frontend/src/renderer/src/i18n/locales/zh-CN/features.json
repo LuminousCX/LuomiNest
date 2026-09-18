@@ -44,6 +44,13 @@
       "clearSummary": "重置AI总结",
       "resetAll": "清空全部记忆 ⚠️"
     },
+    "agentPicker": {
+      "viewing": "查看",
+      "mainWorkspace": "主工作台",
+      "mainWorkspaceSub": "主 Agent 的记忆",
+      "factCount": "{n} 条事实",
+      "noSubAgents": "暂无其他 Agent"
+    },
     "confirm": {
       "deleteFactTitle": "删除事实",
       "deleteFactMessage": "确定要删除这条事实吗？",

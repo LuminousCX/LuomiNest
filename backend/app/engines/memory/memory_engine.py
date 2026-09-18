@@ -34,7 +34,6 @@ from .prompts import (
     _REINFORCEMENT_HINT,
     _REINFORCEMENT_PATTERNS_EN,
     _REINFORCEMENT_PATTERNS_ZH,
-    _SUMMARY_EXTRACT_PROMPT,
 )
 from .store import (
     MemoryStore,
@@ -50,6 +49,32 @@ from .context_builder import ContextBuilder
 
 if TYPE_CHECKING:
     from .vector_manager import VectorSearchManager
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 锁协议（并发安全设计，Phase 4 文档化）
+# ═══════════════════════════════════════════════════════════════════════
+# 本模块存在两级锁，职责不同、互不嵌套（避免死锁）：
+#
+# 1) store 锁（threading.RLock，MemoryStore 内部）：
+#    保护 SQLite 单库读写。所有同步方法（load_data/save_data/mutate/
+#    append_daily 等）内部自持；async 调用方须经 asyncio.to_thread 包裹，
+#    因为 store 的同步 API 在 worker 线程中执行，asyncio.Lock 不可用。
+#
+# 2) 引擎级写锁（asyncio.Lock，self._async_lock，经 write_lock 暴露）：
+#    串行化「读-改-写」跨步序列（API 端点 / 工作流工具 / 提取器写入段），
+#    防止与蒸馏/画像更新并发时相互覆盖。
+#
+# 规则：
+#   - 纯内存内变更（无跨 await 的中间态）→ 只走 store 锁（mutate 原子化）。
+#   - 跨 await 的读-改-写序列 → 先拿 write_lock，再在锁内用 store 同步 API
+#     （经 to_thread）完成，保证整段序列原子。
+#   - 严禁在持有 write_lock 时再 await 任何可能反向获取 store 锁的代码
+#     （本层所有 store 调用均已 to_thread，不重入 write_lock）。
+#   - forget_facts / remember_fact 等门面方法已封装上述顺序，调用方勿再
+#     直接摸 engine._store / _async_lock。
+# ═══════════════════════════════════════════════════════════════════════
+
 
 
 class MemoryEngine:
@@ -76,7 +101,10 @@ class MemoryEngine:
         self._conversation_base_dir = Path(conversation_base_dir) if conversation_base_dir else None
         self._fact_manager = FactManager(self._store)
         self._async_lock = asyncio.Lock()
-        self._extractor = MemoryExtractor(self._store, self._fact_manager, self._async_lock, agent_id=self._agent_id)
+        self._extractor = MemoryExtractor(
+            self._store, self._fact_manager, self._async_lock,
+            agent_id=self._agent_id, conversation_base_dir=self._conversation_base_dir,
+        )
         self._context_builder = ContextBuilder(self._store)
         
         self._vector_manager: VectorSearchManager | None = None
@@ -142,8 +170,48 @@ class MemoryEngine:
     ) -> bool:
         return self._fact_manager.update_fact(fact_id, content, category, confidence)
 
+    async def remember_fact(self, fact: FactItem, conversation_id: str | None = None) -> None:
+        """写库 + 向量入库（事实↔向量生命周期联动，Phase 3）。
+
+        同步 add_fact 已把事实写进 store；此处补齐向量索引，使手动创建/工作流
+        创建的事实立即可被语义检索。embedding 失败不抛（与 update_profile_from_message
+        的 B2.3 降级策略一致），保证记忆主体写入不被向量子系统阻断。
+        """
+        await asyncio.to_thread(self.add_fact, fact)
+        try:
+            vm = self._get_vector_manager()
+            await vm.add_fact(fact, conversation_id)
+        except Exception as e:
+            logger.warning(f"[Memory] Vector add after remember_fact failed: {e}")
+
+    async def forget_fact_vector(self, fact_id: str) -> None:
+        """向量摘除（删库后即时清向量，Phase 3）。失败仅告警不阻断。"""
+        try:
+            if self._vector_manager is not None:
+                await self._vector_manager.remove(fact_id)
+        except Exception as e:
+            logger.warning(f"[Memory] Vector remove after delete_fact failed: {e}")
+
+    async def sync_fact_vector(self, fact: FactItem, conversation_id: str | None = None) -> None:
+        """事实更新后重同步向量：先摘旧向量再按新内容重嵌（Phase 3）。"""
+        try:
+            vm = self._get_vector_manager()
+            await vm.remove(fact.id)
+            await vm.add_fact(fact, conversation_id)
+        except Exception as e:
+            logger.warning(f"[Memory] Vector sync after update_fact failed: {e}")
+
     def clear_facts(self) -> None:
         self._fact_manager.clear_facts()
+
+    def forget_facts(self, matcher) -> int:
+        """按匹配器遗忘事实（引擎写锁 + store 原子 mutate，返回删除条数）。
+
+        matcher: callable(data) -> int，在 store 锁内 load→fn(data)→save，
+        返回被遗忘（降置信）的事实条数。供自然语言 forget 操作调用，
+        替代生产代码直接摸 engine._store.mutate。
+        """
+        return self._store.mutate(matcher)
 
     def promote_conversation_facts(self, conversation_id: str, fact_ids: list[str] | None = None) -> int:
         """方案A：将对话级facts提升到Agent级。
@@ -237,13 +305,6 @@ class MemoryEngine:
             "事件时间线": data.summaries.timeline.summary,
         }
 
-    async def merge_summary(self, old_summary: str, new_summary: str, llm_adapter=None) -> str | None:
-        return await self._extractor.merge_summary(old_summary, new_summary, llm_adapter)
-
-    async def extract_summary_sections(self, content: str, llm_adapter=None) -> dict | None:
-        """使用LLM从摘要内容中提取五个部分。"""
-        return await self._extractor.extract_summary_sections(content, llm_adapter)
-
     async def extract_knowledge(self, conversation: str, existing_knowledge: str = "", llm_adapter=None) -> str | None:
         """使用LLM从对话中提取知识点，并与现有知识库合并。"""
         return await self._extractor.extract_knowledge(conversation, existing_knowledge, llm_adapter)
@@ -252,6 +313,25 @@ class MemoryEngine:
         data = self._store.load_data()
         data.summaries = SummaryData()
         self._store.save_data(data)
+
+    # --- 蒸馏游标 ---
+
+    def get_distilled_turns(self, conversation_id: str | None = None) -> int:
+        """读取蒸馏游标（上次蒸馏时的完整轮次数，防多 worker/重启重复蒸馏）。
+
+        conversation_id 非空读对话级 store，否则读 Agent 级 store。
+        """
+        store = self._get_conv_store(conversation_id) if conversation_id else self._store
+        return int(store.load_data().profile.distilled_turns or 0)
+
+    def set_distilled_turns(self, conversation_id: str | None, turns: int) -> None:
+        """写入蒸馏游标（store 原子 mutate，Phase 4 落盘替代内存 dict）。"""
+        store = self._get_conv_store(conversation_id) if conversation_id else self._store
+
+        def op(data: MemoryData) -> None:
+            data.profile.distilled_turns = int(turns)
+
+        store.mutate(op)
 
     # --- 每日记录 ---
 
@@ -297,7 +377,16 @@ class MemoryEngine:
         if self._vector_manager is None:
             if self._embedding_provider is None:
                 try:
-                    self._embedding_provider = llm_adapter.get_provider()
+                    raw = llm_adapter.get_provider()
+                    # 关键装配：LLMProvider.embed 是单文本协议（str → list[float]），
+                    # 直接注入 VectorStore 会与批量协议错配——历史缺陷曾致
+                    # vectors[i] 取到单个向量的第 i 个 float，全索引静默标量化。
+                    # 统一经 LLMEmbeddingProvider（批量协议，直连 /embeddings）包装。
+                    model = str(getattr(raw, "default_model", "") or "")
+                    if "embed" not in model.lower():
+                        model = "text-embedding-3-small"
+                    from .vector_store import LLMEmbeddingProvider
+                    self._embedding_provider = LLMEmbeddingProvider(raw, model=model)
                 except Exception as e:
                     logger.warning(f"[Memory] Failed to access llm_adapter for embedding provider: {e}")
 
@@ -316,6 +405,12 @@ class MemoryEngine:
                 owner_key=self._store.owner_key,
             )
         return self._vector_manager
+
+    @property
+    def write_lock(self) -> asyncio.Lock:
+        """引擎级写锁：与提取器写入段共用，供 API 端点/工作流工具串行化
+        读-改-写序列，避免与蒸馏/画像更新并发时相互覆盖。"""
+        return self._async_lock
 
     async def vector_dedup(self, facts: list[FactItem], conversation_id: str | None = None) -> list[FactItem]:
         """向量语义去重后的 facts"""
@@ -352,11 +447,6 @@ class MemoryEngine:
             return await self._vector_manager.delete_conversation(conversation_id)
         return 0
 
-    def vector_save(self) -> None:
-        """保存向量索引"""
-        if self._vector_manager:
-            self._vector_manager.save()
-
     # --- 上下文 ---
 
     async def build_context_async(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
@@ -365,16 +455,16 @@ class MemoryEngine:
             conv_store = self._get_conv_store(conversation_id)
 
         # 如果有查询，尝试向量召回增强
+        retrieved_ids: set[str] | None = None
         if query:
             try:
                 retrieved = await self.vector_retrieve(query, k=10)
                 if retrieved:
                     retrieved_ids = {r.fact_id for r in retrieved}
-                    self._context_builder._relevant_fact_ids = retrieved_ids
             except Exception as e:
                 logger.warning(f"[Memory] Vector retrieve failed: {e}")
 
-        return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id)
+        return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id, relevant_fact_ids=retrieved_ids)
 
     def build_context_sync(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
         """同步上下文组装（与 build_context 的事件循环内回退分支相同，不含向量召回）。
@@ -418,7 +508,8 @@ class MemoryEngine:
             if conv_facts:
                 conv_store = self._get_conv_store(conversation_id)
                 conv_data = await asyncio.to_thread(conv_store.load_data)
-                self._fact_manager.merge_facts(conv_data, conv_facts)
+                # merge_facts 为纯 CPU（分词+相似度），放线程池避免阻塞事件循环
+                await asyncio.to_thread(self._fact_manager.merge_facts, conv_data, conv_facts)
                 await asyncio.to_thread(conv_store.save_data, conv_data)
 
         # 增量向量化新提取的事实（embedding 失败不影响主流程，B2.3）
@@ -431,48 +522,16 @@ class MemoryEngine:
 
         return result
 
-    async def distill_conversation(
-        self,
-        messages: list[dict],
-        llm_adapter=None,
-        correction_hint: str = "",
-        conversation_id: str | None = None,
-    ) -> str | None:
-        result = await self._extractor.distill_conversation(messages, llm_adapter, correction_hint, conversation_id)
-
-        # 蒸馏后增量向量化（agent 级 + 对话级 latest facts，B2.3）
-        try:
-            data = await asyncio.to_thread(self._store.load_data)
-            agent_facts = [f for f in data.facts if f.is_latest]
-            if agent_facts:
-                await self.vector_dedup(agent_facts)
-            if conversation_id:
-                conv_store = self._get_conv_store(conversation_id)
-                conv_data = await asyncio.to_thread(conv_store.load_data)
-                conv_facts = [f for f in conv_data.facts if f.is_latest]
-                if conv_facts:
-                    await self.vector_dedup(conv_facts, conversation_id)
-        except Exception as e:
-            logger.warning(f"[Memory] Vector sync after distill failed: {e}")
-
-        return result
-
     # --- 重置 ---
 
     def reset_all(self) -> None:
         self._store.reset_all()
 
-    # --- 内部兼容方法（测试和 API debug 端点使用） ---
+    # --- 内部兼容方法（测试使用） ---
 
     @property
     def _path(self):
         return self._store._path
-
-    def _memory_file(self):
-        return self._store._memory_file()
-
-    def _knowledge_file(self):
-        return self._store._knowledge_file()
 
     def _find_similar_fact(self, data: MemoryData, fact: FactItem):
         return self._fact_manager._find_similar_fact(data, fact)
@@ -620,6 +679,17 @@ def get_memory_engine(agent_id: str | None = None) -> MemoryEngine:
         engine = MemoryEngine(storage_path=path, agent_id=key)
         _engines[key] = engine
         return engine
+
+
+def remove_engine(agent_id: str | None = None) -> None:
+    """从注册表移除指定 Agent 的记忆引擎缓存（不落盘，仅清缓存）。
+
+    替代生产代码直接摸 _engines.pop。删除内存后再次 get_memory_engine
+    会重新构建。
+    """
+    key = agent_id or "_default"
+    with _engine_lock:
+        _engines.pop(key, None)
 
 
 # --- 群友画像块（§8.5.10 本期实现：群成员轨读侧） ---

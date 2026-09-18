@@ -642,18 +642,16 @@ class OpenAICompatibleProvider(ProviderClientMixin, LLMProvider):
 
     async def embed(self, text: str) -> list[float]:
         embed_model = self.default_model if "embed" in self.default_model.lower() else "text-embedding-3-small"
-        client = httpx.AsyncClient(timeout=30.0) if self._client is None else self.client
-        try:
-            resp = await client.post(
-                f"{self.base_url}/embeddings",
-                headers=self._build_headers(),
-                json={"model": embed_model, "input": text},
-            )
-            resp.raise_for_status()
-            return resp.json()["data"][0]["embedding"]
-        finally:
-            if self._client is None:
-                await client.aclose()
+        # 共享连接池（ProviderClientMixin 懒加载 client）；
+        # 旧版 self._client 为 None 时每次新建临时 client，逐次付 TCP/TLS 握手开销
+        client = self.client
+        resp = await client.post(
+            f"{self.base_url}/embeddings",
+            headers=self._build_headers(),
+            json={"model": embed_model, "input": text},
+        )
+        resp.raise_for_status()
+        return resp.json()["data"][0]["embedding"]
 
     # ── 模型列表 ──
 

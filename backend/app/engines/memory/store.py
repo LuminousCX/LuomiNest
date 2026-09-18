@@ -265,7 +265,6 @@ class MemoryStore:
         self._owner_key = _derive_owner_key(self._path)
         self._conversation_id = _derive_conversation_id(self._path)
         self._db = _MemoryDB(self._path)
-        self._auto_migrate()
 
     @classmethod
     def for_track(cls, track: str, user_key: str = "", base_dir: Path | None = None) -> "MemoryStore":
@@ -282,61 +281,7 @@ class MemoryStore:
         """行级隔离键（owner:… / users:… / tmp:…），向量索引与记忆共用。"""
         return self._owner_key
 
-    # ── 兼容旧文件布局的虚拟路径（历史 API/端点仍引用） ──
-
-    def _memory_file(self) -> Path:
-        return self._path / "memory.json"
-
-    def _knowledge_file(self) -> Path:
-        return self._path / "knowledge.md"
-
-    @staticmethod
-    def _safe_conversation_id(conversation_id: str) -> str:
-        """校验并返回路径安全的 conversation_id（防路径遍历）。"""
-        safe_id = "".join(c if c.isalnum() or c in "-_" else "_" for c in conversation_id)
-        if safe_id != conversation_id:
-            raise ValueError(f"Invalid conversation_id: {conversation_id!r}")
-        return safe_id
-
-    def _daily_file(self, date: str | None = None, conversation_id: str | None = None) -> Path:
-        """兼容旧布局的虚拟路径（SQLite 下仅作展示/迁移参考，不再读写）。"""
-        if date is not None:
-            if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
-                raise ValueError(f"Invalid date format: {date!r}, expected YYYY-MM-DD")
-        else:
-            date = datetime.now(_TZ).strftime("%Y-%m-%d")
-        if conversation_id:
-            safe_id = self._safe_conversation_id(conversation_id)
-            return self._path / "conversations" / safe_id / "daily" / f"{date}.md"
-        return self._path / "daily" / f"{date}.md"
-
-    def _legacy_daily_file(self, date: str, conversation_id: str) -> Path:
-        """旧布局（历史数据兜底）：{path}/daily/{conversation_id}/{date}.md。"""
-        return self._path / "daily" / conversation_id / f"{date}.md"
-
-    # --- 格式迁移（文件 → SQLite 由 migration.memory_to_sqlite_migrator 统一执行） ---
-
-    def _auto_migrate(self) -> None:
-        # 旧实现在此处把 MEMORY.md/summary.md 迁移到 memory.json；
-        # SQLite 化后文件级迁移统一收敛到 DB 迁移器（幂等，见
-        # app/infrastructure/database/migration/memory_to_sqlite_migrator.py），
-        # 此处不再需要 per-store 文件迁移。
-        return
-
-    def _migrate_summary_sections(self, raw: dict) -> None:
-        # 兼容旧逻辑：preferences → interests 分区改名（历史 memory.json 兜底）
-        summaries = raw.get("summaries", {})
-        if not summaries:
-            return
-        if "preferences" in summaries and "interests" not in summaries:
-            old_prefs = summaries["preferences"]
-            if isinstance(old_prefs, dict) and old_prefs.get("summary"):
-                summaries["interests"] = {
-                    "summary": old_prefs["summary"],
-                    "updated_at": old_prefs.get("updated_at", ""),
-                }
-                summaries["preferences"] = {"summary": "", "updated_at": ""}
-                logger.info("[Memory] Migrated '兴趣偏好' to '兴趣目标'")
+    # ── 格式迁移：文件 → SQLite 由 migration.memory_to_sqlite_migrator 统一执行 ──
 
     # --- 数据读写（SQLite） ---
 
@@ -356,6 +301,7 @@ class MemoryStore:
                             updated_at=profile_row.updated_at or "",
                             static_facts=list(profile_row.static_facts or []),
                             dynamic_context=list(profile_row.dynamic_context or []),
+                            distilled_turns=int(profile_row.distilled_turns or 0),
                         )
                     fact_rows = (
                         session.execute(
@@ -386,6 +332,19 @@ class MemoryStore:
             self._cache = data
             return data
 
+    def mutate(self, fn):
+        """读-改-写原子化：在 store 锁内 load → fn(data) → save，返回 fn 的返回值。
+
+        FactManager 的单条写操作（add/remove/update/clear）原先为
+        load→改→save 三步无锁序列，并发调用会相互覆盖（后写者整体覆盖
+        先写者的修改）。收进同一锁段后序列化执行。
+        """
+        with self._lock:
+            data = self.load_data()
+            result = fn(data)
+            self.save_data(data)
+            return result
+
     def save_data(self, data: MemoryData) -> None:
         with self._lock:
             data.last_updated = utc_now()
@@ -403,6 +362,7 @@ class MemoryStore:
                     profile.name = data.profile.name or ""
                     profile.static_facts = data.profile.static_facts or []
                     profile.dynamic_context = data.profile.dynamic_context or []
+                    profile.distilled_turns = int(data.profile.distilled_turns or 0)
                     profile.updated_at = data.profile.updated_at or utc_now()
 
                     # 事实全量替换（单事务；事实集合量级小，替换语义最稳）
@@ -517,19 +477,6 @@ class MemoryStore:
             except Exception as e:
                 logger.error(f"[Memory] Failed to save knowledge: {e}")
                 raise
-
-    def export_knowledge(self, path: Path | None = None) -> Path:
-        """把 SQLite 中的知识库导出为 Markdown 文件（knowledge.md 的导出视图）。
-
-        供迁移器/管理端使用；不指定 path 时导出到存储目录下 knowledge.md。
-        """
-        target = Path(path) if path else self._knowledge_file()
-        content = self.load_knowledge()
-        target.parent.mkdir(parents=True, exist_ok=True)
-        tmp = target.with_suffix(".tmp")
-        tmp.write_text(content or "", encoding="utf-8")
-        tmp.replace(target)
-        return target
 
     def parse_knowledge(self) -> list[dict[str, str]]:
         content = self.load_knowledge()

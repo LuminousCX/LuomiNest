@@ -30,7 +30,8 @@ def _distill_allowed(agent_id: str | None, domain: str | None, user_key: str) ->
     if domain:
         policy = resolve_domain_policy(domain, agent_id=agent_id, user_key=user_key)
         return policy.memory_write and policy.memory_track == TRACK_OWNER
-    return agent_id == _MAIN_AGENT_ID
+    # domain 缺省（legacy 调用）：主 Agent 或任意子 Agent（agent_id 非空）均生效
+    return bool(agent_id)
 
 
 class DistillationService:
@@ -48,9 +49,6 @@ class DistillationService:
     """
 
     DROPLET_THRESHOLD = 5
-
-    # 记录每个对话上次蒸馏时的轮次数，防止重复蒸馏
-    _last_distilled_turns: dict[str, int] = {}
 
     STOP_WORDS = {
         '好', '嗯', '哦', '行', 'ok', 'OK', '好的', '嗯嗯', '嗯嗯嗯',
@@ -76,9 +74,34 @@ class DistillationService:
         pass
 
     @staticmethod
+    def _get_distilled_turns(agent_id: str, conversation_id: str) -> int:
+        """读蒸馏游标（落盘，防多 worker/重启重复蒸馏）。"""
+        engine = get_memory_engine(agent_id)
+        return engine.get_distilled_turns(conversation_id)
+
+    @staticmethod
+    def _set_distilled_turns(agent_id: str, conversation_id: str, turns: int) -> None:
+        """写蒸馏游标（落盘）。"""
+        engine = get_memory_engine(agent_id)
+        engine.set_distilled_turns(conversation_id, turns)
+
+    @staticmethod
     def reset_distill_state(conversation_id: str) -> None:
-        """重置指定对话的蒸馏状态，使下次maybe_distill能重新触发"""
-        DistillationService._last_distilled_turns.pop(conversation_id, None)
+        """重置指定对话的蒸馏状态，使下次 maybe_distill 能重新触发。
+
+        落盘游标无法跨对话定位（缺 agent_id），保留为兼容入口：
+        由调用方（chat_service.rebuild_conversation_memory）提供 agent_id 时
+        直接调 set_distilled_turns(agent_id, conversation_id, 0)。此处仅记录告警。
+        """
+        logger.debug(
+            f"[Distill] reset_distill_state({conversation_id}) 为兼容入口，"
+            "请改用 set_distilled_turns(agent_id, conversation_id, 0)"
+        )
+
+    @staticmethod
+    def set_distilled_turns(agent_id: str, conversation_id: str, turns: int) -> None:
+        """显式写蒸馏游标（供 rebuild/删除对话时清零，Phase 4 落盘）。"""
+        DistillationService._set_distilled_turns(agent_id, conversation_id, turns)
 
     @staticmethod
     def _is_emoji(char: str) -> bool:
@@ -191,7 +214,7 @@ class DistillationService:
             logger.info(f"[Distill] Skip: {full_turns} turns < {DistillationService.DROPLET_THRESHOLD}")
             return False
 
-        last_distilled = DistillationService._last_distilled_turns.get(conversation_id, 0)
+        last_distilled = DistillationService._get_distilled_turns(agent_id, conversation_id)
         if full_turns <= last_distilled:
             logger.info(f"[Distill] Skip: {full_turns} turns, last distilled at {last_distilled}")
             return False
@@ -201,7 +224,7 @@ class DistillationService:
         success = await DistillationService.distill_and_merge(agent_id, conversation_id, messages, llm_adapter)
 
         if success:
-            DistillationService._last_distilled_turns[conversation_id] = full_turns
+            DistillationService._set_distilled_turns(agent_id, conversation_id, full_turns)
         return success
 
     @staticmethod
@@ -361,7 +384,7 @@ class DistillationService:
             logger.info(f"[Distill] Skip final: {full_turns} < 2 turns")
             return
 
-        last_distilled = DistillationService._last_distilled_turns.get(conversation_id, 0)
+        last_distilled = DistillationService._get_distilled_turns(agent_id, conversation_id)
         if full_turns <= last_distilled:
             logger.info(f"[Distill] Skip final: already distilled at {last_distilled} turns")
             return
@@ -376,7 +399,7 @@ class DistillationService:
         # 对话结束兜底：随最终蒸馏提取知识
         await DistillationService._extract_knowledge(agent_id, messages, llm_adapter)
 
-        DistillationService._last_distilled_turns.pop(conversation_id, None)
+        DistillationService._set_distilled_turns(agent_id, conversation_id, full_turns)
 
 
 distillation_service = DistillationService()
