@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 class ChatMessageCreate(BaseModel):
     role: str = Field(..., pattern="^(user|assistant|system)$")
-    content: str
+    content: str = Field(..., max_length=65536)  # 文本长度上限（审计 B4-4）
 
 
 class ChatRequest(BaseModel):
@@ -139,4 +139,6 @@ class TrashListItemResponse(ConversationListResponse):
 
 
 class BatchIdsRequest(BaseModel):
-    ids: list[str] = Field(..., min_length=1)
+    # 上限 100：batch-delete 会对每个 id 触发一次 LLM final distill，
+    # 无上限时可放大为任意次 LLM 调用（审计 B4-4）
+    ids: list[str] = Field(..., min_length=1, max_length=100)

@@ -472,7 +472,7 @@ async def restore_conversation(
     restored = await conversation_store.restore_async(conversation_id)
     if not restored:
         logger.warning(f"[API] POST /chat/trash/{conversation_id}/restore - Restore failed, not found")
-        return {"error": "not found", "data": {"restored": False}}
+        raise NotFoundError(f"Conversation {conversation_id} not found in trash", code="CONVERSATION_NOT_FOUND")
     logger.success(f"[API] POST /chat/trash/{conversation_id}/restore - Restored")
     return ok({"restored": True})
 
@@ -486,7 +486,7 @@ async def permanent_delete_conversation(
     deleted = await conversation_store.permanent_delete_async(conversation_id)
     if not deleted:
         logger.warning(f"[API] DELETE /chat/trash/{conversation_id} - Delete failed, not found")
-        return {"error": "not found", "data": {"deleted": False}}
+        raise NotFoundError(f"Conversation {conversation_id} not found in trash", code="CONVERSATION_NOT_FOUND")
     logger.success(f"[API] DELETE /chat/trash/{conversation_id} - Permanently deleted")
     return ok({"deleted": True})
 

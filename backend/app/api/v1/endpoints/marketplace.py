@@ -394,7 +394,8 @@ class InstallRequest(BaseModel):
     # itemId/version/itemType 会被拼进下载文件名与临时目录路径：
     # 约束字符集与长度阻断 ../ 路径注入（纵深防御另见 install_service._resolve_download_target）
     itemId: str = Field(..., min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-    itemType: str = Field(..., min_length=1, max_length=32, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")  # plugin / skill / agent
+    # itemType: plugin / skill / agent
+    itemType: str = Field(..., min_length=1, max_length=32, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
     itemName: str = Field(..., min_length=1, max_length=128)
     version: str = Field("1.0.0", min_length=1, max_length=32, pattern=r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
     downloadUrl: Optional[str] = None
@@ -732,7 +733,9 @@ async def get_cached_registry():
 class PublishLocalRegistryRequest(BaseModel):
     """publish-local 请求体：GitHub Token 走 body 而非 Query（避免进请求日志/代理历史）。"""
 
-    github_token: Optional[str] = Field(None, max_length=256, description="可选 GitHub Token，覆盖 settings.GITHUB_TOKEN")
+    github_token: Optional[str] = Field(
+        None, max_length=256, description="可选 GitHub Token，覆盖 settings.GITHUB_TOKEN"
+    )
 
 
 @router.post("/registry/publish-local")

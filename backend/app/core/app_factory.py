@@ -721,6 +721,28 @@ def create_app() -> FastAPI:
             },
         )
 
+    # FastAPI 422 校验错误统一转规范信封（审计 B4-1）：
+    # 原漏网路径返回裸 {"detail": [...]}，前端被迫做数组形式双格式兼容
+    from fastapi.exceptions import RequestValidationError
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError):
+        detail = "; ".join(
+            f"{'.'.join(str(loc) for loc in err.get('loc', []))}: {err.get('msg', '')}"
+            for err in exc.errors()
+        )
+        message = detail or "请求参数校验失败"
+        logger.warning(f"[Exception] RequestValidationError: {message} | {request.url.path}")
+        return JSONResponse(
+            status_code=422,
+            content={
+                "code": 1,
+                "message": message,
+                "error": {"code": "VALIDATION_ERROR", "message": message},
+                "data": None,
+            },
+        )
+
     # --- 速率限制（slowapi） ---
     from slowapi.errors import RateLimitExceeded
 

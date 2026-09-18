@@ -12,6 +12,7 @@ from loguru import logger
 
 from app.core.exceptions import BadRequestError, LuomiNestError, NotFoundError, ServiceUnavailableError
 from app.core.utils import ok
+from app.services.scheduled_task_persistence import delete_scheduled_task
 from app.core.scheduler import (
     LuomiTaskStatus,
     LuomiTaskType,
@@ -25,17 +26,17 @@ router = APIRouter(prefix="/scheduler", tags=["scheduler"])
 @router.get("/status")
 async def get_scheduler_status():
     """获取调度器运行状态"""
-    return {
+    return ok({
         "running": luominest_scheduler.is_running,
         "task_count": len(luominest_scheduler.list_tasks()),
-    }
+    })
 
 
 @router.get("/tasks")
 async def list_tasks():
     """列出所有定时任务"""
     tasks = luominest_scheduler.list_tasks()
-    return [t.model_dump() for t in tasks]
+    return ok([t.model_dump() for t in tasks])
 
 
 @router.get("/tasks/{task_id}")
@@ -44,7 +45,7 @@ async def get_task(task_id: str):
     task = luominest_scheduler.get_task(task_id)
     if not task:
         raise NotFoundError(f"任务 {task_id} 不存在", code="SCHEDULER_TASK_NOT_FOUND")
-    return task.model_dump()
+    return ok(task.model_dump())
 
 
 @router.post("/tasks")
@@ -55,7 +56,7 @@ async def create_task(config: ScheduledTaskConfig):
     try:
         task_id = await luominest_scheduler.add_task(config)
         task = luominest_scheduler.get_task(task_id)
-        return task.model_dump() if task else {"id": task_id}
+        return ok(task.model_dump() if task else {"id": task_id})
     except ValueError as e:
         raise BadRequestError(str(e), code="SCHEDULER_TASK_INVALID")
     except Exception as e:
@@ -69,8 +70,17 @@ async def create_task(config: ScheduledTaskConfig):
 
 @router.delete("/tasks/{task_id}")
 async def delete_task(task_id: str):
-    """删除定时任务"""
+    """删除定时任务（内存调度器 + 数据库行同步删除，审计 B4-5）。
+
+    原实现仅 remove_task 内存删除并触发 _persist_tasks 重写存量任务，
+    被删任务的 DB 行残留（孤儿行）；此处显式删除 DB 行，与 /scheduled-tasks
+    删除语义收敛。
+    """
     success = await luominest_scheduler.remove_task(task_id)
     if not success:
         raise NotFoundError(f"任务 {task_id} 不存在", code="SCHEDULER_TASK_NOT_FOUND")
+    try:
+        await delete_scheduled_task(task_id)
+    except Exception as e:
+        logger.warning(f"[SchedulerAPI] DB row cleanup skipped for {task_id}: {e}")
     return ok({"task_id": task_id})

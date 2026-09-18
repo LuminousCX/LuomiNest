@@ -76,16 +76,9 @@ const extractErrorMessage = (errData: unknown, status: number): string => {
     errMsg = data.error?.message || data.detail || data.message || ''
   }
 
-  // 3. 数组形式（FastAPI 校验错误）
-  if (Array.isArray(errMsg)) {
-    errMsg = errMsg.map((e: unknown) => {
-      if (typeof e === 'object' && e !== null) {
-        const obj = e as { msg?: string; message?: string }
-        return obj.msg || obj.message || JSON.stringify(e)
-      }
-      return JSON.stringify(e)
-    }).join('; ')
-  } else if (typeof errMsg === 'object' && errMsg !== null) {
+  // 3. 兜底：对象形式序列化（后端 422 校验错误已由 RequestValidationError
+  //    handler 统一转信封，不再出现裸 {"detail": [...]} 数组形式）
+  if (typeof errMsg === 'object' && errMsg !== null) {
     errMsg = JSON.stringify(errMsg)
   }
 

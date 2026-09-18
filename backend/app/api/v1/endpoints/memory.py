@@ -21,7 +21,7 @@ class AppendRequest(BaseModel):
 
 
 class UpdateContentRequest(BaseModel):
-    content: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1, max_length=5000)  # 与 AppendRequest 上限一致（审计 B4-4）
 
 
 class CreateFactRequest(BaseModel):
