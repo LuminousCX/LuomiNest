@@ -14,9 +14,12 @@ import {
   Sparkles,
   Download,
   Upload,
+  ChevronDown,
+  Check,
+  Bot,
 } from 'lucide-vue-next'
 import { useMemoryStore, categoryLabel, CATEGORY_COLORS, FACT_CATEGORIES } from '../stores/memory'
-import type { FactItem, FactCategory } from '../stores/memory'
+import type { FactItem, FactCategory, MemoryAgent } from '../stores/memory'
 import { useToast } from '../composables/useToast'
 import LumiButton from '../components/common/LumiButton.vue'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
@@ -287,6 +290,44 @@ async function handleAddDaily() {
 const isSaving = ref(false)
 const selectedAgentId = ref<string | null>(MAIN_AGENT_ID)
 
+// —— Agent 切换（记忆中枢可选择查看主工作台或某个子 Agent 的记忆）——
+const showAgentPicker = ref(false)
+const agentPickerPosition = ref({ x: 0, y: 0 })
+
+const agents = computed<MemoryAgent[]>(() => memoryStore.memoryAgents)
+
+const currentAgentName = computed(() => {
+  if (!selectedAgentId.value) return t('memory.agentPicker.mainWorkspace')
+  if (selectedAgentId.value === MAIN_AGENT_ID) return t('memory.agentPicker.mainWorkspace')
+  const hit = agents.value.find(a => a.id === selectedAgentId.value)
+  return hit?.name || selectedAgentId.value
+})
+
+function toggleAgentPicker(event: MouseEvent) {
+  event.stopPropagation()
+  if (showAgentPicker.value) {
+    showAgentPicker.value = false
+    return
+  }
+  showMenu.value = false
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const menuWidth = 260
+  let menuX = rect.left
+  if (menuX + menuWidth > window.innerWidth) {
+    menuX = window.innerWidth - menuWidth - 16
+  }
+  agentPickerPosition.value = { x: menuX, y: rect.bottom + 8 }
+  showAgentPicker.value = true
+}
+
+async function selectAgent(agentId: string | null) {
+  showAgentPicker.value = false
+  selectedAgentId.value = agentId
+  selectedConversationId.value = null
+  selectedDailyDate.value = ''
+  await loadData()
+}
+
 async function switchConversation(convId: string | null) {
   selectedConversationId.value = convId
   selectedDailyDate.value = ''
@@ -300,6 +341,7 @@ async function switchConversation(convId: string | null) {
 async function loadData() {
   await Promise.all([
     memoryStore.fetchMemory(selectedAgentId.value),
+    memoryStore.fetchMemoryAgents(),
     memoryStore.fetchKnowledge(selectedAgentId.value),
     memoryStore.fetchSummary(selectedAgentId.value),
     memoryStore.fetchDailies(selectedAgentId.value),
@@ -331,6 +373,7 @@ const toggleMenu = (event: MouseEvent) => {
 
 const closeMenu = () => {
   showMenu.value = false
+  showAgentPicker.value = false
 }
 
 const openConfirm = (action: ConfirmAction) => {
@@ -533,6 +576,14 @@ window.addEventListener('click', closeMenu)
       <div class="memory-header__left">
         <h1 class="memory-title">{{ t('memory.title') }}</h1>
         <p class="memory-desc">{{ t('memory.desc') }}</p>
+        <div class="memory-agent-picker">
+          <button class="agent-picker-trigger" @click="toggleAgentPicker">
+            <Bot :size="15" />
+            <span class="agent-picker-label">{{ t('memory.agentPicker.viewing') }}</span>
+            <span class="agent-picker-current">{{ currentAgentName }}</span>
+            <ChevronDown :size="15" class="agent-picker-caret" />
+          </button>
+        </div>
       </div>
       <div class="memory-header__actions">
         <LumiButton variant="ghost" size="sm" icon-only @click="exportMemory" :title="t('memory.exportTitle')">
@@ -548,6 +599,35 @@ window.addEventListener('click', closeMenu)
           <template #icon><MoreVertical :size="15" /></template>
         </LumiButton>
       </div>
+    </div>
+
+    <div v-if="showAgentPicker" class="dropdown-menu agent-picker-menu" :style="{ left: agentPickerPosition.x + 'px', top: agentPickerPosition.y + 'px' }">
+      <div class="menu-item" :class="{ active: selectedAgentId === MAIN_AGENT_ID }" @click="selectAgent(MAIN_AGENT_ID)">
+        <Bot :size="16" />
+        <div class="agent-option">
+          <span class="agent-option-name">{{ t('memory.agentPicker.mainWorkspace') }}</span>
+          <span class="agent-option-sub">{{ t('memory.agentPicker.mainWorkspaceSub') }}</span>
+        </div>
+        <Check v-if="selectedAgentId === MAIN_AGENT_ID" :size="16" class="agent-check" />
+      </div>
+      <div class="menu-divider"></div>
+      <template v-if="agents.length > 0">
+        <div
+          v-for="agent in agents"
+          :key="agent.id"
+          class="menu-item"
+          :class="{ active: selectedAgentId === agent.id }"
+          @click="selectAgent(agent.id)"
+        >
+          <Bot :size="16" />
+          <div class="agent-option">
+            <span class="agent-option-name">{{ agent.name }}</span>
+            <span class="agent-option-sub">{{ t('memory.agentPicker.factCount', { n: agent.fact_count ?? 0 }) }}</span>
+          </div>
+          <Check v-if="selectedAgentId === agent.id" :size="16" class="agent-check" />
+        </div>
+      </template>
+      <div v-else class="agent-picker-empty">{{ t('memory.agentPicker.noSubAgents') }}</div>
     </div>
 
     <div v-if="showMenu" class="dropdown-menu" :style="{ left: menuPosition.x + 'px', top: menuPosition.y + 'px' }">
@@ -746,6 +826,84 @@ window.addEventListener('click', closeMenu)
 .memory-header__left {
   display: flex;
   flex-direction: column;
+}
+
+.memory-agent-picker {
+  margin-top: var(--space-3);
+}
+
+.agent-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  font-size: var(--text-md);
+}
+
+.agent-picker-trigger:hover {
+  background: var(--surface-hover);
+  border-color: var(--lumi-brand);
+}
+
+.agent-picker-label {
+  color: var(--text-muted);
+}
+
+.agent-picker-current {
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.agent-picker-caret {
+  color: var(--text-muted);
+}
+
+.agent-picker-menu {
+  min-width: 260px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.agent-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-option-name {
+  font-size: var(--text-md);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-option-sub {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.menu-item.active {
+  background: color-mix(in srgb, var(--lumi-brand) 10%, transparent);
+}
+
+.agent-check {
+  color: var(--lumi-brand);
+  flex-shrink: 0;
+}
+
+.agent-picker-empty {
+  padding: 12px var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-md);
 }
 
 .memory-title {

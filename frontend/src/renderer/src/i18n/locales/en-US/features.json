@@ -44,6 +44,13 @@
       "clearSummary": "Reset AI summary",
       "resetAll": "Clear all memory ⚠️"
     },
+    "agentPicker": {
+      "viewing": "Viewing",
+      "mainWorkspace": "Main Workspace",
+      "mainWorkspaceSub": "Main agent memory",
+      "factCount": "{n} facts",
+      "noSubAgents": "No other agents"
+    },
     "confirm": {
       "deleteFactTitle": "Delete Fact",
       "deleteFactMessage": "Are you sure you want to delete this fact?",

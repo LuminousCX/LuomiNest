@@ -161,60 +161,11 @@ const focusTextarea = () => {
   if (textareaRef.value) textareaRef.value.focus()
 }
 
-const beautifyThinking = (text: string): string => {
-  if (!text || text.length < 20) return text || ''
-
-  let result = text
-
-  if (/【[^】]+】/.test(result)) {
-    result = result.replace(/\s*【/g, '\n\n【')
-    result = result.replace(/】\s*/g, '】\n')
-    result = result.replace(/\n{3,}/g, '\n\n')
-    return result.trim()
-  }
-
-  if (/\n\n/.test(result)) return result
-
-  const parts = result.split(/([。！？])/)
-  const sentences: string[] = []
-  let current = ''
-
-  for (const part of parts) {
-    current += part
-    if (/^[。！？]$/.test(part)) {
-      sentences.push(current.trim())
-      current = ''
-    }
-  }
-  if (current.trim()) {
-    sentences.push(current.trim())
-  }
-
-  const paragraphs: string[] = []
-  let para = ''
-  let count = 0
-
-  for (const s of sentences) {
-    if (para) para += ' '
-    para += s
-    count++
-
-    const threshold = para.length > 150 ? 1 : (s.length < 30 ? 3 : 2)
-    if (count >= threshold) {
-      paragraphs.push(para)
-      para = ''
-      count = 0
-    }
-  }
-  if (para) paragraphs.push(para)
-
-  return paragraphs.join('\n\n')
-}
-
 const renderReasoningMarkdown = (msg: ChatMessage): string => {
   // 流式期间按消息缓存 + 节流重解析，完成后精确渲染（最终 HTML 与全量渲染一致）
+  // 与工作台对齐：思考过程原样渲染，不做中文标点重排（避免英文思考被乱切）
   return renderMarkdownThrottled(`reasoning:${msg.id}`, msg.reasoningContent || '', !!msg.done, (text) =>
-    renderMarkdown(beautifyThinking(text))
+    renderMarkdown(text)
   )
 }
 
@@ -232,13 +183,7 @@ const getVersionIndex = (msg: ChatMessage): number => {
 
 const isLastAssistantMessage = (msgId: string) => checkLastAssistantMessage(props.messages, msgId)
 
-watch(() => props.messages, async (msgs) => {
-  for (const msg of msgs) {
-    if (msg.role !== 'assistant') continue
-    if (msg.content && msg.content.length > 0 && props.showReasoning[msg.id] === undefined) {
-      emit('toggle-reasoning', msg.id)
-    }
-  }
+watch(() => props.messages, async () => {
   await nextTick()
   const scrollEls = reasoningScrollRefs.value
   if (scrollEls) {
