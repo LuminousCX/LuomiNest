@@ -71,10 +71,21 @@ async def _verify_jwt_ws(websocket: WebSocket, token: str, endpoint_name: str) -
     from app.security.auth.jwt_handler import verify_token as jwt_verify_token, TokenError
 
     try:
+        # expected_type 默认 "access"：refresh token 不能用于 WS 握手
         payload = jwt_verify_token(token)
     except TokenError as exc:
         logger.warning(f"[{endpoint_name}/JWT] Token verification failed: {exc.message} | {websocket.client}")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason=f"认证失败: {exc.message}")
+        return False
+
+    # 比对 DB token_version：登出/吊销后旧 token 的 WS 通道同样失效（握手低频，直查不缓存）
+    from app.security.auth.middleware import load_user_token_version
+
+    user_id = payload.get("sub") or ""
+    current_version = await load_user_token_version(user_id, use_cache=False)
+    if current_version is None or int(payload.get("ver", 1) or 1) != current_version:
+        logger.warning(f"[{endpoint_name}/JWT] Stale/unknown token_version, rejecting WS: {websocket.client}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="令牌已失效，请重新登录")
         return False
 
     # 将用户信息存入 websocket.state（供后续使用）

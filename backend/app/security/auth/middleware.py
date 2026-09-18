@@ -2,10 +2,11 @@
 
 拦截所有 /api/* 请求，根据 AUTH_MODE 选择认证方式：
 - "local" 模式：Bearer Token + secrets.compare_digest（向后兼容）
-- "jwt" 模式：JWT 验证（Fail-Closed）
+- "jwt" 模式：JWT 验证（Fail-Closed），并比对 DB token_version 实现登出/吊销
 
 /health 和 / 路由不受保护。
 """
+import time
 from functools import lru_cache
 
 from fastapi import HTTPException, Request
@@ -35,6 +36,47 @@ _JWT_EXEMPT_PATHS_DOCS = {
 # local 模式下豁免的路径（保持向后兼容）
 _LOCAL_EXEMPT_PATHS = {"/health", "/"}
 
+# token_version 短 TTL 进程内缓存（user_id → (version, monotonic 时间戳)）。
+# 认证热路径不能每请求查库；代价是登出/改密吊销后旧 token 最多再用 TTL 秒。
+_TOKEN_VERSION_CACHE: dict[str, tuple[int, float]] = {}
+_TOKEN_VERSION_CACHE_TTL = 10.0
+_TOKEN_VERSION_CACHE_MAX = 1024
+
+
+async def load_user_token_version(user_id: str, *, use_cache: bool = True) -> int | None:
+    """查询用户当前 token_version（用于 JWT 吊销比对）；用户不存在返回 None。
+
+    HTTP 中间件热路径走缓存；WS 握手等低频路径可传 use_cache=False 直查。
+    """
+    if use_cache:
+        now = time.monotonic()
+        cached = _TOKEN_VERSION_CACHE.get(user_id)
+        if cached is not None and now - cached[1] < _TOKEN_VERSION_CACHE_TTL:
+            return cached[0]
+
+    from sqlalchemy import select
+
+    from app.infrastructure.database.models.user import User
+    from app.infrastructure.database.session import async_session_factory
+
+    async with async_session_factory() as session:
+        result = await session.execute(
+            select(User.token_version).where(User.id == user_id)
+        )
+        row = result.scalar_one_or_none()
+
+    if row is None:
+        return None
+    if len(_TOKEN_VERSION_CACHE) >= _TOKEN_VERSION_CACHE_MAX:
+        _TOKEN_VERSION_CACHE.clear()  # 防膨胀兜底：单用户桌面应用实际远达不到上限
+    _TOKEN_VERSION_CACHE[user_id] = (int(row), time.monotonic())
+    return int(row)
+
+
+def invalidate_token_version_cache(user_id: str) -> None:
+    """登出/改密吊销后清除缓存，令版本比对立即生效（不留 TTL 残留窗口）。"""
+    _TOKEN_VERSION_CACHE.pop(user_id, None)
+
 
 @lru_cache(maxsize=1)
 def _get_jwt_exempt_paths() -> set[str]:
@@ -49,21 +91,17 @@ def _get_jwt_exempt_paths() -> set[str]:
 
 
 def _extract_token_from_request(request: Request) -> str | None:
-    """从请求中提取 Token（支持 Header 和 Query 参数）。
+    """从请求中提取 Token（仅 Authorization 头）。
 
-    优先从 Authorization: Bearer <token> 头提取，
-    若无则从 URL query 参数 ?token= 提取（WebSocket 场景）。
+    历史实现回退 ?token= query 参数（WebSocket 场景的兜底扩散到了全部 /api），
+    令牌会随之进入请求日志、浏览器历史与代理日志。WS 握手由 ws_auth.py 在
+    其自己的 query 通道校验，HTTP 侧不再接受 query 传令牌。
     """
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         token = auth_header[7:].strip()
         if token:
             return token
-
-    # 回退到 query 参数（WebSocket 场景）
-    token = request.query_params.get("token", "")
-    if token:
-        return token
 
     return None
 
@@ -89,7 +127,7 @@ async def _handle_jwt_auth(request: Request, call_next):
             },
         )
 
-    # 验证 JWT
+    # 验证 JWT（expected_type 默认 "access"：refresh token 不能当 access token 用）
     from app.security.auth.jwt_handler import verify_token as jwt_verify_token, TokenError
 
     try:
@@ -106,6 +144,22 @@ async def _handle_jwt_auth(request: Request, call_next):
             },
         )
 
+    # 比对 DB token_version：登出/改密吊销后旧 token 立即失效
+    # （get_current_user 的兜底仅覆盖注入该依赖的端点，其余端点靠此处拦截）
+    user_id = payload.get("sub") or ""
+    token_version = int(payload.get("ver", 1) or 1)
+    current_version = await load_user_token_version(user_id)
+    if current_version is None or token_version != current_version:
+        # 缓存可能滞后于刚发生的登出/重新登录（版本单调递增、缓存滞后偏低会误拒新 token），
+        # 不匹配时绕过缓存直查 DB 复核一次（仅罕见路径多一次查询）
+        current_version = await load_user_token_version(user_id, use_cache=False)
+    if current_version is None:
+        logger.warning(f"[Auth/JWT] Unknown user, rejecting: {user_id} | {request.method} {path}")
+        return _auth_failed_response(f"认证失败: 用户 {user_id} 不存在")
+    if token_version != current_version:
+        logger.warning(f"[Auth/JWT] Stale token_version, rejecting: {user_id} | {request.method} {path}")
+        return _auth_failed_response("认证失败: 令牌已失效，请重新登录")
+
     # 将用户信息存入 request.state 供后续依赖注入使用
     request.state.user = {
         "user_id": payload.get("sub"),
@@ -115,6 +169,19 @@ async def _handle_jwt_auth(request: Request, call_next):
     }
 
     return await call_next(request)
+
+
+def _auth_failed_response(message: str) -> JSONResponse:
+    """构造统一信封的 401 响应。"""
+    return JSONResponse(
+        status_code=401,
+        content={
+            "code": 1,
+            "message": message,
+            "error": {"code": "AUTH_FAILED", "message": message},
+            "data": None,
+        },
+    )
 
 
 async def _handle_local_auth(request: Request, call_next):

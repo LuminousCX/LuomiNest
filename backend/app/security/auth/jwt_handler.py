@@ -105,12 +105,14 @@ def create_access_token(
 def create_refresh_token(
     user_id: str,
     device_id: str,
+    token_version: int = 1,
 ) -> str:
     """签发 Refresh Token。
 
     Args:
         user_id: 用户 ID。
         device_id: 设备 ID。
+        token_version: 用户当前 token_version，用于登出/吊销后使旧 refresh token 失效。
 
     Returns:
         编码后的 JWT 字符串。
@@ -125,17 +127,20 @@ def create_refresh_token(
         "type": "refresh",
         "exp": expires,
         "iat": now,
+        "ver": token_version,
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
 # ── 验证 ──────────────────────────────────────────────────────────────────────
 
-def verify_token(token: str) -> dict:
+def verify_token(token: str, expected_type: str = "access") -> dict:
     """验证并解码 JWT 令牌。
 
     Args:
         token: 编码后的 JWT 字符串。
+        expected_type: 期望的令牌类型（"access" | "refresh"）。type 不匹配即拒绝，
+            防止 30 天有效的 refresh token 被当作 access token 全权调用 API。
 
     Returns:
         解码后的 payload 字典。
@@ -146,10 +151,15 @@ def verify_token(token: str) -> dict:
     secret = _ensure_jwt_secret()
     try:
         payload: dict = jwt.decode(token, secret, algorithms=["HS256"])
-        return payload
     except ExpiredSignatureError:
         raise TokenError(TokenErrorKind.EXPIRED, "Token has expired")
     except JWSSignatureError:
         raise TokenError(TokenErrorKind.INVALID_SIGNATURE, "Invalid token signature")
     except JWTError as exc:
         raise TokenError(TokenErrorKind.MALFORMED, f"Malformed token: {exc}")
+    if payload.get("type") != expected_type:
+        raise TokenError(
+            TokenErrorKind.MALFORMED,
+            f"Invalid token type: expected {expected_type}, got {payload.get('type')!r}",
+        )
+    return payload

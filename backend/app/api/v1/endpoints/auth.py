@@ -181,6 +181,7 @@ async def login(request: Request, body: LoginRequest):
     refresh_token = create_refresh_token(
         user_id=user.id,
         device_id=device_id,
+        token_version=user.token_version,
     )
 
     logger.success(f"[Auth] 用户登录成功: username={body.username}")
@@ -202,13 +203,13 @@ async def refresh_token(request: Request, body: RefreshRequest):
 
     验证 refresh_token，检查 token type 和 token_version，签发新的 access_token。
     """
-    # 验证 refresh_token
+    # 验证 refresh_token（expected_type="refresh"：access token 不能用于刷新）
     try:
-        payload = jwt_verify_token(body.refresh_token)
+        payload = jwt_verify_token(body.refresh_token, expected_type="refresh")
     except TokenError as exc:
         raise AuthenticationError(f"Refresh token 无效: {exc.message}")
 
-    # 检查 token type
+    # 检查 token type（verify_token 已校验，此处兜底防御）
     if payload.get("type") != "refresh":
         raise AuthenticationError("无效的令牌类型，需要 refresh token")
 
@@ -226,6 +227,11 @@ async def refresh_token(request: Request, body: RefreshRequest):
         raise AuthenticationError("用户不存在")
     if not user.is_active:
         raise AuthenticationError("用户已被禁用")
+
+    # 比对 token_version：登出/吊销后旧 refresh token 不能再换取新 access token
+    # （兼容说明：升级前签发的 refresh token 无 ver 声明，按 1 处理；已登出的用户需重新登录）
+    if int(payload.get("ver", 1) or 1) != user.token_version:
+        raise AuthenticationError("令牌已失效，请重新登录")
 
     # 签发新的 access_token
     device_id = payload.get("device_id", "")
@@ -257,6 +263,11 @@ async def logout(user: User = Depends(get_current_user)):
         user.token_version += 1
         session.add(user)
         await session.commit()
+
+    # 立即清除认证中间件的版本缓存，旧 token 不残留 TTL 窗口
+    from app.security.auth.middleware import invalidate_token_version_cache
+
+    invalidate_token_version_cache(user.id)
 
     logger.success(f"[Auth] 用户登出成功: username={user.username}, new_version={user.token_version}")
 
