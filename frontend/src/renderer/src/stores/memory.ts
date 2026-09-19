@@ -76,7 +76,7 @@ export const useMemoryStore = defineStore('memory', () => {
 
   const fetchBriefing = async (force = false): Promise<void> => {
     try {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = new Date().toLocaleDateString('sv-SE')  // 本地日期 YYYY-MM-DD
       if (!force && briefingFetchedDate.value === today && briefing.value) return
       const result = await apiGet<{ date: string; content: string; generated_at: string; enabled?: boolean }>(
         force ? '/memory/briefing/refresh' : '/memory/briefing',

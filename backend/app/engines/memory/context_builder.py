@@ -133,14 +133,15 @@ class ContextBuilder:
                 if fact.source_error:
                     line += f" (避免: {fact.source_error})"
                 if used_chars + len(line) + 20 > budget:
+                    # 单条超预算时跳过（而非中断）：保证后续小条目（含置顶）仍可注入
                     truncated = True
-                    break
+                    continue
                 fact_lines.append(line)
                 used_chars += len(line) + 1
             if fact_lines:
                 header = "=== [记忆事实] ==="
                 if truncated:
-                    header += f" (共{len(all_facts)}条，按置信度截断显示前{len(fact_lines)}条)"
+                    header += f" (共{len(all_facts)}条，按相关度截断显示前{len(fact_lines)}条)"
                 sections.append(header + "\n" + "\n".join(fact_lines))
 
         # 4. 知识记忆 - 始终从Agent级store读取

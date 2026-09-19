@@ -59,14 +59,14 @@ async def get_knowledge(agent_id: str | None = None, track: str = "owner", user_
 
 @router.put("/knowledge")
 async def update_knowledge(request: UpdateContentRequest, agent_id: str | None = None):
-    engine = _resolve_engine(agent_id, track, user_key)
+    engine = get_memory_engine(agent_id)
     engine.save_knowledge(request.content)
     return ok()
 
 
 @router.get("/summary")
 async def get_summary(agent_id: str | None = None, track: str = "owner", user_key: str = ""):
-    engine = get_memory_engine(agent_id)
+    engine = _resolve_engine(agent_id, track, user_key)
     content = engine.load_summary()
     sections = engine.parse_summary()
     return ok({"content": content, "sections": sections})
@@ -220,9 +220,12 @@ async def list_memory_tracks():
     if users_dir.exists():
         for d in sorted(users_dir.iterdir()):
             if d.is_dir():
-                user_keys.append(d.name)
+                try:
+                    user_keys.append(sanitize_track_key(d.name))
+                except ValueError:
+                    continue  # 畸形目录名跳过，不让单个坏目录打挂整个列表
 
-    return ok({"agents": agents, "user_keys": [sanitize_track_key(k) for k in user_keys]})
+    return ok({"agents": agents, "user_keys": user_keys})
 
 
 @router.get("/daily")
@@ -375,5 +378,7 @@ async def refresh_morning_briefing(agent_id: str | None = None):
     """强制重新生成当日简报。"""
     from app.services.proactive_service import proactive_care_service
 
+    if not settings.PROACTIVE_CARE_ENABLED:
+        return ok({"date": "", "content": "", "enabled": False})
     payload = await proactive_care_service.refresh_briefing(agent_id)
     return ok({**payload, "enabled": True})

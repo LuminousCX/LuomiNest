@@ -3,7 +3,7 @@
  * 晨间简报卡片（陪伴定位：记忆的消费形态）。
  * 应用启动/回到工作台时展示当日问候；可刷新、可关闭（当日不再打扰）。
  */
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { Sunrise, RefreshCw, X } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import LumiButton from '../common/LumiButton.vue'
@@ -22,26 +22,28 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const DISMISS_KEY = 'luominest.briefing.dismissed'
-const dismissed = ref(readDismissed())
-
-function readDismissed(): boolean {
+// dismissed 必须跟随 props.date 响应式重算（briefing 异步到达前 date 为空串，
+// 若只在挂载时初始化一次，刷新后当日已关闭的简报会重新出现）
+const dismissedTick = ref(0)
+const isDismissed = computed(() => {
+  void dismissedTick.value
   try {
-    return localStorage.getItem(DISMISS_KEY) === props.date
+    return !!props.date && localStorage.getItem(DISMISS_KEY) === props.date
   } catch {
     return false
   }
-}
+})
 
 function dismiss(): void {
   try {
     localStorage.setItem(DISMISS_KEY, props.date)
   } catch { /* ignore */ }
-  dismissed.value = true
+  dismissedTick.value += 1
 }
 </script>
 
 <template>
-  <div v-if="content && !dismissed" class="briefing-card">
+  <div v-if="content && !isDismissed" class="briefing-card">
     <div class="briefing-icon"><Sunrise :size="18" /></div>
     <div class="briefing-body">
       <div class="briefing-title">{{ t('memory.briefing.title') }}</div>

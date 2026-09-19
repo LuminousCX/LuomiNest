@@ -6,8 +6,10 @@
 
 生成策略（桌面应用形态下最可靠的方式）：
 - 懒生成 + 当日缓存：GET /memory/briefing 时若当日尚未生成且已过晨间时点
-  （Settings.PROACTIVE_BRIEFING_HOUR，默认 6 点）则现场生成并缓存于
-  config_items；前端在应用启动/回到前台时拉取展示。
+  （Settings.PROACTIVE_BRIEFING_HOUR，默认 6 点，本地时区）则现场生成并
+  缓存于 config_items；未到晨间时点返回空内容（不出卡片）。
+- 日期/星期/缓存键一律用本地时区（与每日记忆的记录时区一致），
+  generated_at 保留 UTC 供 TTL 计算。
 - POST /memory/briefing/refresh 强制重新生成。
 - 说明：真正的"主动推送"依赖 avatar_drive WS 通道成熟后接入；当前为
   拉取式，不引入额外调度器任务。
@@ -32,7 +34,7 @@ class ProactiveCareService:
     """晨间简报与主动关心。"""
 
     def __init__(self) -> None:
-        self._inflight: asyncio.Task | None = None
+        pass
 
     # ── 数据收集 ──────────────────────────────────────────────────
 
@@ -91,11 +93,16 @@ class ProactiveCareService:
     # ── 生成 ─────────────────────────────────────────────────────
 
     async def get_briefing(self, agent_id: str | None = None) -> dict:
-        """获取当日简报：当日已生成直接返回缓存；否则懒生成。"""
-        today = utc_now_dt().strftime("%Y-%m-%d")
+        """获取当日简报：当日已生成直接返回缓存；未到晨间时点返回空内容；否则懒生成。"""
+        now_local = datetime.now().astimezone()
+        today = now_local.strftime("%Y-%m-%d")
         cached = self._load_cached(today)
         if cached is not None:
             return {**cached, "cached": True}
+
+        # 未到晨间时点：不生成"晚间晨报"，返回空内容（前端不出卡片）
+        if now_local.hour < settings.PROACTIVE_BRIEFING_HOUR:
+            return {"date": today, "content": "", "generated_at": "", "sources": {}, "cached": False}
 
         return await self.generate_briefing(agent_id)
 
@@ -104,7 +111,7 @@ class ProactiveCareService:
         return await self.generate_briefing(agent_id)
 
     async def generate_briefing(self, agent_id: str | None = None) -> dict:
-        now = utc_now_dt()
+        now = datetime.now().astimezone()
         today = now.strftime("%Y-%m-%d")
         # 收集素材放线程池（同步 SQLite）
         ctx = await asyncio.to_thread(self._collect_context, agent_id)
@@ -194,6 +201,8 @@ class ProactiveCareService:
             if not payload:
                 return None
             generated_at = payload.get("generated_at", "")
+            if not generated_at:
+                return None  # 无时间戳的旧缓存按过期处理
             if generated_at:
                 gen_dt = datetime.fromisoformat(generated_at)
                 if utc_now_dt() - gen_dt > timedelta(hours=_BRIEFING_TTL_HOURS):
