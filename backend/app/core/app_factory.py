@@ -325,18 +325,10 @@ async def lifespan(app: FastAPI):
         from app.core.tools.builtin.memory_search_tool import LuomiNestMemorySearchTool
         tool_registry.register(LuomiNestMemorySearchTool())
 
-        # 技能工具：list/read/use（洋葱架构 §11.2 / B10，各场景通用）
-        from app.core.tools.builtin.skills_tools import get_luominest_skills_tools
-        for _skill_tool in get_luominest_skills_tools():
-            tool_registry.register(_skill_tool)
-
-        # 工具发现 meta-tool（L1 主动发现，tier=meta，对齐 tool-opt §4.2.1）
-        from app.core.tools.builtin.tools_meta import (
-            ListLuomiNestToolsTool,
-            ReadLuomiNestToolTool,
-        )
-        tool_registry.register(ListLuomiNestToolsTool())
-        tool_registry.register(ReadLuomiNestToolTool())
+        # 探索式工具发现（一切皆工具/插件，原 5 个发现类工具合并为 2 个，tier=meta）
+        from app.core.tools.builtin.explore_tools import SkillExploreTool, ToolExploreTool
+        tool_registry.register(ToolExploreTool())
+        tool_registry.register(SkillExploreTool())
 
         # 文件搜索工具（tier=domain, platform=win，Everything/OsWalk 适配器，对齐 tool-opt §4.5 T6）
         from app.core.tools.builtin.search_everything_tool import SearchEverythingTool

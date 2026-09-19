@@ -69,7 +69,7 @@ def _make_registry() -> ToolRegistry:
     registry.register(_FakeTool("create_scheduled_task", "创建定时任务，支持 cron 表达式"))
     registry.register(_FakeTool("browser_screenshot", "截取当前浏览器页面截图"))
     registry.register(_FakeTool("cli", "执行命令行命令"))
-    registry.register(_FakeTool("list_luominest_tools", "列出全部工具", tier="meta"))
+    registry.register(_FakeTool("tool_explore", "探索可用工具", tier="meta"))
     return registry
 
 
@@ -83,7 +83,7 @@ def test_registry_search_recalls_by_cjk():
 def test_registry_search_excludes_meta_tier():
     registry = _make_registry()
     names = [t.name for t in registry.search("列出全部工具 tools", top_k=10)]
-    assert "list_luominest_tools" not in names
+    assert "tool_explore" not in names
 
 
 def test_registry_search_top_k_and_empty():
@@ -124,8 +124,8 @@ def test_chat_mode_only_normal_and_standard():
 
 def test_normal_whitelist_contains_meta_tools():
     whitelist = CHAT_MODE_TOOL_CONFIGS[ChatMode.NORMAL]["whitelist"]
-    assert "list_luominest_tools" in whitelist
-    assert "read_luominest_tool" in whitelist
+    assert "tool_explore" in whitelist
+    assert "skill_explore" in whitelist
     assert CHAT_MODE_TOOL_CONFIGS[ChatMode.NORMAL]["is_workflow"] is False
     assert CHAT_MODE_TOOL_CONFIGS[ChatMode.STANDARD]["is_workflow"] is True
     # 浏览器工具瘦身后 STANDARD 不再有排除集

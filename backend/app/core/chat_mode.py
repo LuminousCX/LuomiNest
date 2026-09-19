@@ -33,9 +33,9 @@ CHAT_MODE_TOOL_CONFIGS: dict[ChatMode, dict[str, Any]] = {
             "get_scheduled_task",
             "delete_scheduled_task",
             "cli",
-            # 工具发现 meta-tool（S1b：长尾工具靠检索召回 + meta 按需拉取）
-            "list_luominest_tools",
-            "read_luominest_tool",
+            # 探索式工具发现（S1b：长尾工具靠检索召回 + meta 按需拉取）
+            "tool_explore",
+            "skill_explore",
         ],
         "is_workflow": False,
     },

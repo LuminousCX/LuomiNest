@@ -9,8 +9,8 @@
 - collaboration_tool：LuomiNestStartCollaborationTool（工作台多 Agent 协作）
 - memory_search_tool：LuomiNestMemorySearchTool（记忆主动搜索，群聊 Agent 查主 Agent 记忆）
 - scheduler_tool：CreateScheduledTaskTool（定时任务创建）
-- skills_tools：list/read/use_luominest_skills（技能列表/读取/应用，洋葱架构 §11.2）
-- tools_meta：ListLuomiNestToolsTool / ReadLuomiNestToolTool（工具发现，tier=meta）
+- explore_tools：ToolExploreTool / SkillExploreTool（探索式工具与技能发现，tier=meta，
+  原 list/read/use 技能三件套 + list/read 工具二件套合并而来，一切皆工具/插件）
 
 所有工具继承 ToolBase，统一使用 `arguments: dict[str, Any]` 签名。
 在 app_factory lifespan 中注册到 tool_registry。
@@ -31,18 +31,14 @@ from app.core.tools.builtin.scheduler_tool import (
     GetScheduledTaskTool,
     ListScheduledTasksTool,
 )
-from app.core.tools.builtin.skills_tools import (
-    LuomiNestListSkillsTool,
-    LuomiNestReadSkillTool,
-    LuomiNestUseSkillTool,
-    get_luominest_skills_tools,
-)
+from app.core.tools.builtin.explore_tools import SkillExploreTool, ToolExploreTool
 from app.core.tools.builtin.search_everything_tool import SearchEverythingTool
 from app.core.tools.builtin.subagent_tool import DelegateToSubagentTool
-from app.core.tools.builtin.tools_meta import ListLuomiNestToolsTool, ReadLuomiNestToolTool
 
 __all__ = [
     "CliTool",
+    "ToolExploreTool",
+    "SkillExploreTool",
     "ReadFileTool",
     "WriteFileTool",
     "ListFilesTool",
@@ -56,11 +52,7 @@ __all__ = [
     "ListScheduledTasksTool",
     "GetScheduledTaskTool",
     "DeleteScheduledTaskTool",
-    "LuomiNestListSkillsTool",
-    "LuomiNestReadSkillTool",
-    "LuomiNestUseSkillTool",
-    "get_luominest_skills_tools",
-    "ListLuomiNestToolsTool",
-    "ReadLuomiNestToolTool",
+
+
     "SearchEverythingTool",
 ]

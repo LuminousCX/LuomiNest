@@ -857,16 +857,17 @@ async def register_internal_tools() -> None:
     )
 
     # ─── 技能模块（洋葱架构 §11.2/§11.3：各场景通用，standard 工具集自动包含）───
-    from app.core.tools.builtin.skills_tools import get_luominest_skills_tools
-    for _skill_tool in get_luominest_skills_tools():
-        await internal_tool_registry.register(
-            name=_skill_tool.name,
-            module="skills",
-            description=_skill_tool.description,
-            handler=_make_skill_tool_handler(_skill_tool.name),
-            parameters_schema=_skill_tool.parameters,
-            is_concurrent_safe=True,
-        )
+    from app.core.tools.builtin.explore_tools import SkillExploreTool
+
+    _skill_explore = SkillExploreTool()
+    await internal_tool_registry.register(
+        name=_skill_explore.name,
+        module="skills",
+        description=_skill_explore.description,
+        handler=_make_skill_tool_handler(_skill_explore.name),
+        parameters_schema=_skill_explore.parameters,
+        is_concurrent_safe=True,
+    )
 
     # ─── 文件搜索模块（search.everything，桥接 SearchEverythingTool 适配器）───
     await internal_tool_registry.register(
