@@ -104,10 +104,16 @@ def _get_machine_fingerprint() -> str:
             except Exception as exc:
                 logger.debug(f"读取机器指纹文件失败: {path}, err={exc}")
 
-    # 兜底：MAC 地址 + 主机名
+    # 兜底：MAC 地址 + 主机名。该指纹不稳定（随网卡/主机名漂移），
+    # 以它加密的密钥文件在环境变化后将永久无法解密，必须让这条路径可见。
     mac = uuid_mod.getnode()
     hostname = platform.node()
-    return f"fallback-{mac}-{hostname}"
+    fingerprint = f"fallback-{mac}-{hostname}"
+    logger.warning(
+        "[SecretKey] OS 级机器 ID 不可用，回退到 MAC+主机名的不稳定指纹"
+        "（网卡/主机名变更后，已加密的密钥文件可能无法解密）"
+    )
+    return fingerprint
 
 
 def _derive_machine_key(fingerprint: str) -> bytes:
@@ -247,12 +253,19 @@ def load_or_create_secret_key(data_dir: str, file_name: str = SECRET_KEY_FILE_NA
                 pass
 
             # 4. 既非有效密文也非有效明文
+            fingerprint_source = (
+                "MAC+主机名回退指纹（不稳定，随网卡/主机名漂移）"
+                if fingerprint.startswith("fallback-")
+                else "OS 级机器 ID（MachineGuid/machine-id）"
+            )
             logger.error(
-                f"[SecretKey] 无法解密 {key_path}（机器指纹不匹配或文件损坏）。"
+                f"[SecretKey] 无法解密 {key_path}（机器指纹不匹配或文件损坏；"
+                f"当前指纹来源: {fingerprint_source}）。"
                 "若硬件已变更，删除该文件后重启可重新生成（已加密的 API Key 需重新输入）。"
             )
             raise RuntimeError(
-                f"{name} 解密失败：机器指纹不匹配或文件损坏。"
+                f"{name} 解密失败：机器指纹不匹配或文件损坏"
+                f"（当前指纹来源: {fingerprint_source}）。"
                 f"请删除 {key_path} 后重启应用。"
             )
 
