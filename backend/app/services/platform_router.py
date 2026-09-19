@@ -380,6 +380,26 @@ class LuomiNestPlatformRouter:
                 f"{len(tool_calls)} tool call(s)"
             )
 
+            # 提取 assistant 响应中的文本和思考内容
+            assistant_content = ""
+            reasoning_content = ""
+            if isinstance(result, dict):
+                assistant_content = result.get("content") or ""
+                reasoning_content = result.get("reasoning") or result.get("reasoning_content") or ""
+            else:
+                assistant_content = getattr(result, "content", "") or ""
+                reasoning_content = getattr(result, "reasoning", "") or ""
+
+            # 追加单个 Assistant 消息（OpenAI / DeepSeek 标准：所有 tool_calls 归于同一个 assistant 消息）
+            assistant_msg: dict[str, Any] = {
+                "role": "assistant",
+                "content": assistant_content,
+                "tool_calls": tool_calls,
+            }
+            if reasoning_content:
+                assistant_msg["reasoning_content"] = reasoning_content
+            messages.append(assistant_msg)
+
             for tc in tool_calls:
                 tool_name = tc.get("function", {}).get("name", "")
                 tool_args = tc.get("function", {}).get("arguments", {})
@@ -397,16 +417,19 @@ class LuomiNestPlatformRouter:
                     tool_name, tool_args, platform_adapter,
                 )
 
-                # 将工具结果追加到消息列表（OpenAI API 格式）
-                messages.append({
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [tc],
-                })
+                # 获取工具输出（确保非空字符串，避免下游被清洗或 LLM 抛 400）
+                tool_output = (
+                    tool_result.get("output")
+                    or tool_result.get("error")
+                    or (json.dumps(tool_result, ensure_ascii=False) if tool_result else "{}")
+                )
+                if not tool_output or not str(tool_output).strip():
+                    tool_output = "{}"
+
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc_id,
-                    "content": tool_result.get("output", tool_result.get("error", "")),
+                    "content": str(tool_output),
                 })
 
             # 再次调用 LLM（带工具结果）

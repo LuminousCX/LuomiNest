@@ -879,11 +879,46 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
             return {"success": res.get("success", True), "output": res.get("output", "命令已执行"), "error": res.get("error", "")}
 
         elif tool_name == "mc.get_player_state":
-            target = player or next(iter(self._player_states.keys()), "Steve")
-            state = self._player_states.get(target)
+            target = str(arguments.get("player") or player or "").strip()
+            if not target and self._player_states:
+                target = next(iter(self._player_states.keys()))
+
+            state = self._player_states.get(target) if target else None
+
+            # 如果目标玩家没有直接遥测，但有其他遥测（如伴侣 Bot 或其他玩家），检查周边实体或回退伴侣自身状态
+            if not state and self._player_states:
+                for p_name, p_state in self._player_states.items():
+                    for entity in p_state.get("nearby_entities", []):
+                        if entity.get("name") and target and target.lower() in entity.get("name").lower():
+                            state = {
+                                "player": target,
+                                "seen_by": p_name,
+                                "position": entity.get("position"),
+                                "distance": entity.get("distance"),
+                                "observer_state": p_state,
+                            }
+                            break
+                    if state:
+                        break
+
+                if not state:
+                    first_k = next(iter(self._player_states.keys()))
+                    state = {
+                        "note": f"未直接定位到玩家 {target}，已返回伴侣自身实时遥测",
+                        "companion_state": self._player_states[first_k],
+                    }
+
             if state:
                 return {"success": True, "output": json.dumps(state, ensure_ascii=False), "error": ""}
-            return {"success": False, "output": "", "error": f"暂无玩家 {target} 的实时遥测数据"}
+            return {
+                "success": True,
+                "output": json.dumps({
+                    "status": "online",
+                    "player": target or "player",
+                    "message": "已连接到游戏，但暂无位置遥测数据包",
+                }, ensure_ascii=False),
+                "error": "",
+            }
 
         elif tool_name == "mc.request_screenshot":
             res = await self.dispatch_mod_action("request_screenshot", {}, player=player)

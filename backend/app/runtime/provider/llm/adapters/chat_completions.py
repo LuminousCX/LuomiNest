@@ -393,13 +393,22 @@ class OpenAICompatibleProvider(ProviderClientMixin, LLMProvider):
 
         规则：
         - 保留 system 消息和有 tool_calls 的 assistant 消息
+        - 保留 role == "tool" 消息（若 content 为空，补齐为 "{}" 以免上游模型抛出 400 缺少 tool 响应）
         - 跳过 content 为 None 或空字符串的消息
         """
         sanitized = []
         for msg in messages:
+            role = msg.get("role")
             content = msg.get("content")
             # 保留 system 消息和有 tool_calls 的 assistant 消息
-            if msg.get("role") == "system" or msg.get("tool_calls"):
+            if role == "system" or msg.get("tool_calls"):
+                sanitized.append(msg)
+                continue
+            # 保留 tool 消息：绝不能丢弃 tool 结果，否则会导致 upstream 模型报 400
+            if role == "tool":
+                if content is None or (isinstance(content, str) and content.strip() == ""):
+                    msg = dict(msg)
+                    msg["content"] = "{}"
                 sanitized.append(msg)
                 continue
             # 跳过 content 为空的消息
@@ -409,7 +418,7 @@ class OpenAICompatibleProvider(ProviderClientMixin, LLMProvider):
         return sanitized
 
     def _normalize_tool_call_id(self, tool_call_id: str) -> str:
-        """标准化 tool_call_id（过长时哈希截断，兼容严格 provider）。"""
+        """标准化 tool_call_id（过长时哈希截断，兼容严格 provider 如 mistral）。"""
         if len(tool_call_id) <= 9:
             return tool_call_id
         return hashlib.sha256(tool_call_id.encode()).hexdigest()[:9]
@@ -455,13 +464,13 @@ class OpenAICompatibleProvider(ProviderClientMixin, LLMProvider):
                 if not (msg.get("role") == "tool" and msg.get("tool_call_id") in orphan_tool_ids)
             ]
 
-        # 标准化 tool_call_id（过长时哈希截断）
+        # 标准化 tool_call_id（仅针对 mistral 等特定限制字符的 provider 或极端超长 ID）
         id_mapping: dict[str, str] = {}
         for msg in messages:
             if msg.get("role") == "assistant" and msg.get("tool_calls"):
                 for tc in msg["tool_calls"]:
                     original_id = tc.get("id", "")
-                    if original_id and len(original_id) > 9:
+                    if original_id and (self.provider_name == "mistral" or len(original_id) > 64):
                         normalized = self._normalize_tool_call_id(original_id)
                         id_mapping[original_id] = normalized
                         tc["id"] = normalized
