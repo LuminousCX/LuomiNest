@@ -211,3 +211,135 @@ def test_middleware_gated_tool_only():
         return await mw.wrap_tool_call(_ctx(), tc, next_fn)
 
     assert asyncio.run(scenario())["content"] == "ok"
+
+
+# ── P0 回归：SSE 载荷 id 与 _pending 键一致性 + runner 实时排水 ──────────
+
+
+def test_middleware_sse_request_id_matches_pending_key():
+    """P0-1 回归：前端拿到的 request_id 必须能 resolve（与 _pending 键一致）。"""
+    import json as _json
+
+    import app.core.agents.middleware.permission as gate_mod
+
+    mgr = AgentCommandPermissionManager()
+    gate_mod.agent_command_permissions = mgr
+
+    captured: list[str] = []
+
+    async def emitter(sse_str: str) -> None:
+        captured.append(sse_str)
+
+    async def next_fn(_tc):
+        return {"role": "tool", "tool_call_id": "call_1", "name": "cli", "content": "ok"}
+
+    async def scenario():
+        mw = PermissionGateMiddleware()
+        run_task = asyncio.create_task(
+            mw.wrap_tool_call(_ctx(emitter=emitter), _tool_call("git status"), next_fn)
+        )
+        # 等待中间件发出 permission_request
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            if captured:
+                break
+        assert captured, "permission_request 未发出"
+        payload = _json.loads(captured[0].removeprefix("data: ").strip())
+        rid = payload["permission_request"]["request_id"]
+        # 以 SSE 载荷中的 id 回调（模拟前端）——必须命中 _pending
+        assert mgr.resolve(rid, DECISION_ONCE) is True, (
+            "SSE 载荷的 request_id 与 _pending 键不一致（P0-1 回归）"
+        )
+        return await run_task
+
+    result = asyncio.run(scenario())
+    assert result["content"] == "ok"
+
+
+def test_session_grant_allows_same_conversation_via_middleware():
+    """会话授权后同会话命令经中间件直接放行。"""
+    import app.core.agents.middleware.permission as gate_mod
+
+    mgr = AgentCommandPermissionManager()
+    mgr._session_grants.add("conv-1")
+    gate_mod.agent_command_permissions = mgr
+
+    async def next_fn(_tc):
+        return {"role": "tool", "tool_call_id": "call_1", "name": "cli", "content": "ok"}
+
+    async def scenario():
+        mw = PermissionGateMiddleware()
+        return await mw.wrap_tool_call(_ctx(conv_id="conv-1"), _tool_call("dir"), next_fn)
+
+    assert asyncio.run(scenario())["content"] == "ok"
+
+
+def test_runner_drains_sse_during_tool_execution():
+    """P0-2 回归：工具执行中途发射的 SSE 必须实时流出（不阻塞到工具返回后）。"""
+    import asyncio as _asyncio
+
+    from app.core.agents.middleware.base import AgentContext, AgentMiddleware
+    from app.core.agents.middleware.pipeline import MiddlewarePipeline
+    from app.core.agents.middleware.runner import AgentRunner
+
+    release = _asyncio.Event()
+    emitted_mid_execution: list[str] = []
+
+    class BlockingGate(AgentMiddleware):
+        """模拟 PermissionGate：先发射一条 SSE，再阻塞等待外部放行。"""
+
+        async def wrap_tool_call(self, ctx, tool_call, next_fn):
+            sse_payload = 'data: {"mid_execution": true}\n\n'
+            await ctx.sse_emitter(sse_payload)
+            emitted_mid_execution.append("emitted")
+            await release.wait()
+            return await next_fn(tool_call)
+
+    from app.runtime.provider.llm.types import StreamEvent
+
+    async def llm_call_fn(ctx):
+        # 用合法流事件产出一次工具调用（runner 会经 _assemble_tool_calls 装配）
+        yield StreamEvent("tool_call_delta", {
+            "index": 0,
+            "tool_call_id": "c1",
+            "function_name": "fake",
+            "function_arguments": "{}",
+        })
+        yield StreamEvent("finish_reason", {"finish_reason": "tool_calls"})
+
+    async def execute_fn(_tc):
+        return {"role": "tool", "tool_call_id": "c1", "name": "fake", "content": "done"}
+
+    async def scenario():
+        runner = AgentRunner(
+            pipeline=MiddlewarePipeline([BlockingGate()]),
+            max_iterations=0,  # 仅一轮工具调用，避免第二次 MID 干扰断言
+            execute_fn=execute_fn,
+        )
+        ctx = AgentContext(messages=[], extra={"is_stream": True})
+
+        async def consume():
+            first = True
+            async for sse in runner.run_stream(ctx, llm_call_fn):
+                if "mid_execution" in sse and first:
+                    # 工具仍在阻塞执行中，SSE 已实时到达（P0-2 修复的核心断言）
+                    assert release.is_set() is False
+                    emitted_mid_execution.append("received")
+                    first = False
+
+        consume_task = _asyncio.create_task(consume())
+        # 给消费端时间到达阻塞点，再放行工具执行
+        for _ in range(200):
+            await _asyncio.sleep(0.01)
+            if "received" in emitted_mid_execution:
+                break
+        release.set()
+        # 工具循环中 runner 与 PermissionGate 用模块级 asyncio；此处消费端等待放行后完成
+        import asyncio as _a2
+        await _asyncio.wait_for(consume_task, timeout=5)
+        await _asyncio.sleep(0)  # 让 runner 收尾
+
+        assert "emitted" in emitted_mid_execution
+        assert "received" in emitted_mid_execution
+
+    _asyncio.run(scenario())

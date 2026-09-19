@@ -53,7 +53,7 @@ class AgentCommandPermissionManager:
         self._pending: dict[str, _PendingRequest] = {}
         self._session_grants: set[str] = set()
         self._mode: str = MODE_ASK
-        self._loaded = False
+        self._persist_task: asyncio.Task | None = None
 
     # ── 持久化模式 ────────────────────────────────────────────────
 
@@ -64,11 +64,9 @@ class AgentCommandPermissionManager:
 
             mode = await luominest_config_store.get_async(MODE_KEY, MODE_ASK)
             self._mode = mode if mode in (MODE_ASK, MODE_FULL) else MODE_ASK
-            self._loaded = True
         except Exception as e:
             logger.warning(f"[AgentPermission] 恢复持久化模式失败，按 ask 处理: {e}")
             self._mode = MODE_ASK
-            self._loaded = True
 
     def get_mode(self) -> str:
         return self._mode
@@ -98,10 +96,14 @@ class AgentCommandPermissionManager:
     # ── 请求-决定 协议 ────────────────────────────────────────────
 
     async def request_approval(
-        self, conversation_id: str, tool_name: str, command: str, timeout: float = 120.0
+        self, conversation_id: str, tool_name: str, command: str, timeout: float = 120.0,
+        request_id: str | None = None,
     ) -> str:
-        """发出确认请求并等待用户决定，返回决策类别；超时未响应按 deny。"""
-        request_id = uuid4().hex
+        """发出确认请求并等待用户决定，返回决策类别；超时未响应按 deny。
+
+        request_id：由调用方（PermissionGate 中间件）生成并随 SSE 载荷下发，
+        保证前端回调携带的 id 与 _pending 键一致（P0 修复：原两处各自生成）。"""
+        request_id = request_id or uuid4().hex
         request = _PendingRequest(
             request_id=request_id,
             conversation_id=conversation_id,
@@ -158,14 +160,22 @@ class AgentCommandPermissionManager:
             self._session_grants.add(conversation_id)
             logger.info(f"[AgentPermission] 会话授权: conv={conversation_id}")
         elif decision == DECISION_FULL:
-            # 持久化切换为完全访问（异步写库，不阻塞工具循环；失败时内存生效）
+            # 内存态先行生效（消除窗口期），持久化异步跟进（保存引用防 GC，失败告警）
+            self._mode = MODE_FULL
             import asyncio as _asyncio
 
             try:
                 running = _asyncio.get_running_loop()
-                running.create_task(self.set_mode(MODE_FULL))
+
+                async def _persist_full_mode():
+                    try:
+                        await self.set_mode(MODE_FULL)
+                    except Exception as e:
+                        logger.error(f"[AgentPermission] 完全访问持久化失败（内存态已生效）: {e}")
+
+                self._persist_task = running.create_task(_persist_full_mode())
             except RuntimeError:
-                pass
+                pass  # 无事件循环（单测同步调用）：内存态已生效
 
     def session_grants_snapshot(self) -> list[str]:
         return sorted(self._session_grants)

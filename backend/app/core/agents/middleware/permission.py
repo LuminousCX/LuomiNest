@@ -84,7 +84,9 @@ class PermissionGateMiddleware(AgentMiddleware):
             return self._denied(tool_call, "确认请求发送失败，已拒绝执行本次命令。")
 
         decision = await agent_command_permissions.request_approval(
-            conversation_id, tool_name, command, timeout=DEFAULT_CONFIRM_TIMEOUT,
+            conversation_id, tool_name, command,
+            timeout=DEFAULT_CONFIRM_TIMEOUT,
+            request_id=request_id,  # 与 SSE 载荷同 id：前端回调才能命中 _pending
         )
         logger.info(
             f"[PermissionGate] 命令确认完成: conv={conversation_id} decision={decision} "

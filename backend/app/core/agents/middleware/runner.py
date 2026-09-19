@@ -16,6 +16,7 @@ SSE 发射策略（run_stream）：
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 from loguru import logger
@@ -162,7 +163,47 @@ class AgentRunner:
                         f"[AgentRunner] 执行工具: {tool_name} "
                         f"(iteration={ctx.iteration})"
                     )
-                    result = await self._pipeline.run_tool_call(ctx, tc, self._execute_fn)
+                    # 工具执行与 SSE 排水并发（P0 修复）：PermissionGate 在工具执行
+                    # 中途发射的 permission_request 必须实时到达客户端，否则确认窗
+                    # 无法在超时前显示（原实现等 run_tool_call 返回后才排水=死锁）。
+                    drain_event = asyncio.Event()
+
+                    async def _draining_emitter(sse_str: str) -> None:
+                        sse_buffer.append(sse_str)
+                        drain_event.set()
+
+                    ctx.sse_emitter = _draining_emitter
+                    tool_task = asyncio.create_task(
+                        self._pipeline.run_tool_call(ctx, tc, self._execute_fn)
+                    )
+                    try:
+                        while True:
+                            if sse_buffer:
+                                for sse_str in list(sse_buffer):
+                                    yield sse_str
+                                sse_buffer.clear()
+                            drain_wait = asyncio.ensure_future(drain_event.wait())
+                            done, _ = await asyncio.wait(
+                                {tool_task, drain_wait},
+                                return_when=asyncio.FIRST_COMPLETED,
+                            )
+                            drain_wait.cancel()
+                            if sse_buffer:
+                                for sse_str in list(sse_buffer):
+                                    yield sse_str
+                                sse_buffer.clear()
+                            if tool_task in done:
+                                break
+                            drain_event.clear()
+                        result = tool_task.result()
+                    finally:
+                        ctx.sse_emitter = original_emitter
+                        if not tool_task.done():
+                            tool_task.cancel()
+                            try:
+                                await tool_task
+                            except Exception:
+                                pass
                     while sse_buffer:
                         yield sse_buffer.pop(0)
                     await self._pipeline.run_after_tool_call(ctx, tc, result)

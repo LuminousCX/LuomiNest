@@ -31,6 +31,9 @@ class ChatRequest(BaseModel):
     skill_ids: list[str] | None = None
     # Agent 集群调用内部字段（不暴露前端，仅供 agent_tool_call 递归守卫使用）
     is_sub_agent: bool = False
+    # 父会话透传（Agent 集群委派时由 agent_tool 携带）：
+    # 子 Agent 的命令确认会话授权按主对话 conv_id 判定
+    parent_conv_id: str | None = Field(default=None, max_length=64)
     disable_tools: list[str] | None = None
     agent_depth: int = 0
 

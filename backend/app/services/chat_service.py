@@ -266,6 +266,13 @@ class ChatService:
 
         # Agent 集群调用：子 Agent 请求设置递归深度 contextvar
         is_sub_agent = getattr(request, "is_sub_agent", False)
+        # 父会话透传（P0-3）：子 Agent 命令确认共享主对话会话授权；
+        # 同时续传 contextvar，保证多层委派链路逐级携带
+        parent_conv_id = (getattr(request, "parent_conv_id", "") or "").strip()
+        if parent_conv_id:
+            from app.core.agents.cluster.agent_tool import set_luominest_parent_conv_id
+
+            set_luominest_parent_conv_id(parent_conv_id)
         depth_token = None
         if is_sub_agent:
             depth_token = set_luominest_agent_call_depth(getattr(request, "agent_depth", 0))
@@ -296,6 +303,8 @@ class ChatService:
                 "disable_tools": getattr(request, "disable_tools", None),
                 "tool_whitelist": tool_whitelist,
                 "agent_id": agent_id,
+                # 子 Agent：父会话授权判定键（主对话自身的 conv_id 由 stream_response 设置）
+                "conv_id": parent_conv_id,
             },
         )
 
@@ -443,6 +452,14 @@ class ChatService:
                 "domain": conv_domain,
             },
         )
+
+        # 主对话路径：登记父会话 conv_id，agent_tool 委派子 Agent 时随请求透传（P0-3）
+        try:
+            from app.core.agents.cluster.agent_tool import set_luominest_parent_conv_id
+
+            set_luominest_parent_conv_id(conv_id)
+        except Exception:
+            pass
 
         # 流式处理管线：thinking 分流 → chunk 合并 → emotion 清洗（已解耦到 StreamProcessor）
         async def _accumulate_reasoning(text: str, ctx: "AgentContext") -> None:

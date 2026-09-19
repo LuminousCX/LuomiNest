@@ -25,6 +25,24 @@ from app.core.tools.registry import ToolBase, ToolResult
 
 # 递归深度上下文变量：在 chat 端点处理 is_sub_agent 请求时设置，
 # 使 agent_tool_call 工具能读取当前深度并 +1 后传递给下一层
+# 父会话 conv_id：主对话路径设置，agent_tool 读取并透传给子 Agent 请求，
+# 使子 Agent 的命令确认共享主对话的会话授权（P0-3）
+_luominest_parent_conv_id: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "luominest_parent_conv_id",
+    default="",
+)
+
+
+def get_luominest_parent_conv_id() -> str:
+    """读取父会话 conv_id（未设置返回空串）。"""
+    return _luominest_parent_conv_id.get()
+
+
+def set_luominest_parent_conv_id(conv_id: str):
+    """设置父会话 conv_id（主对话路径与子 Agent 请求路径各自调用）。"""
+    return _luominest_parent_conv_id.set(conv_id or "")
+
+
 _luominest_agent_call_depth: contextvars.ContextVar[int] = contextvars.ContextVar(
     "luominest_agent_call_depth",
     default=0,
@@ -135,6 +153,7 @@ class LuomiNestAgentCallTool(ToolBase):
             "agent_id": agent_id,
             "is_sub_agent": True,
             "agent_depth": new_depth,
+            "parent_conv_id": get_luominest_parent_conv_id(),
             "disable_tools": ["agent_tool_call", "delegate_to_subagent", "start_collaboration"],
         }
 
