@@ -349,6 +349,8 @@ def convert_tools_to_anthropic(tools: list[dict[str, Any]] | None) -> list[dict[
         name = fn.get("name", "")
         if not name:
             continue
+        if "." in name:
+            name = name.replace(".", "__")
         entry: dict[str, Any] = {
             "name": name,
             "input_schema": fn.get("parameters") or {"type": "object", "properties": {}},
@@ -365,11 +367,14 @@ def tool_use_blocks_to_openai_tool_calls(content_blocks: list[dict]) -> list[dic
     for block in content_blocks:
         if block.get("type") != "tool_use":
             continue
+        raw_name = block.get("name", "")
+        if "__" in raw_name and "." not in raw_name:
+            raw_name = raw_name.replace("__", ".")
         tool_calls.append({
             "id": block.get("id") or f"call_{len(tool_calls)}",
             "type": "function",
             "function": {
-                "name": block.get("name", ""),
+                "name": raw_name,
                 "arguments": json.dumps(block.get("input") or {}, ensure_ascii=False),
             },
         })

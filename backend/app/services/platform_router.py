@@ -676,9 +676,11 @@ class LuomiNestPlatformRouter:
         from app.core.workflow.internal_registry import internal_tool_registry
 
         # 先尝试平台专用工具（adapter 实现）
-        if "." in tool_name and adapter and hasattr(adapter, "execute_platform_tool"):
+        # 兼容处理被 LLM 转义的工具名（如 mc__navigate -> mc.navigate）
+        normalized_name = tool_name.replace("__", ".") if ("__" in tool_name and "." not in tool_name) else tool_name
+        if "." in normalized_name and adapter and hasattr(adapter, "execute_platform_tool"):
             try:
-                result = await adapter.execute_platform_tool(tool_name, arguments)
+                result = await adapter.execute_platform_tool(normalized_name, arguments)
                 return result
             except Exception as e:
                 return {"success": False, "output": "", "error": str(e)}

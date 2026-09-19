@@ -116,11 +116,14 @@ def merge_tool_calls(collected: dict[int, dict]) -> StreamEvent:
     merged = []
     for idx in sorted(collected.keys()):
         entry = collected[idx]
+        fn_name = entry["name"]
+        if "__" in fn_name and "." not in fn_name:
+            fn_name = fn_name.replace("__", ".")
         merged.append({
             "id": entry["id"] or f"call_{idx}",
             "type": "function",
             "function": {
-                "name": entry["name"],
+                "name": fn_name,
                 "arguments": entry["arguments"],
             },
         })

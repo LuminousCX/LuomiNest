@@ -506,7 +506,9 @@ class OpenAICompatibleProvider(ProviderClientMixin, LLMProvider):
                 headers=self._build_headers(),
                 json=payload,
             )
-            resp.raise_for_status()
+            if resp.is_error:
+                logger.error(f"[Provider] {self.base_url}/chat/completions returned HTTP {resp.status_code}: {resp.text}")
+                resp.raise_for_status()
             data = resp.json()
         finally:
             if self._client is None:
@@ -518,6 +520,11 @@ class OpenAICompatibleProvider(ProviderClientMixin, LLMProvider):
         raw_reasoning = message.get("reasoning", "") or message.get("reasoning_content", "")
         reasoning = clean_reasoning_content(raw_reasoning)
         tool_calls = message.get("tool_calls")
+        if tool_calls:
+            for tc in tool_calls:
+                func = tc.get("function", {})
+                if "name" in func and "__" in func["name"]:
+                    func["name"] = func["name"].replace("__", ".")
         finish_reason = choice.get("finish_reason", "stop")
         usage = data.get("usage")
 
@@ -700,6 +707,13 @@ class OpenAICompatibleProvider(ProviderClientMixin, LLMProvider):
         if request.top_p is not None:
             payload["top_p"] = request.top_p
         if request.tools:
-            payload["tools"] = request.tools
+            sanitized_tools = []
+            for t in request.tools:
+                t_copy = copy.deepcopy(t)
+                func = t_copy.get("function", {})
+                if "name" in func and "." in func["name"]:
+                    func["name"] = func["name"].replace(".", "__")
+                sanitized_tools.append(t_copy)
+            payload["tools"] = sanitized_tools
             payload["tool_choice"] = "auto"
         return payload
