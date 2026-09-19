@@ -187,6 +187,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
       }
 
       if (chunk.done) {
+        pendingPermissionRequests.value = []
         finishStream()
         return
       }
@@ -384,6 +385,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
           logger.warn('TTS 播报失败，消息已正常显示:', ttsErr)
         }
       }
+      pendingPermissionRequests.value = []
       finishStream()
     }
 
@@ -448,6 +450,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
       return
     }
     chatStore.cancelCurrentRequest()
+    pendingPermissionRequests.value = []
     stopTts()
   }
 
