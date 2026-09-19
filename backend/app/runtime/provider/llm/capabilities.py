@@ -206,9 +206,13 @@ PROVIDER_CAPABILITIES: dict[str, ProviderCapabilities] = {
 # ──────────────────────────────────────────────────────────────
 
 MODEL_CAPABILITY_OVERRIDES: dict[str, dict] = {
-    # 示例（按需补充）：
-    # "gpt-4o": {"supports_vision": True},
-    # "o1-mini": {"supports_tool_calls": False},
+    # DeepSeek 视觉多模态模型（支持图像理解）
+    "deepseek-flash": {"supports_vision": True},
+    "deepseek-v4.1-flash": {"supports_vision": True},
+    "deepseek/deepseek-flash": {"supports_vision": True},
+    "deepseek/deepseek-v4.1-flash": {"supports_vision": True},
+    "deepseek-vl": {"supports_vision": True},
+    "deepseek/deepseek-vl": {"supports_vision": True},
 }
 
 
@@ -238,9 +242,21 @@ def get_capabilities(
     caps = PROVIDER_CAPABILITIES.get(provider_name, ProviderCapabilities())
 
     # 应用模型级覆盖
-    if model and model in MODEL_CAPABILITY_OVERRIDES:
-        overrides = MODEL_CAPABILITY_OVERRIDES[model]
-        caps = replace(caps, **overrides)
+    if model:
+        m_lower = model.lower().strip()
+        bare_model = m_lower.split("/")[-1]
+        overrides = None
+        if model in MODEL_CAPABILITY_OVERRIDES:
+            overrides = MODEL_CAPABILITY_OVERRIDES[model]
+        elif m_lower in MODEL_CAPABILITY_OVERRIDES:
+            overrides = MODEL_CAPABILITY_OVERRIDES[m_lower]
+        elif bare_model in MODEL_CAPABILITY_OVERRIDES:
+            overrides = MODEL_CAPABILITY_OVERRIDES[bare_model]
+        elif provider_name == "deepseek" and ("flash" in m_lower or "vl" in m_lower):
+            overrides = {"supports_vision": True}
+
+        if overrides:
+            caps = replace(caps, **overrides)
 
     # 应用运行时降级
     disabled = _runtime_disabled.get(provider_name)

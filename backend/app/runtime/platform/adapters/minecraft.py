@@ -151,6 +151,8 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
         self._ws_enabled: bool = True
         self._ws_host: str = "0.0.0.0"
         self._ws_port: int = 8081
+        self._game_host: str = "127.0.0.1"
+        self._game_port: int = 56587
         self._bot_name: str = "LuomiNest"
         self._message_format: str = "tellraw"
 
@@ -161,6 +163,8 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
 
     def initialize(self, config: dict[str, Any]) -> None:
         super().initialize(config)
+        self._game_host = config.get("game_host", "127.0.0.1")
+        self._game_port = int(config.get("game_port", 56587) or 56587)
         self._rcon_host = config.get("rcon_host", "127.0.0.1")
         self._rcon_port = int(config.get("rcon_port", 25575))
         self._rcon_password = config.get("rcon_password", "")
