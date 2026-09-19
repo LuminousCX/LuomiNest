@@ -313,6 +313,7 @@ export const useApi = () => {
             tool_event: raw.tool_event || undefined,
             subagent_event: raw.subagent_event || undefined,
             task_event: raw.task_event || undefined,
+            permission_request: raw.permission_request || undefined,
             iteration: raw.iteration ?? undefined,
             errCode: typeof raw.errCode === 'string' ? raw.errCode : undefined,
           }

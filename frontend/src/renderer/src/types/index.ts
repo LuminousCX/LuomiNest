@@ -168,6 +168,8 @@ export interface ChatStreamChunk {
   context_tokens?: number
   /** 上下文窗口容量（仅 done=True 的 chunk 携带，前端用于计算使用百分比） */
   context_max_tokens?: number
+  /** 命令执行三档确认请求（PermissionGate 中间件推送，弹窗后 REST 回调） */
+  permission_request?: PermissionRequest
   /** 模型路由通知（如专业模式推理模型退化为主模型，右上角 toast 展示） */
   notice?: string
   /**
@@ -176,6 +178,15 @@ export interface ChatStreamChunk {
    */
   errCode?: string
 }
+/** Agent 命令执行三档确认请求载荷（后端 PermissionGate 中间件） */
+export interface PermissionRequest {
+  request_id: string
+  tool: string
+  command: string
+  /** 确认超时秒数，超时后端自动按拒绝处理 */
+  timeout: number
+}
+
 
 export interface Conversation {
   id: string

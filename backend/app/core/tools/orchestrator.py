@@ -374,6 +374,7 @@ class ToolOrchestrator:
             ToolFilterMiddleware,
             UsageTrackMiddleware,
         )
+        from app.core.agents.middleware.permission import PermissionGateMiddleware
         from app.core.agents.middleware.pipeline import MiddlewarePipeline
 
         scene = extra.get("scene", "chat")
@@ -389,6 +390,8 @@ class ToolOrchestrator:
             middlewares.append(SubagentCancelMiddleware())
 
         middlewares.append(LoopGuardMiddleware(max_iterations=max_iter))
+        # 命令确认闸门在 SSEEmit/ToolExecution 外层：permission_request 先于 started 到达
+        middlewares.append(PermissionGateMiddleware())
 
         if is_stream:
             middlewares.append(SSEEmitMiddleware())

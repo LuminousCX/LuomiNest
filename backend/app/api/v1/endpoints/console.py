@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query, Request
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from app.core.utils import utc_now_dt
+from app.core.utils import ok, utc_now_dt
 from app.security.rate_limiter import RATE_CONSOLE, limiter
 from app.security.sandbox import (
     SandboxCommandError,
@@ -435,3 +435,33 @@ async def update_command_policy(req: CommandPolicyRequest):
         f"blacklist={req.blacklist}"
     )
     return _build_policy_response()
+
+
+# ─── Agent 命令执行确认策略（三档许可的持久化模式与会话授权管理） ──────────
+
+
+class AgentCommandModeRequest(BaseModel):
+    mode: str = Field(..., pattern="^(ask|full)$")
+
+
+@router.get("/agent-command-policy")
+async def get_agent_command_policy():
+    """查看 agent 命令确认策略：mode=ask 每条询问 / full 完全访问；
+    session_grants 为当前内存中的"允许该对话"授权列表。"""
+    from app.security.sandbox.permission import agent_command_permissions
+
+    return ok(
+        {
+            "mode": agent_command_permissions.get_mode(),
+            "session_grants": agent_command_permissions.session_grants_snapshot(),
+        }
+    )
+
+
+@router.put("/agent-command-policy")
+async def set_agent_command_policy(body: AgentCommandModeRequest):
+    """切换 agent 命令确认模式（ask/full）。完全访问下黑名单硬防线仍然生效。"""
+    from app.security.sandbox.permission import agent_command_permissions
+
+    await agent_command_permissions.set_mode(body.mode)
+    return ok({"mode": body.mode})

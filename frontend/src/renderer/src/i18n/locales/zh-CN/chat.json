@@ -376,6 +376,18 @@
       "yesterday": "昨天",
       "week": "近7天",
       "earlier": "更早"
+    },
+    "permission": {
+      "title": "命令执行确认",
+      "toolLabel": "工具",
+      "countdown": "{seconds} 秒内未响应将自动拒绝",
+      "hint": "AI 想在你的电脑上执行上面的命令。你希望如何处理？",
+      "once": "允许一次",
+      "session": "允许该对话",
+      "full": "完全访问",
+      "deny": "拒绝",
+      "fullNote": "「完全访问」后命令不再逐条询问（可随时在设置中改回）；rm -rf、读取密钥文件等危险命令在任何模式下都会被硬防线拦截。",
+      "resolveFailed": "确认发送失败，请重试"
     }
   }
 }

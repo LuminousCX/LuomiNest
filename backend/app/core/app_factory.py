@@ -206,6 +206,14 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.success("[LuomiNest] Database initialized")
 
+    # Agent 命令确认策略：恢复持久化模式（ask/full），失败按 ask 处理
+    try:
+        from app.security.sandbox.permission import agent_command_permissions
+
+        await agent_command_permissions.load_persisted_state()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Agent command permission init skipped: {e}")
+
     # 存储位置日志（开发/生产区分：dev=backend/data，打包=userData/Data/backend）
     logger.info(
         f"[LuomiNest] 存储位置: 模式={'打包生产(PyInstaller)' if settings.IS_FROZEN else '开发(源码)'}, "

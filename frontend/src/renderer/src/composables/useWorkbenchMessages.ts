@@ -15,11 +15,12 @@ import { useWorkflowStore } from '../stores/workflow'
 import { useStatsStore } from '../stores/stats'
 import { useTaskStreamStore } from '../stores/taskStream'
 import { useToast } from './useToast'
+import { useApi } from './useApi'
 import { useChatSession } from './useChatSession'
 import { updateScrollBottomState, type ScrollMetrics } from './useChatScroll'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import { generateId } from '../utils/id'
-import type { ChatStreamChunk, SubagentEvent, ChatMessage } from '../types'
+import type { ChatStreamChunk, SubagentEvent, ChatMessage, PermissionRequest } from '../types'
 import type { ToolActivity, SubagentActivity, ChatModeLevel } from '../components/workbench/types'
 import type { NavigationTarget } from './useTaskNavigation'
 import WorkbenchChatArea from '../components/workbench/WorkbenchChatArea.vue'
@@ -134,6 +135,30 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     return inputText.value.trim().length > 0
   })
 
+  // ── 命令执行三档确认（PermissionGate）───────────────────────────
+  const { apiPost } = useApi()
+  const pendingPermissionRequests = ref<PermissionRequest[]>([])
+  const isResolvingPermission = ref(false)
+
+  const resolvePermission = async (
+    requestId: string,
+    decision: 'once' | 'session' | 'full' | 'deny',
+  ): Promise<void> => {
+    if (isResolvingPermission.value) return
+    isResolvingPermission.value = true
+    try {
+      await apiPost(`/chat/tool-permission/${requestId}`, { decision })
+    } catch (e: unknown) {
+      logger.warn('Failed to resolve tool permission:', e)
+      toast.warning(i18n.global.t('chat.permission.resolveFailed') as string)
+    } finally {
+      pendingPermissionRequests.value = pendingPermissionRequests.value.filter(
+        (r) => r.request_id !== requestId,
+      )
+      isResolvingPermission.value = false
+    }
+  }
+
   // 子组件引用
   const chatAreaRef = ref<InstanceType<typeof WorkbenchChatArea> | null>(null)
 
@@ -174,6 +199,13 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
       }
       if (chunk.task_event) {
         taskStreamStore.handleTaskEvent(chunk.task_event)
+      }
+      if (chunk.permission_request) {
+        // 命令执行确认：同一请求可能重复推送（去重），排队展示
+        const req = chunk.permission_request
+        if (!pendingPermissionRequests.value.some((r) => r.request_id === req.request_id)) {
+          pendingPermissionRequests.value.push(req)
+        }
       }
       if (chunk.tool_calls && chunk.tool_calls.length > 0) {
         for (const tc of chunk.tool_calls) {
@@ -528,6 +560,10 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     hasMoreMessages,
     // 子组件引用
     chatAreaRef,
+    // 命令确认
+    pendingPermissionRequests,
+    isResolvingPermission,
+    resolvePermission,
     // 方法
     scrollToBottom,
     handleMessagesScroll,

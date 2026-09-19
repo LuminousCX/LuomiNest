@@ -63,6 +63,9 @@ class ChatStreamChunk(BaseModel):
     subagent_event: dict[str, Any] | None = None
     # 定时任务事件（主 Agent 通过 create_scheduled_task 工具创建任务时推送）
     task_event: dict[str, Any] | None = None
+    # 命令执行确认请求（PermissionGate：{request_id, tool, command, timeout}，
+    # 前端弹三档确认窗后 POST /chat/tool-permission/{request_id} 回调）
+    permission_request: dict[str, Any] | None = None
     # 压缩后上下文 token 数（done 时回填）
     context_tokens: int | None = None
     # 上下文窗口容量（done 时回填，前端用于计算使用百分比）

@@ -376,6 +376,18 @@
       "yesterday": "Yesterday",
       "week": "Last 7 days",
       "earlier": "Earlier"
+    },
+    "permission": {
+      "title": "Command Execution Approval",
+      "toolLabel": "Tool",
+      "countdown": "Auto-denied in {seconds}s if no response",
+      "hint": "The AI wants to run the command above on your computer. How would you like to proceed?",
+      "once": "Allow once",
+      "session": "Allow this chat",
+      "full": "Full access",
+      "deny": "Deny",
+      "fullNote": "With \"Full access\", commands run without per-command approval (you can switch back anytime in Settings). Dangerous commands like rm -rf or reading key files remain blocked by the hard guard in every mode.",
+      "resolveFailed": "Failed to send your decision, please retry"
     }
   }
 }

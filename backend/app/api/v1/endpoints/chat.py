@@ -566,3 +566,27 @@ async def compress_conversation(
         "tokens_before": result["tokens_before"],
         "tokens_after": result["tokens_after"],
     })
+
+# ─── 命令执行三档确认（PermissionGate 回调） ─────────────────────
+
+
+class ToolPermissionDecisionRequest(BaseModel):
+    decision: str = Field(..., pattern="^(once|session|full|deny)$")
+
+
+@router.post("/tool-permission/{request_id}")
+async def resolve_tool_permission(
+    request_id: str,
+    body: ToolPermissionDecisionRequest,
+):
+    """前端对 permission_request 的回调：once=允许单次 / session=允许该对话 /
+    full=完全访问（持久化） / deny=拒绝。请求不存在或已处理返回 404。"""
+    from app.security.sandbox.permission import agent_command_permissions
+
+    resolved = agent_command_permissions.resolve(request_id, body.decision)
+    if not resolved:
+        raise NotFoundError(
+            "确认请求不存在或已被处理", code="TOOL_PERMISSION_REQUEST_NOT_FOUND"
+        )
+    logger.info(f"[API] POST /chat/tool-permission/{request_id} -> {body.decision}")
+    return ok({"resolved": True, "decision": body.decision})

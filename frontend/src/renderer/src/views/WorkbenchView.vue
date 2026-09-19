@@ -22,6 +22,7 @@ import WorkbenchChatArea from '../components/workbench/WorkbenchChatArea.vue'
 import WorkbenchInputArea from '../components/workbench/WorkbenchInputArea.vue'
 import WorkbenchAvatarPanel from '../components/workbench/WorkbenchAvatarPanel.vue'
 import WorkbenchToolPanel from '../components/workbench/WorkbenchToolPanel.vue'
+import ToolPermissionDialog from '../components/workbench/ToolPermissionDialog.vue'
 
 // Store 初始化
 const chatStore = useChatStore()
@@ -136,6 +137,9 @@ const {
   hasMoreMessages,
   handleCompressContext,
   handleLoadMore,
+  pendingPermissionRequests,
+  isResolvingPermission,
+  resolvePermission,
 } = useWorkbenchMessages({
   agentId: MAIN_AGENT_ID,
   handleSubagentEvent,
@@ -249,6 +253,13 @@ onBeforeUnmount(() => {
         @compress-context="handleCompressContext"
         @load-more="handleLoadMore"
       />
+    <!-- 命令执行三档确认弹窗（陪伴式安全） -->
+    <ToolPermissionDialog
+      :request="pendingPermissionRequests[0] || null"
+      :loading="isResolvingPermission"
+      @resolve="(id: string, d: 'once' | 'session' | 'full' | 'deny') => resolvePermission(id, d)"
+    />
+
 
       <WorkbenchInputArea
         ref="inputAreaRef"
