@@ -262,6 +262,11 @@ async def update_platform_instance(
     if "config" in update_data and update_data["config"] is not None:
         merged = {**inst.config, **update_data["config"]}
         inst.config = merged
+        if inst.adapter:
+            inst.adapter.initialize(merged)
+        if inst.status == PlatformStatus.RUNNING:
+            await stop_instance(instance_id)
+            await start_instance(instance_id)
     if "enable" in update_data and update_data["enable"] is not None:
         inst.config["enable"] = update_data["enable"]
         if update_data["enable"] and inst.status != PlatformStatus.RUNNING:
@@ -533,33 +538,51 @@ async def get_platform_model_config(
         except Exception as e:
             logger.warning(f"[PlatformAPI] Failed to resolve instance provider info: {e}")
 
+    main_agent_dict = {
+        "provider": main_provider,
+        "provider_name": main_provider_name,
+        "providerName": main_provider_name,
+        "model": main_model,
+        "supports_multimodal": main_supports_vision,
+        "supportsMultimodal": main_supports_vision,
+        "system_prompt": main_config.get("system_prompt", ""),
+        "systemPrompt": main_config.get("system_prompt", ""),
+        "temperature": main_config.get("temperature", 0.7),
+        "max_tokens": main_config.get("max_tokens", 4096),
+        "maxTokens": main_config.get("max_tokens", 4096),
+    }
+
+    effective_dict = {
+        "provider": instance_provider or main_provider,
+        "provider_name": instance_provider_name if is_overridden else main_provider_name,
+        "providerName": instance_provider_name if is_overridden else main_provider_name,
+        "model": instance_model or main_model,
+        "supports_multimodal": instance_supports_vision if is_overridden else main_supports_vision,
+        "supportsMultimodal": instance_supports_vision if is_overridden else main_supports_vision,
+    }
+
+    instance_cfg_dict = {
+        "provider": instance_provider,
+        "model": instance_model,
+        "system_prompt": inst_cfg.get("system_prompt", ""),
+        "systemPrompt": inst_cfg.get("system_prompt", ""),
+        "temperature": inst_cfg.get("temperature"),
+        "max_tokens": inst_cfg.get("max_tokens"),
+        "maxTokens": inst_cfg.get("max_tokens"),
+    }
+
     return {
         "error": None,
         "data": {
             "instance_id": instance_id,
+            "instanceId": instance_id,
             "is_overridden": is_overridden,
-            "instance_config": {
-                "provider": instance_provider,
-                "model": instance_model,
-                "system_prompt": inst_cfg.get("system_prompt", ""),
-                "temperature": inst_cfg.get("temperature"),
-                "max_tokens": inst_cfg.get("max_tokens"),
-            },
-            "main_agent": {
-                "provider": main_provider,
-                "provider_name": main_provider_name,
-                "model": main_model,
-                "supports_multimodal": main_supports_vision,
-                "system_prompt": main_config.get("system_prompt", ""),
-                "temperature": main_config.get("temperature", 0.7),
-                "max_tokens": main_config.get("max_tokens", 4096),
-            },
-            "effective": {
-                "provider": instance_provider or main_provider,
-                "provider_name": instance_provider_name if is_overridden else main_provider_name,
-                "model": instance_model or main_model,
-                "supports_multimodal": instance_supports_vision if is_overridden else main_supports_vision,
-            },
+            "isOverridden": is_overridden,
+            "instance_config": instance_cfg_dict,
+            "instanceConfig": instance_cfg_dict,
+            "main_agent": main_agent_dict,
+            "mainAgent": main_agent_dict,
+            "effective": effective_dict,
             "category": inst.adapter_type,
         },
     }

@@ -145,6 +145,14 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
         self._reconnect_task: asyncio.Task | None = None
         self._running = False
         self._screenshot_enabled = False
+        self._rcon_host: str = "127.0.0.1"
+        self._rcon_port: int = 25575
+        self._rcon_password: str = ""
+        self._ws_enabled: bool = True
+        self._ws_host: str = "0.0.0.0"
+        self._ws_port: int = 8081
+        self._bot_name: str = "LuomiNest"
+        self._message_format: str = "tellraw"
 
         # 具身 AI 模组遥测与状态存储
         self._player_states: dict[str, dict[str, Any]] = {}
@@ -156,12 +164,22 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
         self._rcon_host = config.get("rcon_host", "127.0.0.1")
         self._rcon_port = int(config.get("rcon_port", 25575))
         self._rcon_password = config.get("rcon_password", "")
-        self._ws_enabled = bool(config.get("ws_enabled", True))
+        ws_val = config.get("ws_enabled", True)
+        if isinstance(ws_val, str):
+            self._ws_enabled = ws_val.strip().lower() in ("true", "1", "yes")
+        else:
+            self._ws_enabled = bool(ws_val)
+
         self._ws_host = config.get("ws_host", "0.0.0.0")
         self._ws_port = int(config.get("ws_port", 8081))
         self._bot_name = config.get("bot_name", "LuomiNest")
         self._message_format = config.get("message_format", "tellraw")
-        self._screenshot_enabled = bool(config.get("screenshot_enabled", True))
+
+        ss_val = config.get("screenshot_enabled", True)
+        if isinstance(ss_val, str):
+            self._screenshot_enabled = ss_val.strip().lower() in ("true", "1", "yes")
+        else:
+            self._screenshot_enabled = bool(ss_val)
 
     async def start(self) -> None:
         self._running = True

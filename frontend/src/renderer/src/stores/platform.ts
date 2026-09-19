@@ -311,14 +311,37 @@ export const usePlatformStore = defineStore('platform', () => {
   const fetchInstanceModelConfig = async (instanceId: string) => {
     try {
       const result = await apiGet<RawModelConfigResponse>(`/platforms/instances/${instanceId}/model_config`)
-      const data = (result as { data?: PlatformModelConfigResponse })?.data || (result as PlatformModelConfigResponse)
+      const raw = (result as { data?: Record<string, any> })?.data || (result as Record<string, any>) || {}
+      const rawMain = raw.main_agent || raw.mainAgent || {}
+      const rawEff = raw.effective || {}
+      const rawInst = raw.instance_config || raw.instanceConfig || {}
+
       instanceModelConfig.value = {
-        instanceId: data.instanceId || instanceId,
-        isOverridden: data.isOverridden ?? false,
-        instanceConfig: data.instanceConfig || {},
-        mainAgent: data.mainAgent,
-        effective: data.effective,
-        category: data.category || '',
+        instanceId: raw.instance_id || raw.instanceId || instanceId,
+        isOverridden: raw.is_overridden ?? raw.isOverridden ?? false,
+        instanceConfig: {
+          provider: rawInst.provider || '',
+          model: rawInst.model || '',
+          systemPrompt: rawInst.system_prompt || rawInst.systemPrompt || '',
+          temperature: rawInst.temperature ?? null,
+          maxTokens: rawInst.max_tokens ?? rawInst.maxTokens ?? null,
+        },
+        mainAgent: {
+          provider: rawMain.provider || '',
+          providerName: rawMain.provider_name || rawMain.providerName || rawMain.provider || '',
+          model: rawMain.model || '',
+          supportsMultimodal: rawMain.supports_multimodal ?? rawMain.supportsMultimodal ?? false,
+          systemPrompt: rawMain.system_prompt || rawMain.systemPrompt || '',
+          temperature: rawMain.temperature ?? 0.7,
+          maxTokens: rawMain.max_tokens ?? rawMain.maxTokens ?? 4096,
+        },
+        effective: {
+          provider: rawEff.provider || '',
+          providerName: rawEff.provider_name || rawEff.providerName || rawEff.provider || '',
+          model: rawEff.model || '',
+          supportsMultimodal: rawEff.supports_multimodal ?? rawEff.supportsMultimodal ?? false,
+        },
+        category: raw.category || '',
       }
     } catch {
       instanceModelConfig.value = null

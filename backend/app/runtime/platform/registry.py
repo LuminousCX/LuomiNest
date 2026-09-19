@@ -161,6 +161,8 @@ async def start_instance(instance_id: str) -> bool:
         return False
 
     try:
+        if inst.adapter:
+            inst.adapter.initialize(inst.config)
         await inst.adapter.start()
         inst.status = PlatformStatus.RUNNING
         inst.error_message = ""

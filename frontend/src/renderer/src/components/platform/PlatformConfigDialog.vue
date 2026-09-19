@@ -214,21 +214,21 @@ watch(() => props.instance, async (instance) => {
           <div class="model-current-info">
             <div class="info-row">
               <span class="info-label">{{ t('platform.currentEffective') }}</span>
-              <span class="info-value">{{ effectiveModelConfig.effective.providerName || effectiveModelConfig.effective.provider }}</span>
+              <span class="info-value">{{ effectiveModelConfig?.effective?.providerName || effectiveModelConfig?.effective?.provider || '-' }}</span>
               <span class="info-sep">/</span>
-              <span class="info-value">{{ effectiveModelConfig.effective.model }}</span>
+              <span class="info-value">{{ effectiveModelConfig?.effective?.model || '-' }}</span>
               <span
-                :class="['vision-tag', { supported: effectiveModelConfig.effective.supportsMultimodal }]"
-                :title="effectiveModelConfig.effective.supportsMultimodal ? t('platform.visionSupported') : t('platform.visionUnsupported')"
+                :class="['vision-tag', { supported: effectiveModelConfig?.effective?.supportsMultimodal }]"
+                :title="effectiveModelConfig?.effective?.supportsMultimodal ? t('platform.visionSupported') : t('platform.visionUnsupported')"
               >
-                {{ effectiveModelConfig.effective.supportsMultimodal ? 'Vision' : 'No Vision' }}
+                {{ effectiveModelConfig?.effective?.supportsMultimodal ? 'Vision' : 'No Vision' }}
               </span>
             </div>
             <div class="info-row main-agent-info">
               <span class="info-label">{{ t('platform.mainAgentDefault') }}</span>
-              <span class="info-value">{{ effectiveModelConfig.mainAgent.providerName || effectiveModelConfig.mainAgent.provider }}</span>
+              <span class="info-value">{{ effectiveModelConfig?.mainAgent?.providerName || effectiveModelConfig?.mainAgent?.provider || '-' }}</span>
               <span class="info-sep">/</span>
-              <span class="info-value">{{ effectiveModelConfig.mainAgent.model }}</span>
+              <span class="info-value">{{ effectiveModelConfig?.mainAgent?.model || '-' }}</span>
             </div>
           </div>
 
