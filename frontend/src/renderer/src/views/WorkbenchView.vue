@@ -23,6 +23,7 @@ import WorkbenchInputArea from '../components/workbench/WorkbenchInputArea.vue'
 import WorkbenchAvatarPanel from '../components/workbench/WorkbenchAvatarPanel.vue'
 import WorkbenchToolPanel from '../components/workbench/WorkbenchToolPanel.vue'
 import ToolPermissionDialog from '../components/workbench/ToolPermissionDialog.vue'
+import MorningBriefingCard from '../components/workbench/MorningBriefingCard.vue'
 
 // Store 初始化
 const chatStore = useChatStore()
@@ -155,6 +156,9 @@ const {
 })
 
 onMounted(async () => {
+  // 晨间简报：后端就绪后拉取当日问候（主动关心）
+  void memoryStore.fetchBriefing()
+
   agentStore.setActiveAgent(MAIN_AGENT_PROFILE)
 
   await chatStore.checkBackend()
@@ -214,6 +218,19 @@ onBeforeUnmount(() => {
     />
 
     <div class="workbench-chat">
+
+
+      <MorningBriefingCard
+
+        :date="memoryStore.briefing?.date || ''"
+
+        :content="memoryStore.briefing?.content || ''"
+
+        :loading="false"
+
+        @refresh="memoryStore.fetchBriefing(true)"
+
+      />
       <WorkbenchChatArea
         ref="chatAreaRef"
         :messages="messageList"

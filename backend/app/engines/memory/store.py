@@ -414,6 +414,7 @@ class MemoryStore:
             source_conversation_id=fact.source_conversation_id,
             source_message=fact.source_message,
             history=[a.model_dump() for a in fact.history],
+            pinned=fact.pinned,
         )
 
     @staticmethod
@@ -432,6 +433,7 @@ class MemoryStore:
             "source_conversation_id": row.source_conversation_id,
             "source_message": row.source_message,
             "history": [ArchivedFact.model_validate(h) for h in (row.history or [])],
+            "pinned": bool(getattr(row, "pinned", False)),
         })
 
     @staticmethod

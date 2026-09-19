@@ -74,6 +74,20 @@ class SkillLoader:
                     count += 1
             except Exception as e:
                 logger.error(f"[CxSkill] Failed to load skill from {entry}: {e}")
+                # 注册 ERROR 状态占位：设置页技能列表可见失败项与原因（审计外需求）
+                try:
+                    from app.runtime.plugin.skill.models import SkillDefinition, SkillStatus
+
+                    await luominest_skill_registry.register(
+                        SkillDefinition(
+                            id=entry,
+                            name=entry,
+                            description=f"加载失败: {e}",
+                            status=SkillStatus.ERROR,
+                        )
+                    )
+                except Exception:
+                    pass
         logger.info(f"[CxSkill] Loaded {count} skill(s) from {self._skill_dir}")
         # skills 表全量 upsert（洋葱架构 §11.1 / §16.1：文件为权威源，每次启动全量同步）
         self.sync_skills_table()

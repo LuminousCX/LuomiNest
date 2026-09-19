@@ -10,7 +10,7 @@ from .fact_manager import _extract_content_words
 class ContextBuilder:
     """上下文组装：按预算优先级将记忆注入 LLM prompt。"""
 
-    MAX_INJECTION_CHARS = 4000
+    MAX_INJECTION_CHARS = 4000  # 兜底默认；实际预算读 Settings.MEMORY_INJECTION_BUDGET
     # 注入闸门：置信度低于此值的事实不进上下文（与提取标尺下限 0.5 对齐，低于即异常产出）
     CONFIDENCE_INJECT_FLOOR = 0.5
 
@@ -25,7 +25,9 @@ class ContextBuilder:
         conversation_id: str | None = None,
         relevant_fact_ids: set[str] | None = None,
     ) -> str:
-        budget = max_chars or self.MAX_INJECTION_CHARS
+        from app.core.config import settings
+
+        budget = max_chars or settings.MEMORY_INJECTION_BUDGET or self.MAX_INJECTION_CHARS
         sections = []
         used_chars = 0
 
@@ -69,9 +71,9 @@ class ContextBuilder:
                 continue
             if f.category not in FACT_SCOPE_AGENT:
                 continue
-            if f.confidence < self.CONFIDENCE_INJECT_FLOOR:
+            if not f.pinned and f.confidence < self.CONFIDENCE_INJECT_FLOOR:
                 continue
-            if f.expires_at:
+            if not f.pinned and f.expires_at:
                 try:
                     exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
                     if exp_time <= utc_now_dt():
@@ -85,9 +87,9 @@ class ContextBuilder:
             for f in conv_data.facts:
                 if not f.is_latest:
                     continue
-                if f.confidence < self.CONFIDENCE_INJECT_FLOOR:
+                if not f.pinned and f.confidence < self.CONFIDENCE_INJECT_FLOOR:
                     continue
-                if f.expires_at:
+                if not f.pinned and f.expires_at:
                     try:
                         exp_time = datetime.fromisoformat(f.expires_at.replace("Z", "+00:00"))
                         if exp_time <= utc_now_dt():
@@ -100,29 +102,32 @@ class ContextBuilder:
         if relevant_fact_ids:
             # 使用向量召回的结果排序
             def vector_relevance(f: FactItem) -> float:
+                base = 2.0 if f.pinned else 0.0
                 if f.id in relevant_fact_ids:
-                    return 1.0 + f.confidence * 0.1
-                return f.confidence * 0.1
+                    return base + 1.0 + f.confidence * 0.1
+                return base + f.confidence * 0.1
             all_facts.sort(key=vector_relevance, reverse=True)
         elif query:
             # 回退到关键词匹配
             query_words = _extract_content_words(query.casefold())
             if query_words:
                 def fact_relevance(f: FactItem) -> float:
+                    base = 2.0 if f.pinned else 0.0
                     fact_words = _extract_content_words(f.content.casefold())
                     if not fact_words:
-                        return 0.0
+                        return base
                     overlap = len(query_words & fact_words) / max(len(query_words | fact_words), 1)
-                    return overlap + f.confidence * 0.1
+                    return base + overlap + f.confidence * 0.1
                 all_facts.sort(key=fact_relevance, reverse=True)
         else:
-            all_facts.sort(key=lambda f: f.confidence, reverse=True)
+            all_facts.sort(key=lambda f: (f.pinned, f.confidence), reverse=True)
         
         if all_facts:
             fact_lines = []
             truncated = False
             for fact in all_facts:
-                line = f"- [{FACT_CATEGORY_LABELS.get(fact.category, fact.category)}|{fact.confidence:.1f}] {fact.content}"
+                pin_mark = "📌 " if fact.pinned else ""
+                line = f"- {pin_mark}[{FACT_CATEGORY_LABELS.get(fact.category, fact.category)}|{fact.confidence:.1f}] {fact.content}"
                 if fact.category == "correction":
                     line += " (仅代表用户对做法/偏好的纠正，与档案冲突时以档案为准)"
                 if fact.source_error:

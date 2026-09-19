@@ -720,6 +720,7 @@ window.addEventListener('click', closeMenu)
           @cancel-edit-fact="cancelEditFact"
           @save-edit-fact="saveEditFact"
           @delete-fact="deleteFact"
+          @toggle-pin="(fact: FactItem) => memoryStore.toggleFactPin(fact.id, !fact.pinned, selectedAgentId)"
         />
 
         <MemoryKnowledgeTab

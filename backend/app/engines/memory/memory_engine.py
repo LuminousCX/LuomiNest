@@ -204,6 +204,22 @@ class MemoryEngine:
     def clear_facts(self) -> None:
         self._fact_manager.clear_facts()
 
+    def set_fact_pinned(self, fact_id: str, pinned: bool) -> bool:
+        """置顶/取消置顶一条事实（store 锁内原子改写）。
+
+        置顶事实在注入时绕过置信度与过期闸门并恒排最前（陪伴场景：
+        生日、纪念日、过敏源等关键信息不因预算截断而丢失）。
+        注意：该事实被矛盾归档替代后新事实不自动继承置顶。
+        """
+        def _apply(data):
+            for f in data.facts:
+                if f.id == fact_id and f.is_latest:
+                    f.pinned = bool(pinned)
+                    return True
+            return False
+
+        return bool(self._store.mutate(_apply))
+
     def forget_facts(self, matcher) -> int:
         """按匹配器遗忘事实（引擎写锁 + store 原子 mutate，返回删除条数）。
 

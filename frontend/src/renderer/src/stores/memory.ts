@@ -21,6 +21,8 @@ export interface FactItem {
   expires_at: string | null
   is_latest: boolean
   supersedes_id: string | null
+  /** 置顶：注入时绕过置信度/过期闸门并恒排最前（陪伴关键信息） */
+  pinned?: boolean
 }
 
 export interface KnowledgeSection {
@@ -68,6 +70,24 @@ export const useMemoryStore = defineStore('memory', () => {
   const { apiGet, apiPost, apiPut, apiPatch, apiDelete } = useApi()
 
   const profile = ref<MemoryProfile>({ name: '' })
+  // 晨间简报（主动关心：记忆的消费形态）
+  const briefing = ref<{ date: string; content: string; generated_at: string; enabled?: boolean } | null>(null)
+  const briefingFetchedDate = ref('')
+
+  const fetchBriefing = async (force = false): Promise<void> => {
+    try {
+      const today = new Date().toISOString().slice(0, 10)
+      if (!force && briefingFetchedDate.value === today && briefing.value) return
+      const result = await apiGet<{ date: string; content: string; generated_at: string; enabled?: boolean }>(
+        force ? '/memory/briefing/refresh' : '/memory/briefing',
+      )
+      briefing.value = result?.content ? result : null
+      briefingFetchedDate.value = today
+    } catch {
+      briefing.value = null
+    }
+  }
+
   const facts = ref<FactItem[]>([])
   const knowledgeContent = ref('')
   const knowledgeSections = ref<KnowledgeSection[]>([])
@@ -123,6 +143,13 @@ export const useMemoryStore = defineStore('memory', () => {
     try {
       await apiDelete(`/memory/facts/${factId}${agentQuery(agentId)}`)
       facts.value = facts.value.filter(f => f.id !== factId)
+    } catch { /* ignore */ }
+  }
+
+  const toggleFactPin = async (factId: string, pinned: boolean, agentId?: string | null) => {
+    try {
+      await apiPost(`/memory/facts/${factId}/pin${agentQuery(agentId)}`, { pinned })
+      await fetchMemory(agentId)
     } catch { /* ignore */ }
   }
 
@@ -281,6 +308,7 @@ export const useMemoryStore = defineStore('memory', () => {
     return {
         profile,
         facts,
+        briefing,
         knowledgeContent,
         knowledgeSections,
         summaryContent,
@@ -292,11 +320,13 @@ export const useMemoryStore = defineStore('memory', () => {
         saving,
         memoryAgents,
         currentAgentId,
+        fetchBriefing,
         fetchMemory,
         fetchFacts,
         addFact,
         removeFact,
         updateFact,
+        toggleFactPin,
         fetchKnowledge,
         saveKnowledge,
         fetchSummary,

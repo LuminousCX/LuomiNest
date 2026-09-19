@@ -103,7 +103,10 @@
       "noMatchHint": "検索キーワードやフィルター条件を調整してみてください",
       "deprecated": "置き換え済み",
       "expires": "期限切れ: {date}",
-      "avoid": "回避: {msg}"
+      "avoid": "回避: {msg}",
+      "pinned": "ピン済み",
+      "pin": "ピン留め（常に注入）",
+      "unpin": "ピン留め解除"
     },
     "nav": {
       "summarized": "要約済み",
@@ -147,6 +150,9 @@
       "empty": "知識メモリはまだありません",
       "emptyHint": "会話の中で AI が自動的に知識を抽出して保存します",
       "itemCountSuffix": "件"
+    },
+    "briefing": {
+      "title": "朝のご挨拶"
     }
   },
   "market": {

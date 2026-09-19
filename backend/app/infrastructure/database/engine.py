@@ -22,7 +22,7 @@ from app.infrastructure.database.base import Base
 
 # 列迁移 schema 版本：_migrate_columns_sync 内新增任何列/回填/索引逻辑时必须 +1，
 # 否则已达标旧库会跳过新迁移。旧库首次升级（user_version=0）会完整执行一遍并回写。
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @contextlib.contextmanager
@@ -323,6 +323,15 @@ def _migrate_columns_sync(sync_conn) -> None:
             _alter_safe(
                 "ALTER TABLE memory_profiles ADD COLUMN distilled_turns INTEGER DEFAULT 0",
                 "memory_profiles table: added distilled_turns column",
+            )
+
+    # SCHEMA v2：记忆事实置顶列（陪伴场景关键信息必注入）
+    if "memory_facts" in inspector.get_table_names():
+        mf_cols = {c["name"] for c in inspector.get_columns("memory_facts")}
+        if "pinned" not in mf_cols:
+            _alter_safe(
+                "ALTER TABLE memory_facts ADD COLUMN pinned BOOLEAN DEFAULT 0",
+                "memory_facts table: added pinned column",
             )
 
     # providers 表添加 protocol 列（接入协议：auto | chat_completions | anthropic_messages）

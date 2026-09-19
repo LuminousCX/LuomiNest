@@ -71,6 +71,8 @@ class FactItem(BaseModel):
     source_message: str = ""
     # 版本归档：历史版本列表
     history: list[ArchivedFact] = Field(default_factory=list)
+    # 置顶（陪伴场景：生日/纪念日/过敏源等关键信息必注入，绕过置信度与过期闸门）
+    pinned: bool = False
 
 
 class SummarySection(BaseModel):

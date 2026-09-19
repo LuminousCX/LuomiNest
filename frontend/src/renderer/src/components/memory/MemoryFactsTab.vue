@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BookOpen, Plus, Search, Filter, ChevronDown, Check, X, Save, Loader2, Archive, Tag, Edit3, Trash2 } from 'lucide-vue-next'
+import { BookOpen, Plus, Search, Filter, ChevronDown, Check, X, Save, Loader2, Archive, Tag, Edit3, Trash2, Pin, PinOff } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import SearchInput from '../common/SearchInput.vue'
 import { categoryLabel, CATEGORY_COLORS, FACT_CATEGORIES } from '../../stores/memory'
@@ -32,6 +32,7 @@ const emit = defineEmits<{
   (e: 'cancelEditFact'): void
   (e: 'saveEditFact'): void
   (e: 'deleteFact', factId: string): void
+  (e: 'togglePin', fact: FactItem): void
   (e: 'update:searchQuery', value: string): void
   (e: 'update:filterCategory', value: string): void
   (e: 'update:newFactContent', value: string): void
@@ -158,11 +159,21 @@ function formatExpiresAt(iso: string): string {
             <template v-else>
               <div class="fact-main">
                 <span class="fact-text" :class="{ 'fact-deprecated': !fact.is_latest }">{{ fact.content }}</span>
+                <span v-if="fact.pinned" class="fact-badge pinned">{{ t('memory.facts.pinned') }}</span>
                 <span v-if="!fact.is_latest" class="fact-badge deprecated">{{ t('memory.facts.deprecated') }}</span>
                 <span v-if="fact.expires_at" class="fact-badge expires">{{ t('memory.facts.expires', { date: formatExpiresAt(fact.expires_at) }) }}</span>
                 <span v-if="fact.source_error" class="fact-error">{{ t('memory.facts.avoid', { msg: fact.source_error }) }}</span>
               </div>
               <div class="fact-actions">
+                <button
+                  class="fact-btn"
+                  :class="{ 'pinned-active': fact.pinned }"
+                  :title="fact.pinned ? t('memory.facts.unpin') : t('memory.facts.pin')"
+                  @click="emit('togglePin', fact)"
+                >
+                  <PinOff v-if="fact.pinned" :size="12" />
+                  <Pin v-else :size="12" />
+                </button>
                 <button class="fact-btn" @click="emit('startEditFact', fact)"><Edit3 :size="12" /></button>
                 <button class="fact-btn danger" @click="emit('deleteFact', fact.id)"><Trash2 :size="12" /></button>
               </div>
@@ -413,6 +424,15 @@ function formatExpiresAt(iso: string): string {
 .fact-badge.deprecated {
   background: var(--lumi-danger-light);
   color: var(--lumi-danger);
+}
+
+.fact-badge.pinned {
+  background: color-mix(in srgb, var(--lumi-warning, #f59e0b) 14%, transparent);
+  color: var(--lumi-warning, #b45309);
+}
+
+.fact-btn.pinned-active {
+  color: var(--lumi-warning, #b45309);
 }
 
 .fact-badge.expires {

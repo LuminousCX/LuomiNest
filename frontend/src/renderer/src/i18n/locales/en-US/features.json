@@ -110,7 +110,10 @@
       "noMatchHint": "Try adjusting the search keywords or filters",
       "deprecated": "Superseded",
       "expires": "Expires: {date}",
-      "avoid": "Avoid: {msg}"
+      "avoid": "Avoid: {msg}",
+      "pinned": "Pinned",
+      "pin": "Pin (always injected)",
+      "unpin": "Unpin"
     },
     "nav": {
       "summarized": "Summarized",
@@ -154,6 +157,9 @@
       "empty": "No knowledge yet",
       "emptyHint": "Knowledge is extracted and stored automatically during chats",
       "itemCountSuffix": "items"
+    },
+    "briefing": {
+      "title": "Morning greeting"
     }
   },
   "market": {

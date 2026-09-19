@@ -18,7 +18,7 @@
 """
 from typing import Optional
 
-from sqlalchemy import BLOB, Float, Index, Integer, JSON, String, Text
+from sqlalchemy import Boolean, BLOB, Float, Index, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.database.base import Base
@@ -61,6 +61,8 @@ class MemoryFact(Base):
     source_message: Mapped[str] = mapped_column(Text, default="")
     # 版本归档（ArchivedFact 列表的 JSON 序列化）
     history: Mapped[list] = mapped_column(JSON, default=list)
+    # 置顶：注入时绕过置信度/过期闸门（SCHEMA v2 迁移补列）
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 Index(

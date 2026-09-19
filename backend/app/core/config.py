@@ -81,7 +81,12 @@ class Settings(BaseSettings):
     LLM_SUMMARY_TARGET_RATIO: float = 0.40  # 摘要占历史预算的比例（与 compression_ratio 同步）
     LLM_COMPRESSION_RATIO: int = 40  # UI 侧摘要保留百分比（1-90，推荐 40-50）
     LLM_SUMMARY_MAX_LENGTH: int = 2000  # 摘要最大字符数
-    LLM_ANTI_DRIFT_ENABLED: bool = True  # 防漂移开关
+    LLM_ANTI_DRIFT_ENABLED: bool = True
+    # 记忆注入预算（字符）：ContextBuilder 组装 <user_memory> 块的上限（审计外需求：可配）
+    MEMORY_INJECTION_BUDGET: int = 4000
+    # 主动关心（晨间简报）：本地记忆驱动的问候，懒生成 + 当日缓存
+    PROACTIVE_CARE_ENABLED: bool = True
+    PROACTIVE_BRIEFING_HOUR: int = 6  # 防漂移开关
 
     LIVE2D_MODEL_PATH: str = "./models/live2d"
     VRM_MODEL_PATH: str = "./models/vrm"

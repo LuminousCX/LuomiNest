@@ -110,7 +110,10 @@
       "noMatchHint": "尝试调整搜索关键词或筛选条件",
       "deprecated": "已替代",
       "expires": "过期: {date}",
-      "avoid": "避免: {msg}"
+      "avoid": "避免: {msg}",
+      "pinned": "已置顶",
+      "pin": "置顶（始终注入）",
+      "unpin": "取消置顶"
     },
     "nav": {
       "summarized": "已总结",
@@ -154,6 +157,9 @@
       "empty": "暂无知识记忆",
       "emptyHint": "对话中AI会自动提取并存储知识信息",
       "itemCountSuffix": "条"
+    },
+    "briefing": {
+      "title": "晨间问候"
     }
   },
   "market": {

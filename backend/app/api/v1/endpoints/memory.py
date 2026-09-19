@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.config import settings
 from app.core.utils import ok
 from app.core.domain_policy import MAIN_AGENT_ID
 from app.engines.memory import get_memory_engine
@@ -38,8 +39,8 @@ class UpdateFactRequest(BaseModel):
 
 
 @router.get("/")
-async def get_memory(agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
+async def get_memory(agent_id: str | None = None, track: str = "owner", user_key: str = ""):
+    engine = _resolve_engine(agent_id, track, user_key)
     data = engine.load_data()
     return ok({
         "memory": engine.load_memory(),
@@ -49,8 +50,8 @@ async def get_memory(agent_id: str | None = None):
 
 
 @router.get("/knowledge")
-async def get_knowledge(agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
+async def get_knowledge(agent_id: str | None = None, track: str = "owner", user_key: str = ""):
+    engine = _resolve_engine(agent_id, track, user_key)
     content = engine.load_knowledge()
     sections = engine.parse_knowledge()
     return ok({"content": content, "sections": sections})
@@ -58,13 +59,13 @@ async def get_knowledge(agent_id: str | None = None):
 
 @router.put("/knowledge")
 async def update_knowledge(request: UpdateContentRequest, agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
+    engine = _resolve_engine(agent_id, track, user_key)
     engine.save_knowledge(request.content)
     return ok()
 
 
 @router.get("/summary")
-async def get_summary(agent_id: str | None = None):
+async def get_summary(agent_id: str | None = None, track: str = "owner", user_key: str = ""):
     engine = get_memory_engine(agent_id)
     content = engine.load_summary()
     sections = engine.parse_summary()
@@ -82,11 +83,13 @@ async def update_summary(request: UpdateContentRequest, agent_id: str | None = N
 async def get_facts(
     category: str | None = None,
     agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
     conversation_id: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ):
-    engine = get_memory_engine(agent_id)
+    engine = _resolve_engine(agent_id, track, user_key)
     facts = engine.get_facts(category)
 
     # 合并对话级facts
@@ -174,9 +177,57 @@ async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | 
     raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
 
 
-@router.get("/daily")
-async def get_daily(date: str | None = None, agent_id: str | None = None, conversation_id: str | None = None):
+class FactPinRequest(BaseModel):
+    pinned: bool
+
+
+@router.post("/facts/{fact_id}/pin")
+async def set_fact_pin(fact_id: str, request: FactPinRequest, agent_id: str | None = None):
+    """置顶/取消置顶一条记忆事实（陪伴场景关键信息必注入）。"""
     engine = get_memory_engine(agent_id)
+    async with engine.write_lock:
+        changed = await asyncio.to_thread(engine.set_fact_pinned, fact_id, request.pinned)
+    if not changed:
+        raise NotFoundError("Fact not found", code="MEMORY_FACT_NOT_FOUND")
+    return ok({"fact_id": fact_id, "pinned": request.pinned})
+
+
+def _resolve_engine(agent_id: str | None, track: str = "owner", user_key: str = ""):
+    """按轨道解析记忆引擎：owner=主轨（默认），users=用户轨（需 user_key）。"""
+    if track == "users":
+        if not user_key:
+            raise BadRequestError("user_key is required for users track", code="MEMORY_USER_KEY_REQUIRED")
+        from app.engines.memory.memory_engine import get_track_engine, TRACK_USERS
+
+        return get_track_engine(TRACK_USERS, user_key)
+    return get_memory_engine(agent_id)
+
+
+@router.get("/tracks")
+async def list_memory_tracks():
+    """列出可用的记忆轨道：主 Agent/子 Agent 轨 + 用户轨（users/{key}）。"""
+    from app.engines.memory.store import agents_root, sanitize_track_key
+
+    agents: list[dict] = []
+    agents_dir = agents_root()
+    if agents_dir.exists():
+        for d in sorted(agents_dir.iterdir()):
+            if d.is_dir():
+                agents.append({"track": "owner", "key": d.name})
+
+    user_keys: list[str] = []
+    users_dir = agents_dir.parent / "users"
+    if users_dir.exists():
+        for d in sorted(users_dir.iterdir()):
+            if d.is_dir():
+                user_keys.append(d.name)
+
+    return ok({"agents": agents, "user_keys": [sanitize_track_key(k) for k in user_keys]})
+
+
+@router.get("/daily")
+async def get_daily(date: str | None = None, agent_id: str | None = None, track: str = "owner", user_key: str = "", conversation_id: str | None = None):
+    engine = _resolve_engine(agent_id, track, user_key)
     return ok({"date": date or "today", "content": engine.load_daily(date, conversation_id)})
 
 
@@ -188,8 +239,8 @@ async def append_daily(request: AppendRequest, agent_id: str | None = None):
 
 
 @router.get("/dailies")
-async def list_dailies(agent_id: str | None = None, conversation_id: str | None = None):
-    engine = get_memory_engine(agent_id)
+async def list_dailies(agent_id: str | None = None, track: str = "owner", user_key: str = "", conversation_id: str | None = None):
+    engine = _resolve_engine(agent_id, track, user_key)
     return ok({"dailies": engine.list_dailies(conversation_id)})
 
 
@@ -303,3 +354,26 @@ async def reset_all_memory(
     # 清除缓存
     remove_engine(agent_id)
     return ok()
+
+
+# ─── 晨间简报 / 主动关心（记忆的消费形态，陪伴定位） ─────────────
+
+
+@router.get("/briefing")
+async def get_morning_briefing(agent_id: str | None = None):
+    """当日晨间简报：懒生成 + 当日缓存（每日记忆 + 置顶/高置信事实 + 待办任务）。"""
+    from app.services.proactive_service import proactive_care_service
+
+    if not settings.PROACTIVE_CARE_ENABLED:
+        return ok({"date": "", "content": "", "enabled": False})
+    payload = await proactive_care_service.get_briefing(agent_id)
+    return ok({**payload, "enabled": True})
+
+
+@router.post("/briefing/refresh")
+async def refresh_morning_briefing(agent_id: str | None = None):
+    """强制重新生成当日简报。"""
+    from app.services.proactive_service import proactive_care_service
+
+    payload = await proactive_care_service.refresh_briefing(agent_id)
+    return ok({**payload, "enabled": True})
