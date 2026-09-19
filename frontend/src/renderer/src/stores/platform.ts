@@ -569,6 +569,18 @@ export const usePlatformStore = defineStore('platform', () => {
     fetchLogs()
   }
 
+  const getWeChatQrCode = async (instanceId: string) => {
+    return await apiGet<Record<string, any>>(`/platforms/instances/${instanceId}/wechat/qrcode`)
+  }
+
+  const checkWeChatQrStatus = async (instanceId: string, uuid: string = '') => {
+    return await apiGet<Record<string, any>>(`/platforms/instances/${instanceId}/wechat/status?uuid=${encodeURIComponent(uuid)}`)
+  }
+
+  const refreshWeChatQrCode = async (instanceId: string) => {
+    return await apiPost<Record<string, any>>(`/platforms/instances/${instanceId}/wechat/refresh_qr`, {})
+  }
+
   const refreshAll = async () => {
     await Promise.all([fetchAdapterTypes(), fetchInstances(), fetchStats(), fetchLogSummary(), fetchMainAgent()])
     if (selectedInstanceId.value) {
@@ -621,6 +633,9 @@ export const usePlatformStore = defineStore('platform', () => {
     selectInstance,
     selectConversation,
     setLogLevelFilter,
+    getWeChatQrCode,
+    checkWeChatQrStatus,
+    refreshWeChatQrCode,
     refreshAll,
   }
 })

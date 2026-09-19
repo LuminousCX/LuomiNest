@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import {
   Globe, Radio, Cable, Link, MessageCircle, Send, Gamepad2, Home, Smartphone,
   Play, Square, Plus, Trash2, Settings,
-  AlertCircle,
+  AlertCircle, QrCode,
 } from 'lucide-vue-next'
 import { usePlatformStore } from '../../stores/platform'
 import type { PlatformInstance } from '../../types'
@@ -23,6 +23,7 @@ const { t } = useI18n()
 const emit = defineEmits<{
   select: [instance: PlatformInstance]
   config: [instance: PlatformInstance]
+  'scan-qr': [instance: PlatformInstance]
   add: []
 }>()
 
@@ -139,6 +140,18 @@ const handleConfig = (instance: PlatformInstance) => {
                 <Square v-if="p.status === 'running'" :size="12" />
                 <Play v-else :size="12" />
               </template>
+            </LumiButton>
+            <LumiButton
+              v-if="p.adapterType === 'wechat_personal'"
+              size="sm"
+              icon-only
+              variant="ghost"
+              class="card-action-btn scan-qr"
+              style="color: #07C160"
+              title="微信扫码登录"
+              @click.stop="emit('scan-qr', p)"
+            >
+              <template #icon><QrCode :size="12" /></template>
             </LumiButton>
             <LumiButton
               size="sm"

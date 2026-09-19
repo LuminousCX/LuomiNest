@@ -15,6 +15,7 @@ import PlatformLogPanel from '../../components/platform/PlatformLogPanel.vue'
 import PlatformConversationPanel from '../../components/platform/PlatformConversationPanel.vue'
 import PlatformAddDialog from '../../components/platform/PlatformAddDialog.vue'
 import PlatformConfigDialog from '../../components/platform/PlatformConfigDialog.vue'
+import WeChatQRDialog from '../../components/platform/WeChatQRDialog.vue'
 import LumiPageHeader from '../../components/common/LumiPageHeader.vue'
 import { formatShortDateTime } from '../../utils/format'
 
@@ -24,7 +25,14 @@ const { t } = useI18n()
 const rightTab = ref<'conversations' | 'logs'>('conversations')
 const showAddDialog = ref(false)
 const showConfigDialog = ref(false)
+const showWeChatQRDialog = ref(false)
+const qrInstance = ref<PlatformInstance | null>(null)
 const editingInstance = ref<PlatformInstance | null>(null)
+
+const handleScanQR = (instance: PlatformInstance) => {
+  qrInstance.value = instance
+  showWeChatQRDialog.value = true
+}
 
 const handleRefresh = async () => {
   await store.refreshAll()
@@ -120,6 +128,7 @@ onMounted(() => {
         <PlatformInstanceList
           @select="handleSelectInstance"
           @config="handleConfig"
+          @scan-qr="handleScanQR"
           @add="showAddDialog = true"
         />
       </div>
@@ -261,6 +270,7 @@ onMounted(() => {
 
     <PlatformAddDialog v-model:visible="showAddDialog" />
     <PlatformConfigDialog v-model:visible="showConfigDialog" :instance="editingInstance" />
+    <WeChatQRDialog v-model:visible="showWeChatQRDialog" :instance="qrInstance" @logged-in="handleRefresh" />
   </div>
 </template>
 

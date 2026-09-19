@@ -2,6 +2,8 @@ import asyncio
 import contextlib
 import json
 import random
+import time
+import uuid
 from typing import Any
 
 from loguru import logger
@@ -20,6 +22,8 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
     4. 主 Agent 响应后通过 send_group_msg / send_private_msg 发回
 
     增强功能：
+    - 防封控防检测：模拟人类打字延迟、支持 NapCat 输入状态上报（set_input_status）、滑动窗口令牌桶限流
+    - 平台原生工具：支持拍一拍（qq.poke）、撤回（qq.delete_msg）、禁言（qq.set_group_ban）、点赞（qq.send_like）等
     - 自动重连：服务器意外崩溃时使用指数退避策略自动重启（初始 5s，最大 60s）
     - 消息发送队列：发送失败的消息进入队列，后台任务定期重试
     - 回复引用支持：提取 OneBot v11 reply 消息段，记录被回复消息 ID
@@ -55,13 +59,35 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
         self._reconnect_attempt: int = 0
         self._is_stopping: bool = False
 
+        # OneBot Action 异步回执等待队列 {echo: Future}
+        self._pending_action_futures: dict[str, asyncio.Future] = {}
+
+        # 防封控防检测机制参数
+        self._anti_ban_enabled: bool = True
+        self._typing_delay_enabled: bool = True
+        self._typing_delay_base: float = 1.0
+        self._typing_delay_per_char: float = 0.03
+        self._typing_delay_max: float = 3.5
+        self._send_input_status: bool = True
+        self._rate_limit_per_minute: int = 25
+        self._rate_limit_records: dict[str, list[float]] = {}
+
     def initialize(self, config: dict[str, Any]) -> None:
         super().initialize(config)
         self._ws_host = config.get("ws_host", "0.0.0.0")
         self._ws_port = int(config.get("ws_port", 8080))
         self._access_token = config.get("access_token", "")
-        self._enable_group = config.get("enable_group", True)
-        self._enable_private = config.get("enable_private", True)
+        self._enable_group = bool(config.get("enable_group", True))
+        self._enable_private = bool(config.get("enable_private", True))
+
+        # 防封控参数注入
+        self._anti_ban_enabled = bool(config.get("anti_ban_enabled", True))
+        self._typing_delay_enabled = bool(config.get("typing_delay_enabled", True))
+        self._typing_delay_base = float(config.get("typing_delay_base", 1.0))
+        self._typing_delay_per_char = float(config.get("typing_delay_per_char", 0.03))
+        self._typing_delay_max = float(config.get("typing_delay_max", 3.5))
+        self._send_input_status = bool(config.get("send_input_status", True))
+        self._rate_limit_per_minute = int(config.get("rate_limit_per_minute", 25))
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -223,6 +249,60 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
     # 消息发送
     # ------------------------------------------------------------------
 
+    def _check_rate_limit(self, target_id: str) -> bool:
+        """滑动窗口限流：检查单位时间（60秒）内向该目标发送的消息数是否超限。"""
+        if not self._anti_ban_enabled or self._rate_limit_per_minute <= 0:
+            return True
+        now = time.time()
+        window = 60.0
+        records = self._rate_limit_records.setdefault(target_id, [])
+        # 清理超出窗口的时间戳
+        valid_records = [ts for ts in records if now - ts < window]
+        self._rate_limit_records[target_id] = valid_records
+        if len(valid_records) >= self._rate_limit_per_minute:
+            self._log(
+                "warning", "rate_limit_exceeded",
+                f"目标 {target_id} 触发防刷屏风控限流 ({len(valid_records)}/{self._rate_limit_per_minute}条/分)",
+                details={"target_id": target_id, "current_count": len(valid_records)},
+            )
+            return False
+        valid_records.append(now)
+        return True
+
+    async def _apply_anti_ban_typing_delay(self, text: str, target_type: str, target_id: str) -> None:
+        """根据回复文本长度模拟人类打字延迟，并在支持时上报输入态。"""
+        if not self._typing_delay_enabled:
+            return
+
+        # 1. 发送输入中状态 (NapCat / OneBot v11 扩展 set_input_status)
+        if self._send_input_status and target_id:
+            try:
+                websocket = self._find_connection()
+                if websocket:
+                    status_payload = {
+                        "action": "set_input_status",
+                        "params": {
+                            "event_type": 1,
+                            "user_id": int(target_id) if target_type == "private" else 0,
+                            "group_id": int(target_id) if target_type == "group" else 0,
+                        },
+                        "echo": f"typing_{int(time.time() * 1000)}",
+                    }
+                    await websocket.send(json.dumps(status_payload))
+            except Exception as e:
+                logger.debug(f"[qq_onebot] set_input_status ignored: {e}")
+
+        # 2. 拟人化打字时长计算：base + char_count * per_char + jitter
+        char_count = len(text.strip()) if text else 0
+        delay = self._typing_delay_base + (char_count * self._typing_delay_per_char)
+        delay = min(delay, self._typing_delay_max) + random.uniform(0.1, 0.4)
+        self._log(
+            "info", "anti_ban_delay",
+            f"触发拟人防风控打字延迟: {delay:.2f}s (字数: {char_count})",
+            details={"delay": round(delay, 2), "char_count": char_count, "target": target_id},
+        )
+        await asyncio.sleep(delay)
+
     async def send_message(self, response: PlatformResponse, target: str) -> bool:
         websocket = self._find_connection()
         if not websocket:
@@ -234,6 +314,15 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
         if not target_id:
             self._log("warning", "message_failed", f"无效的目标: {target}", details={"target": target})
             return False
+
+        # 防风控限流检查
+        if not self._check_rate_limit(target_id):
+            self._log("warning", "rate_limit_drop", f"触发防风控限流，消息暂存队列稍后重试: {target_id}")
+            self._enqueue_message(response, target)
+            return False
+
+        # 拟人化打字延迟与状态上报
+        await self._apply_anti_ban_typing_delay(response.content, target_type, target_id)
 
         message_segments = self._build_message_segments(response)
 
@@ -398,6 +487,14 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
     # ------------------------------------------------------------------
 
     async def _handle_onebot_event(self, event: dict, websocket: Any) -> None:
+        # 1. 响应 Action 回执（OneBot API 返回的 echo）
+        echo = str(event.get("echo", ""))
+        if echo and echo in self._pending_action_futures:
+            fut = self._pending_action_futures.pop(echo)
+            if not fut.done():
+                fut.set_result(event)
+            return
+
         post_type = event.get("post_type")
         if post_type == "meta_event":
             sub_type = event.get("meta_event_type")
@@ -528,3 +625,224 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
         if not segments:
             segments.append({"type": "text", "data": {"text": "[空消息]"}})
         return segments
+
+    # ------------------------------------------------------------------
+    # OneBot Action 调用能力与平台专属工具
+    # ------------------------------------------------------------------
+
+    async def call_action(
+        self,
+        action: str,
+        params: dict[str, Any] | None = None,
+        timeout: float = 10.0,
+    ) -> dict[str, Any]:
+        """向 OneBot 协议端（如 NapCat）发送 API 请求并异步等待结果。"""
+        websocket = self._find_connection()
+        if not websocket:
+            return {"status": "failed", "retcode": -1, "msg": "无可用 WebSocket 连接"}
+
+        echo = f"act_{uuid.uuid4().hex[:8]}"
+        payload = {
+            "action": action,
+            "params": params or {},
+            "echo": echo,
+        }
+        loop = asyncio.get_running_loop()
+        fut: asyncio.Future = loop.create_future()
+        self._pending_action_futures[echo] = fut
+
+        try:
+            await websocket.send(json.dumps(payload))
+            res = await asyncio.wait_for(fut, timeout=timeout)
+            return res if isinstance(res, dict) else {"status": "ok", "data": res}
+        except asyncio.TimeoutError:
+            self._pending_action_futures.pop(echo, None)
+            return {"status": "failed", "retcode": -2, "msg": f"OneBot action {action} 超时 ({timeout}s)"}
+        except Exception as e:
+            self._pending_action_futures.pop(echo, None)
+            return {"status": "failed", "retcode": -3, "msg": str(e)}
+
+    @property
+    def available_tools(self) -> list[dict[str, Any]]:
+        """声明 QQ 平台专用的原生工具（拍一拍、撤回、禁言、点赞等）。"""
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.poke",
+                    "description": "在 QQ 中拍一拍（戳一戳）群成员或私聊好友",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_type": {
+                                "type": "string",
+                                "enum": ["group", "friend"],
+                                "description": "目标类型：group 为群聊拍一拍，friend 为好友拍一拍",
+                            },
+                            "user_id": {
+                                "type": "string",
+                                "description": "被拍对象的 QQ 号",
+                            },
+                            "group_id": {
+                                "type": "string",
+                                "description": "群号（仅当 target_type 为 group 时必传）",
+                            },
+                        },
+                        "required": ["target_type", "user_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.delete_msg",
+                    "description": "撤回 QQ 消息（需机器人为发送者或在群内拥有管理员/群主权限）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "message_id": {
+                                "type": "string",
+                                "description": "要撤回的消息 ID",
+                            },
+                        },
+                        "required": ["message_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.set_group_ban",
+                    "description": "禁言指定的群成员（需要机器人具备群管理员权限）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "group_id": {
+                                "type": "string",
+                                "description": "群号",
+                            },
+                            "user_id": {
+                                "type": "string",
+                                "description": "被禁言的成员 QQ 号",
+                            },
+                            "duration": {
+                                "type": "integer",
+                                "description": "禁言时长（秒），0 表示解除禁言，默认 60 秒",
+                            },
+                        },
+                        "required": ["group_id", "user_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.send_like",
+                    "description": "给指定 QQ 好友或群友名片点赞",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "user_id": {
+                                "type": "string",
+                                "description": "对方 QQ 号",
+                            },
+                            "times": {
+                                "type": "integer",
+                                "description": "点赞次数（1~10次，默认 10）",
+                            },
+                        },
+                        "required": ["user_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.get_group_member_list",
+                    "description": "获取指定 QQ 群的成员列表及群名片信息",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "group_id": {
+                                "type": "string",
+                                "description": "群号",
+                            },
+                        },
+                        "required": ["group_id"],
+                    },
+                },
+            },
+        ]
+
+    async def execute_platform_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """执行 QQ 平台专用工具调用。"""
+        if tool_name == "qq.poke":
+            target_type = arguments.get("target_type", "group")
+            user_id = int(arguments.get("user_id", 0))
+            if target_type == "group":
+                group_id = int(arguments.get("group_id", 0))
+                res = await self.call_action("group_poke", {"group_id": group_id, "user_id": user_id})
+            else:
+                res = await self.call_action("friend_poke", {"user_id": user_id})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": f"拍一拍执行完成: {res.get('status', 'ok')}",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.delete_msg":
+            msg_id = int(arguments.get("message_id", 0))
+            res = await self.call_action("delete_msg", {"message_id": msg_id})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": f"撤回消息 {msg_id} 成功" if success else "撤回消息失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.set_group_ban":
+            group_id = int(arguments.get("group_id", 0))
+            user_id = int(arguments.get("user_id", 0))
+            duration = int(arguments.get("duration", 60))
+            res = await self.call_action("set_group_ban", {"group_id": group_id, "user_id": user_id, "duration": duration})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": f"已将群 {group_id} 成员 {user_id} 禁言 {duration} 秒" if success else "禁言失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.send_like":
+            user_id = int(arguments.get("user_id", 0))
+            times = int(arguments.get("times", 10))
+            res = await self.call_action("send_like", {"user_id": user_id, "times": times})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": f"已为 {user_id} 点赞 {times} 次" if success else "点赞失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.get_group_member_list":
+            group_id = int(arguments.get("group_id", 0))
+            res = await self.call_action("get_group_member_list", {"group_id": group_id})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            data = res.get("data", [])
+            summary = [
+                {
+                    "user_id": str(m.get("user_id", "")),
+                    "nickname": m.get("nickname", ""),
+                    "card": m.get("card", ""),
+                    "role": m.get("role", "member"),
+                }
+                for m in data[:50]
+            ]
+            return {
+                "success": success,
+                "output": json.dumps(summary, ensure_ascii=False),
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        return await super().execute_platform_tool(tool_name, arguments)
+

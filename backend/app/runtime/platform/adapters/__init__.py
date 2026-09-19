@@ -13,6 +13,7 @@ from app.runtime.platform.adapters.rest_api import RESTPlatformAdapter
 from app.runtime.platform.adapters.telegram import TelegramAdapter
 from app.runtime.platform.adapters.websocket import WebSocketAdapter
 from app.runtime.platform.adapters.wechat_mp import LuomiNestWeChatMPAdapter
+from app.runtime.platform.adapters.wechat_personal import LuomiNestWeChatPersonalAdapter
 from app.runtime.platform.adapters.wechat_work import LuomiNestWeComAdapter
 from app.runtime.platform.adapters.xiaomi_iot import LuomiNestXiaomiIoTAdapter as XiaomiIoTAdapter
 from app.runtime.platform.registry import register_adapter_type
@@ -76,7 +77,7 @@ def _register_all_adapter_types():
     register_adapter_type(
         name="qq_onebot",
         display_name="QQ OneBot v11",
-        description="通过 OneBot v11 协议接入 QQ 机器人，支持反向 WebSocket 连接（对接 NapCat/Lagrange/go-cqhttp），支持群聊和私聊、图片识别",
+        description="通过 OneBot v11 协议接入 QQ 机器人，支持反向 WebSocket 连接（对接 NapCat/Lagrange/go-cqhttp），支持群聊和私聊、图片识别、拟人防风控延迟与输入态上报",
         adapter_cls=LuomiNestQQOneBotAdapter,
         config_template={
             "ws_host": "0.0.0.0",
@@ -84,6 +85,10 @@ def _register_all_adapter_types():
             "access_token": "",
             "enable_group": True,
             "enable_private": True,
+            "anti_ban_enabled": True,
+            "typing_delay_enabled": True,
+            "send_input_status": True,
+            "rate_limit_per_minute": 25,
         },
         config_metadata={
             "ws_host": {"label": "监听地址", "type": "text", "required": True},
@@ -91,6 +96,10 @@ def _register_all_adapter_types():
             "access_token": {"label": "Access Token", "type": "password", "required": False},
             "enable_group": {"label": "启用群消息", "type": "switch", "required": False},
             "enable_private": {"label": "启用私聊", "type": "switch", "required": False},
+            "anti_ban_enabled": {"label": "启用防风控保护", "type": "switch", "required": False},
+            "typing_delay_enabled": {"label": "启用拟人打字延迟", "type": "switch", "required": False},
+            "send_input_status": {"label": "输入状态上报", "type": "switch", "required": False},
+            "rate_limit_per_minute": {"label": "每分钟发送上限", "type": "number", "required": False},
         },
         icon="MessageCircle",
         category="social",
@@ -171,6 +180,36 @@ def _register_all_adapter_types():
             "enable_image": {"label": "启用图片消息", "type": "switch", "required": False},
         },
         icon="Users",
+        category="social",
+        support_streaming=False,
+        support_proactive=True,
+    )
+    register_adapter_type(
+        name="wechat_personal",
+        display_name="个人微信",
+        description="通过 Gewechat / 微信扫码接入个人微信号，支持二维码扫码登录、消息回调、图片多模态与防封控拟人打字延迟",
+        adapter_cls=LuomiNestWeChatPersonalAdapter,
+        config_template={
+            "api_url": "http://127.0.0.1:2531/v2/api",
+            "token": "",
+            "app_id": "",
+            "callback_url": "",
+            "anti_ban_enabled": True,
+            "typing_delay_enabled": True,
+            "rate_limit_per_minute": 20,
+            "mock_mode": False,
+        },
+        config_metadata={
+            "api_url": {"label": "Gewechat 接口地址", "type": "text", "required": True},
+            "token": {"label": "访问 Token", "type": "password", "required": False},
+            "app_id": {"label": "设备/实例 AppID (选填)", "type": "text", "required": False},
+            "callback_url": {"label": "回调 URL (选填)", "type": "text", "required": False},
+            "anti_ban_enabled": {"label": "启用防封控保护", "type": "switch", "required": False},
+            "typing_delay_enabled": {"label": "启用拟人打字延迟", "type": "switch", "required": False},
+            "rate_limit_per_minute": {"label": "每分钟发送上限", "type": "number", "required": False},
+            "mock_mode": {"label": "本地演示/模拟模式", "type": "switch", "required": False},
+        },
+        icon="MessageSquare",
         category="social",
         support_streaming=False,
         support_proactive=True,

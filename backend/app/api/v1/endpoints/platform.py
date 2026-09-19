@@ -747,10 +747,56 @@ async def platform_webhook_receive(instance_id: str, request: dict):
             from fastapi.responses import PlainTextResponse
             return PlainTextResponse(content=reply or "")
 
+        if adapter_type == "wechat_personal" and hasattr(adapter, "handle_webhook"):
+            res = await adapter.handle_webhook(request)
+            return ok(res)
+
         return ok({"received": True, "note": "adapter does not support webhook"})
     except Exception as e:
         logger.error(f"[API] Webhook handling failed for {instance_id}: {e}")
         raise LuomiNestError(f"Webhook handling failed: {e}", code="PLATFORM_WEBHOOK_FAILED", status_code=500)
+
+
+@router.get("/instances/{instance_id}/wechat/qrcode")
+async def get_wechat_qrcode(instance_id: str):
+    """获取个人微信实例的登录二维码与当前扫码状态。"""
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
+    if inst.adapter_type != "wechat_personal":
+        raise ValidationError("Only wechat_personal instance supports QR login")
+    adapter = inst.adapter
+    if not adapter or not hasattr(adapter, "fetch_login_qrcode"):
+        raise ValidationError("Adapter does not support QR code login")
+
+    qr_info = await adapter.fetch_login_qrcode()
+    return ok(qr_info)
+
+
+@router.get("/instances/{instance_id}/wechat/status")
+async def check_wechat_qr_status(instance_id: str, uuid: str = ""):
+    """轮询个人微信实例的扫码登录状态。"""
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
+    if inst.adapter_type != "wechat_personal":
+        raise ValidationError("Only wechat_personal instance supports QR status check")
+    adapter = inst.adapter
+    if not adapter or not hasattr(adapter, "check_login_status"):
+        raise ValidationError("Adapter does not support QR status check")
+
+    status_info = await adapter.check_login_status(uuid)
+    return ok(status_info)
+
+
+@router.post("/instances/{instance_id}/wechat/refresh_qr")
+async def refresh_wechat_qrcode(instance_id: str):
+    """刷新个人微信登录二维码。"""
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
+    if inst.adapter_type != "wechat_personal":
+        raise ValidationError("Only wechat_personal instance supports QR refresh")
+    adapter = inst.adapter
+    if not adapter or not hasattr(adapter, "fetch_login_qrcode"):
+        raise ValidationError("Adapter does not support QR refresh")
+
+    qr_info = await adapter.fetch_login_qrcode()
+    return ok(qr_info)
 
 
 @router.post("/instances/{instance_id}/send")
