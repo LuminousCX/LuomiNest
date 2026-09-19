@@ -155,6 +155,8 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
         self._game_port: int = 56587
         self._bot_name: str = "LuomiNest"
         self._message_format: str = "tellraw"
+        self._auto_spawn_bot: bool = True
+        self._bot_process: Any = None
 
         # 具身 AI 模组遥测与状态存储
         self._player_states: dict[str, dict[str, Any]] = {}
@@ -178,6 +180,12 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
         self._ws_port = int(config.get("ws_port", 8081))
         self._bot_name = config.get("bot_name", "LuomiNest")
         self._message_format = config.get("message_format", "tellraw")
+
+        auto_bot_val = config.get("auto_spawn_bot", True)
+        if isinstance(auto_bot_val, str):
+            self._auto_spawn_bot = auto_bot_val.strip().lower() in ("true", "1", "yes")
+        else:
+            self._auto_spawn_bot = bool(auto_bot_val)
 
         ss_val = config.get("screenshot_enabled", True)
         if isinstance(ss_val, str):
@@ -209,13 +217,89 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
         if self._ws_enabled:
             await self._start_ws_server()
 
-        logger.success(f"[Minecraft] Adapter started (RCON={bool(self._rcon)}, WS={self._ws_enabled}, Screenshot={self._screenshot_enabled})")
+        if self._auto_spawn_bot and self._game_port > 0:
+            await self._launch_bot_agent()
+
+        logger.success(f"[Minecraft] Adapter started (RCON={bool(self._rcon)}, WS={self._ws_enabled}, Bot={self._auto_spawn_bot and self._game_port > 0}, Screenshot={self._screenshot_enabled})")
         self._log("success", "instance_started", "Minecraft 适配器已启动", details={
-            "rcon": bool(self._rcon), "ws": self._ws_enabled, "screenshot": self._screenshot_enabled,
+            "rcon": bool(self._rcon), "ws": self._ws_enabled, "bot": bool(self._bot_process), "screenshot": self._screenshot_enabled,
         })
+
+    async def _launch_bot_agent(self) -> None:
+        """自动派驻 Mineflayer 虚拟玩家实体加入局域网单机世界。"""
+        import shutil
+        import subprocess
+        from pathlib import Path
+
+        node_exe = shutil.which("node")
+        if not node_exe:
+            logger.warning("[Minecraft] 未检测到 Node.js 环境，跳过实体伴侣玩家自动派遣")
+            self._log("warning", "bot_launch_skipped", "未检测到 Node.js，跳过实体玩家自动派遣")
+            return
+
+        bot_script = Path(__file__).resolve().parents[4] / "scripts" / "mc_bot" / "bot_agent.js"
+        if not bot_script.exists():
+            logger.warning(f"[Minecraft] 未找到伴侣脚本: {bot_script}")
+            return
+
+        cmd = [
+            node_exe,
+            str(bot_script),
+            "--host", self._game_host,
+            "--port", str(self._game_port),
+            "--ws-port", str(self._ws_port),
+            "--name", self._bot_name,
+        ]
+
+        try:
+            logger.info(f"[Minecraft] 正在自动派遣实体伴侣加入游戏: {self._game_host}:{self._game_port} (Bot={self._bot_name})")
+            self._log("info", "bot_spawning", f"正在自动派遣实体伴侣 {self._bot_name} 加入游戏 {self._game_host}:{self._game_port}")
+            self._bot_process = subprocess.Popen(
+                cmd,
+                cwd=str(bot_script.parent),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+
+            import threading
+            def _log_bot_pipe(pipe, is_err: bool = False):
+                try:
+                    for raw_line in iter(pipe.readline, b''):
+                        line_str = raw_line.decode("utf-8", errors="replace").strip()
+                        if line_str:
+                            if is_err:
+                                logger.warning(f"[MC-Bot] {line_str}")
+                            else:
+                                logger.info(f"[MC-Bot] {line_str}")
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        pipe.close()
+                    except Exception:
+                        pass
+
+            threading.Thread(target=_log_bot_pipe, args=(self._bot_process.stdout, False), daemon=True).start()
+            threading.Thread(target=_log_bot_pipe, args=(self._bot_process.stderr, True), daemon=True).start()
+
+        except Exception as e:
+            logger.error(f"[Minecraft] 派遣实体伴侣异常: {e}")
+            self._log("error", "bot_spawn_failed", f"派遣伴侣异常: {e}")
 
     async def stop(self) -> None:
         self._running = False
+        if self._bot_process:
+            try:
+                self._bot_process.terminate()
+                self._bot_process.wait(timeout=2)
+            except Exception:
+                try:
+                    self._bot_process.kill()
+                except Exception:
+                    pass
+            self._bot_process = None
+            self._log("info", "bot_stopped", "实体伴侣玩家已离开游戏")
+
         if self._reconnect_task:
             self._reconnect_task.cancel()
             try:

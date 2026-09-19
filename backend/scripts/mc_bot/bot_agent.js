@@ -8,6 +8,13 @@
  * 4. 监听游戏公屏聊天，转发给 LuomiNest 主 Agent / DeepSeek；
  * 5. 接收 LuomiNest 下发的具身指令并在游戏内执行 (打字说话、攻击、跟随移动、挖掘)。
  */
+// 动态应用兼容补丁 (如 Minecraft 26.2 / Protocol 776 支持)
+try {
+  const { applyPatch } = require('./patch_mc26')
+  applyPatch()
+} catch (e) {
+  console.warn('[MC-Bot] 应用协议补丁警告:', e.message)
+}
 
 const mineflayer = require('./node_modules/mineflayer')
 

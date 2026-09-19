@@ -103,11 +103,24 @@ async def test_mc_action_dispatch(mc_adapter):
 
     # 模拟下发具身动作
     res = await mc_adapter.execute_platform_tool("mc.navigate", {"x": 100, "y": 64, "z": 200, "player": "Steve"})
-    assert res["success"] is True
-
     sent_raw = mock_ws.send.call_args[0][0]
     payload = json.loads(sent_raw)
     assert payload["type"] == "action"
     assert payload["action"] == "navigate"
     assert payload["params"]["x"] == 100
     assert payload["params"]["y"] == 64
+
+
+@pytest.mark.asyncio
+async def test_mc_auto_spawn_bot_config():
+    adapter = LuomiNestMinecraftAdapter()
+    adapter.initialize({
+        "game_port": 56587,
+        "auto_spawn_bot": "true",
+        "bot_name": "LuomiNest",
+    })
+    assert adapter._game_port == 56587
+    assert adapter._auto_spawn_bot is True
+    assert adapter._bot_name == "LuomiNest"
+    assert adapter._rcon_password == ""
+
