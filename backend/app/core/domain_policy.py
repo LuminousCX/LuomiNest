@@ -31,8 +31,9 @@ LEGACY_MAIN_AGENT_ID = "main"
 # 记忆轨道（§8.5.2 记忆树 namespace）
 # ──────────────────────────────────────────────────────────────
 
-TRACK_OWNER = "owner"  # 主人轨道：工作台/皮套/桌宠读写，优先级最高
-TRACK_USERS = "users"  # 用户轨道：平台对话按 user_key 提炼写入
+TRACK_OWNER = "owner"   # 主人轨道：工作台/皮套/桌宠读写，优先级最高
+TRACK_USERS = "users"   # 用户轨道：平台对话按 user_key 提炼写入（粉丝个体）
+TRACK_GROUPS = "groups" # 群组轨道：粉丝群专属公共记忆（群画像/群规/群梗）
 
 # ──────────────────────────────────────────────────────────────
 # 场景值（conversation.scene）
@@ -121,24 +122,40 @@ def sanitize_key_segment(raw: str | None) -> str:
     return seg[:_SEGMENT_MAX_LEN]
 
 
+def platform_user_key(platform: str, user_id: str) -> str:
+    """平台用户全局统一标识：``{platform}_{user_id}``。
+
+    保证同一用户在群聊与私聊中归一为同一个用户轨（如 qq_onebot_10001）。
+    两段均经 :func:`sanitize_key_segment` 清洗。
+    """
+    if not (user_id or "").strip():
+        return ""
+    return f"{sanitize_key_segment(platform)}_{sanitize_key_segment(user_id)}"
+
+
+def platform_group_key(platform: str, group_id: str) -> str:
+    """平台群组全局统一标识：``{platform}_{group_id}``。
+
+    用于独立粉丝群的群画像与公共记忆隔离（如 qq_onebot_888888）。
+    两段均经 :func:`sanitize_key_segment` 清洗。
+    """
+    if not (group_id or "").strip():
+        return ""
+    return f"{sanitize_key_segment(platform)}_{sanitize_key_segment(group_id)}"
+
+
 def group_member_user_key(platform: str, identity: str, sender_id: str) -> str:
-    """群聊成员 → 用户轨 user_key：``{platform}_{identity}_{sender_id}``。
+    """群聊成员 → 用户轨 user_key：{platform}_{identity}_{sender_id}。
 
-    - platform: 平台类型（如 qq_onebot，取 PlatformMessage.platform）
-    - identity: 平台实例标识（platform:{instId} 域中的 instance_id）
-    - sender_id: 发送者在平台内的身份（如 QQ 号，PlatformMessage.user_id）
-
-    三段均经 :func:`sanitize_key_segment` 清洗；identity 取平台实例而非群 id，
-    同一人跨群在同一实例下得到同一个轨（按「人」不按「群」）。
-    sender_id 为空 → 返回 ""（不建轨，维持现状）。
+    三段均经 :func:`sanitize_key_segment` 清洗。
     """
     if not (sender_id or "").strip():
         return ""
-    return (
-        f"{sanitize_key_segment(platform)}_"
-        f"{sanitize_key_segment(identity)}_"
-        f"{sanitize_key_segment(sender_id)}"
-    )
+    seg_p = sanitize_key_segment(platform)
+    seg_i = sanitize_key_segment(identity)
+    seg_s = sanitize_key_segment(sender_id)
+    key = f"{seg_p}_{seg_i}_{seg_s}"
+    return key[:128]
 
 
 @dataclass(frozen=True)
@@ -150,8 +167,7 @@ class DomainPolicy:
     - memory_track：写入/归属轨道（TRACK_OWNER / TRACK_USERS / None=无记忆）
     - tool_profile：工具路由画像（§10）
     - track_user_key：memory_track == TRACK_USERS 时实际生效的用户轨键
-      （私聊 = conversation.user_key；群聊 = 群成员轨 group_member_user_key；
-      其他轨道为空串）
+    - group_track_key：群聊场景下的群组轨键（groups/{group_track_key}/）
     """
 
     kind: str
@@ -160,6 +176,7 @@ class DomainPolicy:
     memory_track: str | None
     tool_profile: str
     track_user_key: str = ""
+    group_track_key: str = ""
 
     @property
     def has_memory(self) -> bool:
@@ -179,6 +196,7 @@ def resolve_domain_policy(
     platform_memory_write: bool = False,
     sender_id: str = "",
     platform_name: str = "",
+    group_id: str = "",
 ) -> DomainPolicy:
     """按 domain（缺省时按 agent_id 兜底推导）查策略表，返回 DomainPolicy。
 
@@ -189,17 +207,17 @@ def resolve_domain_policy(
         user_key: 平台私聊用户标识；群聊为空
         platform_memory_write: 平台实例级记忆写入开关（M5=C，默认关）
         sender_id: 群消息发送者身份（PlatformMessage.user_id）；非空且
-            user_key 为空时按群成员轨解析 user_key（§8.5.10 本期实现）
-        platform_name: 平台类型（如 qq_onebot）；缺省时群成员轨回退用实例标识
+            user_key 为空时按统一用户标识解析 user_key
+        platform_name: 平台类型（如 qq_onebot）；缺省时回退用实例标识
+        group_id: 群标识（PlatformMessage.group_id），用于定位独立粉丝群记忆轨
 
     §9 记忆策略矩阵：
 
     - workbench（含 scene=avatar）：owner 轨，读 ✅ 写 ✅
     - agent:{id}：owner 轨，读 ✅ 写 ✅（各自 owner:{agent_id} 记忆，记忆中枢可选页）
-    - platform:{instId}：读 ✅（owner 优先 + 该用户/说话成员记忆）；
+    - platform:{instId}：读 ✅（owner 优先 + 该群公共记忆 + 该用户/说话成员记忆）；
       写受 platform_memory_write 开关控制（默认 ❌），写入 users/{track_user_key}/
-      （私聊 = conversation.user_key；群聊 = {platform}_{instId}_{sender_id}，
-      无 sender_id 的群消息维持现状不建轨）
+      与 groups/{group_track_key}/
 
     domain 为空/None 时按 agent_id 兜底推导（兼容未携带 domain 的 legacy 调用）：
     主 Agent → workbench；其他 Agent → agent:{id}；均无 → 无记忆权限
@@ -229,15 +247,20 @@ def resolve_domain_policy(
         inst_id = parse_domain(dom)[1]
         effective_user_key = (user_key or "").strip()
         if not effective_user_key and (sender_id or "").strip():
-            # 群聊成员轨（按「人」不按「群」，同一人跨群同实例同轨）
             effective_user_key = group_member_user_key(
-                platform_name or inst_id, inst_id, sender_id,
+                platform_name or inst_id, inst_id, sender_id
             )
+
+        effective_group_key = ""
+        if (group_id or "").strip():
+            effective_group_key = platform_group_key(platform_name or inst_id, group_id)
+
         track = TRACK_USERS if effective_user_key else None
-        memory_write = bool(platform_memory_write) and bool(effective_user_key)
+        memory_write = bool(platform_memory_write) and bool(effective_user_key or effective_group_key)
         return DomainPolicy(
             KIND_PLATFORM, True, memory_write, track, TOOL_PROFILE_STANDARD,
             track_user_key=effective_user_key,
+            group_track_key=effective_group_key,
         )
 
     # agent:{id}：子 Agent 对话读写各自 owner:{agent_id} 记忆（A 方案，记忆中枢可选页）

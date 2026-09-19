@@ -21,6 +21,12 @@ FACT_CATEGORY_LABELS = {
 FACT_SCOPE_AGENT = {"preference", "knowledge", "correction"}
 FACT_SCOPE_CONVERSATION = {"context", "behavior", "goal"}
 
+# 隐私安全作用域：双层记忆隔离
+SCOPE_GLOBAL = "global"    # 全局公开画像：基础偏好/称呼，群聊与私聊均可见
+SCOPE_PRIVATE = "private"  # 私聊专属心事/隐私：仅私聊可见，群聊强力屏蔽防泄密
+SCOPE_GROUP = "group"      # 群聊公开互动/称号：群聊可见，私聊可作为关注感知
+FACT_SCOPES = (SCOPE_GLOBAL, SCOPE_PRIVATE, SCOPE_GROUP)
+
 _SUMMARY_SECTION_MAP = {
     "用户画像": "user_profile",
     "偏好设置": "preferences",
@@ -73,6 +79,10 @@ class FactItem(BaseModel):
     history: list[ArchivedFact] = Field(default_factory=list)
     # 置顶（陪伴场景：生日/纪念日/过敏源等关键信息必注入，绕过置信度与过期闸门）
     pinned: bool = False
+    # 作用域：global=全局画像, private=私聊专属秘密, group=群聊公开记忆
+    scope: str = "global"
+    # 来源群标识（当 scope 为 group 时记录群 ID）
+    group_id: str = ""
 
 
 class SummarySection(BaseModel):

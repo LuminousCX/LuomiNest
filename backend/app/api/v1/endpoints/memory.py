@@ -30,17 +30,43 @@ class CreateFactRequest(BaseModel):
     category: str = Field(default="context")
     confidence: float = Field(default=0.8, ge=0.0, le=1.0)
     source_error: str = Field(default="")
+    scope: str = Field(default="global")
+    group_id: str = Field(default="")
 
 
 class UpdateFactRequest(BaseModel):
     content: str | None = None
     category: str | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    scope: str | None = None
+    group_id: str | None = None
+
+
+def _resolve_engine(
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
+    """按轨道解析记忆引擎：owner=主轨（默认），users=用户轨（需 user_key），groups=群聊轨（需 group_key）。"""
+    if track == "users":
+        if not user_key:
+            raise BadRequestError("user_key is required for users track", code="MEMORY_USER_KEY_REQUIRED")
+        from app.engines.memory.memory_engine import get_track_engine, TRACK_USERS
+
+        return get_track_engine(TRACK_USERS, user_key)
+    if track == "groups":
+        if not group_key:
+            raise BadRequestError("group_key is required for groups track", code="MEMORY_GROUP_KEY_REQUIRED")
+        from app.engines.memory.memory_engine import get_track_engine, TRACK_GROUPS
+
+        return get_track_engine(TRACK_GROUPS, group_key)
+    return get_memory_engine(agent_id)
 
 
 @router.get("/")
-async def get_memory(agent_id: str | None = None, track: str = "owner", user_key: str = ""):
-    engine = _resolve_engine(agent_id, track, user_key)
+async def get_memory(agent_id: str | None = None, track: str = "owner", user_key: str = "", group_key: str = ""):
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     data = engine.load_data()
     return ok({
         "memory": engine.load_memory(),
@@ -50,31 +76,43 @@ async def get_memory(agent_id: str | None = None, track: str = "owner", user_key
 
 
 @router.get("/knowledge")
-async def get_knowledge(agent_id: str | None = None, track: str = "owner", user_key: str = ""):
-    engine = _resolve_engine(agent_id, track, user_key)
+async def get_knowledge(agent_id: str | None = None, track: str = "owner", user_key: str = "", group_key: str = ""):
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     content = engine.load_knowledge()
     sections = engine.parse_knowledge()
     return ok({"content": content, "sections": sections})
 
 
 @router.put("/knowledge")
-async def update_knowledge(request: UpdateContentRequest, agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
+async def update_knowledge(
+    request: UpdateContentRequest,
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     engine.save_knowledge(request.content)
     return ok()
 
 
 @router.get("/summary")
-async def get_summary(agent_id: str | None = None, track: str = "owner", user_key: str = ""):
-    engine = _resolve_engine(agent_id, track, user_key)
+async def get_summary(agent_id: str | None = None, track: str = "owner", user_key: str = "", group_key: str = ""):
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     content = engine.load_summary()
     sections = engine.parse_summary()
     return ok({"content": content, "sections": sections})
 
 
 @router.put("/summary")
-async def update_summary(request: UpdateContentRequest, agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
+async def update_summary(
+    request: UpdateContentRequest,
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     engine.save_summary(request.content)
     return ok()
 
@@ -82,14 +120,16 @@ async def update_summary(request: UpdateContentRequest, agent_id: str | None = N
 @router.get("/facts")
 async def get_facts(
     category: str | None = None,
+    scope: str | None = None,
     agent_id: str | None = None,
     track: str = "owner",
     user_key: str = "",
+    group_key: str = "",
     conversation_id: str | None = None,
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ):
-    engine = _resolve_engine(agent_id, track, user_key)
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     facts = engine.get_facts(category)
 
     # 合并对话级facts
@@ -113,6 +153,9 @@ async def get_facts(
                 conv_facts = [f for f in conv_facts if f.category == category]
             facts.extend(conv_facts)
 
+    if scope:
+        facts = [f for f in facts if getattr(f, "scope", "global") == scope]
+
     # 去重（按id）
     seen = set()
     unique_facts = []
@@ -129,16 +172,24 @@ async def get_facts(
 
 
 @router.post("/facts")
-async def create_fact(request: CreateFactRequest, agent_id: str | None = None):
+async def create_fact(
+    request: CreateFactRequest,
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
     if request.category not in FACT_CATEGORIES:
         raise BadRequestError(f"Invalid category. Must be one of: {FACT_CATEGORIES}", code="MEMORY_CATEGORY_INVALID")
-    engine = get_memory_engine(agent_id)
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     fact = FactItem(
         content=request.content,
         category=request.category,
         confidence=request.confidence,
         source_error=request.source_error,
         source="manual",
+        scope=request.scope,
+        group_id=request.group_id or group_key,
     )
     # 引擎写锁：与蒸馏/画像更新的读-改-写序列互斥，避免并发覆盖
     async with engine.write_lock:
@@ -147,8 +198,14 @@ async def create_fact(request: CreateFactRequest, agent_id: str | None = None):
 
 
 @router.delete("/facts/{fact_id}")
-async def delete_fact(fact_id: str, agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
+async def delete_fact(
+    fact_id: str,
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     async with engine.write_lock:
         removed = await asyncio.to_thread(engine.remove_fact, fact_id)
         if removed:
@@ -159,10 +216,17 @@ async def delete_fact(fact_id: str, agent_id: str | None = None):
 
 
 @router.patch("/facts/{fact_id}")
-async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | None = None):
+async def update_fact(
+    fact_id: str,
+    request: UpdateFactRequest,
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
     if request.category is not None and request.category not in FACT_CATEGORIES:
         raise BadRequestError(f"Invalid category. Must be one of: {FACT_CATEGORIES}", code="MEMORY_CATEGORY_INVALID")
-    engine = get_memory_engine(agent_id)
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     async with engine.write_lock:
         updated = await asyncio.to_thread(
             engine.update_fact, fact_id, request.content, request.category, request.confidence
@@ -171,6 +235,11 @@ async def update_fact(fact_id: str, request: UpdateFactRequest, agent_id: str | 
             data = await asyncio.to_thread(engine.load_data)
             fact = next((f for f in data.facts if f.id == fact_id), None)
             if fact is not None:
+                if request.scope is not None:
+                    fact.scope = request.scope
+                if request.group_id is not None:
+                    fact.group_id = request.group_id
+                await asyncio.to_thread(engine.save_data, data)
                 await engine.sync_fact_vector(fact)
     if updated:
         return ok()
@@ -182,9 +251,16 @@ class FactPinRequest(BaseModel):
 
 
 @router.post("/facts/{fact_id}/pin")
-async def set_fact_pin(fact_id: str, request: FactPinRequest, agent_id: str | None = None):
+async def set_fact_pin(
+    fact_id: str,
+    request: FactPinRequest,
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
     """置顶/取消置顶一条记忆事实（陪伴场景关键信息必注入）。"""
-    engine = get_memory_engine(agent_id)
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     async with engine.write_lock:
         changed = await asyncio.to_thread(engine.set_fact_pinned, fact_id, request.pinned)
     if not changed:
@@ -192,20 +268,9 @@ async def set_fact_pin(fact_id: str, request: FactPinRequest, agent_id: str | No
     return ok({"fact_id": fact_id, "pinned": request.pinned})
 
 
-def _resolve_engine(agent_id: str | None, track: str = "owner", user_key: str = ""):
-    """按轨道解析记忆引擎：owner=主轨（默认），users=用户轨（需 user_key）。"""
-    if track == "users":
-        if not user_key:
-            raise BadRequestError("user_key is required for users track", code="MEMORY_USER_KEY_REQUIRED")
-        from app.engines.memory.memory_engine import get_track_engine, TRACK_USERS
-
-        return get_track_engine(TRACK_USERS, user_key)
-    return get_memory_engine(agent_id)
-
-
 @router.get("/tracks")
 async def list_memory_tracks():
-    """列出可用的记忆轨道：主 Agent/子 Agent 轨 + 用户轨（users/{key}）。"""
+    """列出可用的记忆轨道：主 Agent/子 Agent 轨 + 用户轨 + 群组轨。"""
     from app.engines.memory.store import agents_root, sanitize_track_key
 
     agents: list[dict] = []
@@ -225,25 +290,76 @@ async def list_memory_tracks():
                 except ValueError:
                     continue  # 畸形目录名跳过，不让单个坏目录打挂整个列表
 
-    return ok({"agents": agents, "user_keys": user_keys})
+    group_keys: list[str] = []
+    groups_dir = agents_dir.parent / "groups"
+    if groups_dir.exists():
+        for d in sorted(groups_dir.iterdir()):
+            if d.is_dir():
+                try:
+                    group_keys.append(sanitize_track_key(d.name))
+                except ValueError:
+                    continue
+
+    return ok({"agents": agents, "user_keys": user_keys, "group_keys": group_keys})
+
+
+@router.get("/users")
+async def list_memory_users():
+    """列出所有已记录画像与记忆的粉丝用户（SQLite 全量统计）。"""
+    from app.engines.memory.store import query_stored_users
+    from app.infrastructure.database.session import sync_session_factory
+
+    with sync_session_factory() as session:
+        users = query_stored_users(session)
+    return ok({"users": users})
+
+
+@router.get("/groups")
+async def list_memory_groups():
+    """列出所有已记录画像与记忆的粉丝群聊（SQLite 全量统计）。"""
+    from app.engines.memory.store import query_stored_groups
+    from app.infrastructure.database.session import sync_session_factory
+
+    with sync_session_factory() as session:
+        groups = query_stored_groups(session)
+    return ok({"groups": groups})
 
 
 @router.get("/daily")
-async def get_daily(date: str | None = None, agent_id: str | None = None, track: str = "owner", user_key: str = "", conversation_id: str | None = None):
-    engine = _resolve_engine(agent_id, track, user_key)
+async def get_daily(
+    date: str | None = None,
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+    conversation_id: str | None = None,
+):
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     return ok({"date": date or "today", "content": engine.load_daily(date, conversation_id)})
 
 
 @router.post("/daily")
-async def append_daily(request: AppendRequest, agent_id: str | None = None):
-    engine = get_memory_engine(agent_id)
+async def append_daily(
+    request: AppendRequest,
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     engine.append_daily(request.content, request.date, conversation_id=request.conversation_id)
     return ok()
 
 
 @router.get("/dailies")
-async def list_dailies(agent_id: str | None = None, track: str = "owner", user_key: str = "", conversation_id: str | None = None):
-    engine = _resolve_engine(agent_id, track, user_key)
+async def list_dailies(
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+    conversation_id: str | None = None,
+):
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     return ok({"dailies": engine.list_dailies(conversation_id)})
 
 
@@ -309,34 +425,54 @@ async def list_memory_agents(agents_store=Depends(get_agents_store)):
 
 
 @router.delete("/facts")
-async def clear_facts(agent_id: str | None = None):
+async def clear_facts(
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
     """清空所有事实"""
-    engine = get_memory_engine(agent_id)
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     async with engine.write_lock:
         await asyncio.to_thread(engine.clear_facts)
     return ok()
 
 
 @router.delete("/knowledge")
-async def clear_knowledge(agent_id: str | None = None):
+async def clear_knowledge(
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
     """清空知识记忆"""
-    engine = get_memory_engine(agent_id)
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     engine.clear_knowledge()
     return ok()
 
 
 @router.delete("/dailies")
-async def clear_dailies(agent_id: str | None = None):
+async def clear_dailies(
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
     """清空所有近期对话记录"""
-    engine = get_memory_engine(agent_id)
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     engine.clear_dailies()
     return ok()
 
 
 @router.delete("/summary")
-async def clear_summary(agent_id: str | None = None):
+async def clear_summary(
+    agent_id: str | None = None,
+    track: str = "owner",
+    user_key: str = "",
+    group_key: str = "",
+):
     """重置AI总结"""
-    engine = get_memory_engine(agent_id)
+    engine = _resolve_engine(agent_id, track, user_key, group_key)
     engine.clear_summaries()
     return ok()
 

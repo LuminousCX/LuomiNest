@@ -11,6 +11,7 @@ from app.core.domain_policy import (
     LEGACY_MAIN_AGENT_ID as _LEGACY_MAIN_AGENT_ID,
     TRACK_OWNER,
     TRACK_USERS,
+    TRACK_GROUPS,
     DomainPolicy,
     is_main_agent_id,
     resolve_domain_policy,
@@ -405,14 +406,15 @@ Examples:
         domain: str | None = None,
         scene: str = "",
         user_key: str = "",
+        group_id: str = "",
         group_members: list[dict] | None = None,
+        platform_name: str = "",
     ) -> list[dict]:
         """记忆注入（读），由 DomainPolicy.memory_read 判定（B7，§9 记忆策略矩阵）。
 
         - workbench（含 avatar 场景）：注入 owner 轨
-        - platform:{instId}：owner 优先 + 说话成员 users/{track_user_key} 记忆
-          （私聊 = conversation.user_key；群聊 = 群成员轨，§8.5.10 本期实现）
-          （注意：若该平台实例绑定的是子 Agent，owner 优先块读的是该子 Agent 的 owner 轨，而非主 Agent）
+        - platform:{instId}：owner 优先 + 群组画像(若群聊) + 说话成员 users/{track_user_key} 记忆
+          （私聊 = conversation.user_key；群聊 = 粉丝成员轨 + 群聊专属记忆，防隐私泄露）
         - agent:{id}：读写各自 owner:{agent_id} 记忆（A 方案，记忆中枢可选页）
         domain 缺省时按 agent_id 兜底推导（legacy 行为兼容）。
 
@@ -422,13 +424,18 @@ Examples:
                 「群友画像块」（每人 top 事实摘要，读不受写开关限制）。
                 私聊/工作台不传，行为与旧版完全一致。
         """
+        inferred_platform = platform_name or (user_key.split("_")[0] if "_" in user_key else "")
         policy = resolve_domain_policy(
-            domain, scene=scene, agent_id=agent_id, user_key=user_key,
+            domain, scene=scene, agent_id=agent_id, user_key=user_key, group_id=group_id,
+            platform_name=inferred_platform,
         )
         if not policy.memory_read:
             return messages
         # 用户轨键以 policy 解析结果为准（群聊成员轨由 DomainPolicy 归一）
         track_key = policy.track_user_key or user_key
+        is_group = bool(policy.group_track_key or group_id or group_members or (domain and "group" in domain))
+        allowed_scopes = {"global", "group"} if is_group else {"global", "group", "private"}
+
         try:
             # query-aware：用用户最新消息作为 query 优化事实检索
             query = self.get_user_query(messages)
@@ -438,24 +445,45 @@ Examples:
             # build_context 的同步组装含 SQLite 读，放 to_thread 执行避免阻塞事件循环
             owner_engine = _owner_engine_for(agent_id)
             owner_ctx = await asyncio.to_thread(
-                owner_engine.build_context_sync, query=query, conversation_id=thread_id
+                owner_engine.build_context_sync,
+                query=query,
+                conversation_id=thread_id,
+                allowed_scopes=allowed_scopes,
             )
             if owner_ctx:
                 blocks.append(owner_ctx)
 
-            # ② users 轨（平台私聊用户 / 群聊说话成员记忆，owner 之后注入）
+            # ② groups 轨（群聊场景下的粉丝群公共画像/群设定与梗）
+            if is_group and policy.group_track_key:
+                try:
+                    group_engine = get_track_engine(TRACK_GROUPS, policy.group_track_key)
+                    group_ctx = await asyncio.to_thread(
+                        group_engine.build_context_sync,
+                        query=query,
+                        conversation_id=thread_id,
+                        allowed_scopes={"global", "group"},
+                    )
+                    if group_ctx:
+                        blocks.append(f"[群聊画像 · 群体设定]\n{group_ctx}")
+                except Exception as group_err:
+                    logger.warning(f"[Memory] Group track read failed: group_key={policy.group_track_key}, error={group_err}")
+
+            # ③ users 轨（平台私聊用户 / 群聊说话成员记忆，群聊中私密事实已被严格过滤）
             if policy.memory_track == TRACK_USERS and track_key:
                 try:
                     user_engine = get_track_engine(TRACK_USERS, track_key)
                     user_ctx = await asyncio.to_thread(
-                        user_engine.build_context_sync, query=query, conversation_id=thread_id
+                        user_engine.build_context_sync,
+                        query=query,
+                        conversation_id=thread_id,
+                        allowed_scopes=allowed_scopes,
                     )
                     if user_ctx:
                         blocks.append(f"[当前用户记忆]\n{user_ctx}")
                 except Exception as user_err:
                     logger.warning(f"[Memory] User track read failed: user_key={track_key}, error={user_err}")
 
-            # ③ 群友画像块（§8.5.10 本期实现）：在场成员轨 top 事实摘要。
+            # ④ 群友画像块（§8.5.10 本期实现）：在场成员轨 top 事实摘要。
             # 读不受 platform_memory_write 开关限制（平台域读语义一致，写闸门在写侧）
             if group_members and policy.kind == KIND_PLATFORM:
                 member_block = await asyncio.to_thread(
@@ -498,11 +526,13 @@ Examples:
         *,
         policy: DomainPolicy | None = None,
         user_key: str = "",
+        group_id: str = "",
     ) -> None:
         """对话后记忆提炼写入。轨道由 policy.memory_track 决定（B7/§8.5.5 写入隔离）：
 
         - owner 轨（工作台/皮套/桌宠）：写 agents/{主 Agent}/（现状行为）
-        - users 轨（平台私聊）：写 users/{user_key}/，不污染主人记忆
+        - users 轨（平台私聊/群聊成员）：写 users/{user_key}/，不污染主人记忆
+        - groups 轨（群聊设定/群梗/公共事件）：当在群聊中时，公共事件同步记录至 groups/{group_key}/
         """
         try:
             user_msgs = [m for m in messages if m.get("role") == "user"]
@@ -511,6 +541,10 @@ Examples:
 
             last_msg = user_msgs[-1]
             content = ContextService._extract_user_text(last_msg)
+
+            is_group = bool((policy and policy.group_track_key) or group_id or (policy and policy.domain and "group" in policy.domain))
+            effective_group_id = (policy.group_track_key if policy else "") or group_id
+            default_scope = "group" if is_group else ("private" if (policy and policy.memory_track == TRACK_USERS) else "global")
 
             if policy is not None and policy.memory_track == TRACK_USERS and user_key:
                 engine = get_track_engine(TRACK_USERS, user_key)
@@ -532,6 +566,8 @@ Examples:
                     profile_result = await engine.update_profile_from_message(
                         str(content), llm_adapter, hint, context_messages=context_msg,
                         conversation_id=thread_id,
+                        default_scope=default_scope,
+                        group_id=effective_group_id,
                     )
                     if profile_result:
                         logger.info(f"[Memory] Background profile update: {profile_result}")
@@ -554,6 +590,15 @@ Examples:
                     await asyncio.to_thread(
                         engine.append_daily, "\n".join(daily_lines), conversation_id=thread_id
                     )
+                    # 若在群聊中，且群标识存在，群每日记录也同步追加一份群轨迹
+                    if is_group and effective_group_id:
+                        try:
+                            group_engine = get_track_engine(TRACK_GROUPS, effective_group_id)
+                            await asyncio.to_thread(
+                                group_engine.append_daily, "\n".join(daily_lines), conversation_id=thread_id
+                            )
+                        except Exception as ge:
+                            logger.warning(f"[Memory] Group daily record failed: {ge}")
 
             # 蒸馏统一由 distillation_service 处理，此处不再内嵌蒸馏
         except Exception as e:
@@ -618,6 +663,7 @@ Examples:
         domain: str | None = None,
         scene: str = "",
         user_key: str = "",
+        group_id: str = "",
         platform_memory_write: bool = False,
     ) -> None:
         """记忆写入门控：由 DomainPolicy.memory_write 判定（B7，§9）。
@@ -626,7 +672,7 @@ Examples:
         平台域写入受实例级开关 platform_memory_write 控制（M5=C，默认关）。
         """
         policy = resolve_domain_policy(
-            domain, scene=scene, agent_id=agent_id, user_key=user_key,
+            domain, scene=scene, agent_id=agent_id, user_key=user_key, group_id=group_id,
             platform_memory_write=platform_memory_write,
         )
         if not policy.memory_write:
@@ -636,7 +682,7 @@ Examples:
         try:
             await ContextService.update_memory_from_conversation(
                 messages, thread_id, agent_id, llm_adapter,
-                policy=policy, user_key=user_key,
+                policy=policy, user_key=user_key, group_id=group_id,
             )
             logger.info(f"[Memory] Background task completed")
         except Exception as e:

@@ -272,6 +272,10 @@ class FactManager:
                 existing.source_conversation_id = fact.source_conversation_id
             if fact.source_message:
                 existing.source_message = fact.source_message
+            if hasattr(fact, "scope") and fact.scope:
+                existing.scope = fact.scope
+            if hasattr(fact, "group_id") and fact.group_id:
+                existing.group_id = fact.group_id
 
     @staticmethod
     def _is_contradiction(existing: FactItem, new_fact: FactItem) -> bool:

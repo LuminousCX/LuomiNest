@@ -98,6 +98,8 @@ log.log
 # ============================================================
 .vscode/
 .idea/
+.vs/
+unsloth_compiled_cache/
 *.swp
 *.swo
 *~
@@ -256,4 +258,12 @@ review_security_diff.txt
 
 # 临时回收目录（测试脚本等，可恢复）
 .trash_mem_tests/
+
+# 独立云端服务（本地独立服务，不随主客户端仓库分发）
+luominest-cloud/
+
+# 已废弃的 Alembic 遗留脚本目录（见提交 7da93d0a，schema 统一走 engine.py）
+backend/scripts/migrate/
+backend/scripts/selfcheck/storage/test_provider_migration.py
+
 

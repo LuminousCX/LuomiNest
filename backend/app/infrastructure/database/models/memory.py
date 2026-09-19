@@ -63,12 +63,23 @@ class MemoryFact(Base):
     history: Mapped[list] = mapped_column(JSON, default=list)
     # 置顶：注入时绕过置信度/过期闸门（SCHEMA v2 迁移补列）
     pinned: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 作用域：global=全局/公开事实, private=私聊专属私密, group=群聊公开互动（SCHEMA v3 补列）
+    scope: Mapped[str] = mapped_column(String(32), default="global")
+    # 来源群标识（当 scope 为 group 时记录群 ID）
+    group_id: Mapped[str] = mapped_column(String(64), default="")
 
 
 Index(
     "ix_memory_facts_owner_conv",
     MemoryFact.owner_key,
     MemoryFact.conversation_id,
+    MemoryFact.is_latest,
+)
+
+Index(
+    "ix_memory_facts_owner_scope",
+    MemoryFact.owner_key,
+    MemoryFact.scope,
     MemoryFact.is_latest,
 )
 

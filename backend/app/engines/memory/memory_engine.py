@@ -24,6 +24,7 @@ from .models import (
     FACT_CATEGORIES,
     FACT_SCOPE_AGENT,
     FACT_SCOPE_CONVERSATION,
+    SCOPE_GLOBAL,
     _SUMMARY_SECTION_MAP,
     summaries_to_markdown,
 )
@@ -42,7 +43,7 @@ from .store import (
     resolve_track_dir,
     sanitize_track_key,
 )
-from app.core.domain_policy import TRACK_OWNER, TRACK_USERS
+from app.core.domain_policy import TRACK_OWNER, TRACK_USERS, TRACK_GROUPS
 from .fact_manager import FactManager
 from .extractor import MemoryExtractor
 from .context_builder import ContextBuilder
@@ -465,7 +466,9 @@ class MemoryEngine:
 
     # --- 上下文 ---
 
-    async def build_context_async(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
+    async def build_context_async(
+        self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None, allowed_scopes: set[str] | None = None
+    ) -> str:
         conv_store = None
         if conversation_id:
             conv_store = self._get_conv_store(conversation_id)
@@ -480,9 +483,14 @@ class MemoryEngine:
             except Exception as e:
                 logger.warning(f"[Memory] Vector retrieve failed: {e}")
 
-        return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id, relevant_fact_ids=retrieved_ids)
+        return self._context_builder.build_context(
+            max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id,
+            relevant_fact_ids=retrieved_ids, allowed_scopes=allowed_scopes,
+        )
 
-    def build_context_sync(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
+    def build_context_sync(
+        self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None, allowed_scopes: set[str] | None = None
+    ) -> str:
         """同步上下文组装（与 build_context 的事件循环内回退分支相同，不含向量召回）。
 
         供 async 调用方配合 asyncio.to_thread 使用：worker 线程中检测不到运行中的
@@ -491,9 +499,13 @@ class MemoryEngine:
         conv_store = None
         if conversation_id:
             conv_store = self._get_conv_store(conversation_id)
-        return self._context_builder.build_context(max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id)
+        return self._context_builder.build_context(
+            max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id, allowed_scopes=allowed_scopes,
+        )
 
-    def build_context(self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None) -> str:
+    def build_context(
+        self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None, allowed_scopes: set[str] | None = None
+    ) -> str:
         """同步包装器：检测是否在事件循环中运行，选择合适的调用方式。"""
         try:
             loop = asyncio.get_running_loop()
@@ -502,21 +514,49 @@ class MemoryEngine:
 
         if loop and loop.is_running():
             # 已在事件循环中，无法用 asyncio.run，使用同步回退
-            return self.build_context_sync(max_chars, query=query, conversation_id=conversation_id)
+            return self.build_context_sync(max_chars, query=query, conversation_id=conversation_id, allowed_scopes=allowed_scopes)
 
-        return asyncio.run(self.build_context_async(max_chars, query, conversation_id))
+        return asyncio.run(self.build_context_async(max_chars, query, conversation_id, allowed_scopes=allowed_scopes))
 
     # --- LLM 驱动的更新 ---
 
     async def extract_facts(
-        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = ""
+        self,
+        message: str,
+        llm_adapter=None,
+        correction_hint: str = "",
+        context_messages: str = "",
+        default_scope: str = SCOPE_GLOBAL,
+        group_id: str = "",
     ) -> tuple[str, list[FactItem]]:
-        return await self._extractor.extract_facts(message, llm_adapter, correction_hint, context_messages)
+        return await self._extractor.extract_facts(
+            message,
+            llm_adapter,
+            correction_hint,
+            context_messages,
+            default_scope=default_scope,
+            group_id=group_id,
+        )
 
     async def update_profile_from_message(
-        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = "", conversation_id: str | None = None
+        self,
+        message: str,
+        llm_adapter=None,
+        correction_hint: str = "",
+        context_messages: str = "",
+        conversation_id: str | None = None,
+        default_scope: str = SCOPE_GLOBAL,
+        group_id: str = "",
     ) -> dict[str, str]:
-        result = await self._extractor.update_profile_from_message(message, llm_adapter, correction_hint, context_messages)
+        result = await self._extractor.update_profile_from_message(
+            message,
+            llm_adapter,
+            correction_hint,
+            context_messages,
+            conversation_id=conversation_id,
+            default_scope=default_scope,
+            group_id=group_id,
+        )
 
         # 对话级facts写入conversation store
         if conversation_id and result.get("facts"):
@@ -782,7 +822,11 @@ def build_group_members_block(
         except Exception as e:
             logger.warning(f"[Memory] Group member track read failed: key={key}, error={e}")
             continue
-        facts = [f for f in data.facts if f.is_latest][-facts_per_member:]
+        # 严格过滤私密事实：群友画像仅展示公开/群聊事实，严禁泄露他人私聊秘密
+        facts = [
+            f for f in data.facts
+            if f.is_latest and getattr(f, "scope", "global") != "private"
+        ][-facts_per_member:]
         if not facts:
             continue
         name = str((member.get("sender_name") or "").strip())
@@ -810,23 +854,24 @@ _track_engines: dict[str, MemoryEngine] = {}
 
 
 def get_track_engine(track: str, user_key: str = "") -> MemoryEngine:
-    """按记忆轨道返回引擎（owner / users 双轨）。
+    """按记忆轨道返回引擎（owner / users / groups 三轨）。
 
     - owner：委托 get_memory_engine（目录别名解析见 store.resolve_track_dir），
       与工作台主 Agent 引擎是同一实例，保证读写一致（M2=B）。
     - users：users/{user_key}/ 目录独立引擎，读写逻辑复用 MemoryEngine。
+    - groups：groups/{group_key}/ 目录独立引擎，用于独立粉丝群的群记忆。
     """
     if track == TRACK_OWNER:
         return get_memory_engine(resolve_owner_agent_key())
-    if track == TRACK_USERS:
+    if track in (TRACK_USERS, TRACK_GROUPS):
         safe_key = sanitize_track_key(user_key)
-        key = f"{TRACK_USERS}/{safe_key}"
+        key = f"{track}/{safe_key}"
         if key in _track_engines:
             return _track_engines[key]
         with _engine_lock:
             if key in _track_engines:
                 return _track_engines[key]
-            track_dir = resolve_track_dir(TRACK_USERS, safe_key)
+            track_dir = resolve_track_dir(track, safe_key)
             engine = MemoryEngine(
                 storage_path=track_dir,
                 agent_id=key,

@@ -44,6 +44,24 @@
       "clearSummary": "Reset AI summary",
       "resetAll": "Clear all memory ⚠️"
     },
+    "tracks": {
+      "owner": "Blogger Core",
+      "ownerSub": "Core persona & owner memory",
+      "users": "Fan Profiles",
+      "usersSub": "Individual fan profiles & private secrets",
+      "groups": "Fan Groups",
+      "groupsSub": "Group lore, rules & memes",
+      "noUsers": "No fan interaction records yet",
+      "noUsersHint": "Fan profiles will be automatically created when fans chat via platforms",
+      "noGroups": "No fan group memories yet",
+      "noGroupsHint": "Group lore and rules will be accumulated when interacting in groups",
+      "currentFan": "Current Fan",
+      "currentGroup": "Current Group",
+      "searchFans": "Search fan name or ID...",
+      "searchGroups": "Search group name or ID...",
+      "allFans": "All Fans",
+      "allGroups": "All Groups"
+    },
     "agentPicker": {
       "viewing": "Viewing",
       "mainWorkspace": "Main Workspace",

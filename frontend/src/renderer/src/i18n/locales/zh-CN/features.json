@@ -44,6 +44,24 @@
       "clearSummary": "重置AI总结",
       "resetAll": "清空全部记忆 ⚠️"
     },
+    "tracks": {
+      "owner": "博主自身记忆",
+      "ownerSub": "博主核心人设与主记忆",
+      "users": "粉丝用户画像",
+      "usersSub": "各平台独立粉丝画像与私密心事",
+      "groups": "粉丝群聊画像",
+      "groupsSub": "粉丝群专属设定与群规群梗",
+      "noUsers": "暂无粉丝画像记录",
+      "noUsersHint": "当粉丝在各平台私聊或群聊互动时，将自动建立独立画像",
+      "noGroups": "暂无群聊画像记录",
+      "noGroupsHint": "当博主接入群聊互动时，将自动沉淀群设定与规则",
+      "currentFan": "当前粉丝",
+      "currentGroup": "当前群聊",
+      "searchFans": "搜索粉丝昵称或平台ID...",
+      "searchGroups": "搜索群聊名称或群号...",
+      "allFans": "全部粉丝",
+      "allGroups": "全部群聊"
+    },
     "agentPicker": {
       "viewing": "查看",
       "mainWorkspace": "主工作台",

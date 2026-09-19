@@ -22,7 +22,7 @@ from app.infrastructure.database.base import Base
 
 # 列迁移 schema 版本：_migrate_columns_sync 内新增任何列/回填/索引逻辑时必须 +1，
 # 否则已达标旧库会跳过新迁移。旧库首次升级（user_version=0）会完整执行一遍并回写。
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 @contextlib.contextmanager
@@ -332,6 +332,23 @@ def _migrate_columns_sync(sync_conn) -> None:
             _alter_safe(
                 "ALTER TABLE memory_facts ADD COLUMN pinned BOOLEAN DEFAULT 0",
                 "memory_facts table: added pinned column",
+            )
+        # SCHEMA v3：双层记忆作用域 (global/private/group) 与群标识
+        if "scope" not in mf_cols:
+            _alter_safe(
+                "ALTER TABLE memory_facts ADD COLUMN scope VARCHAR(32) DEFAULT 'global'",
+                "memory_facts table: added scope column",
+            )
+        if "group_id" not in mf_cols:
+            _alter_safe(
+                "ALTER TABLE memory_facts ADD COLUMN group_id VARCHAR(64) DEFAULT ''",
+                "memory_facts table: added group_id column",
+            )
+        existing_mf_indexes = {ix["name"] for ix in inspector.get_indexes("memory_facts")}
+        if "ix_memory_facts_owner_scope" not in existing_mf_indexes:
+            _alter_safe(
+                "CREATE INDEX ix_memory_facts_owner_scope ON memory_facts(owner_key, scope, is_latest)",
+                "memory_facts table: added ix_memory_facts_owner_scope index",
             )
 
     # providers 表添加 protocol 列（接入协议：auto | chat_completions | anthropic_messages）

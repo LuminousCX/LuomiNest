@@ -24,6 +24,7 @@ class ContextBuilder:
         conversation_store=None,
         conversation_id: str | None = None,
         relevant_fact_ids: set[str] | None = None,
+        allowed_scopes: set[str] | None = None,
     ) -> str:
         from app.core.config import settings
 
@@ -32,15 +33,19 @@ class ContextBuilder:
         used_chars = 0
 
         data = self._store.load_data()
+        is_group_track = self._store.owner_key.startswith("groups:")
 
-        # 1. 用户档案（最高优先级）- Static + Dynamic 分层注入
+        # 1. 用户档案 / 群组画像（最高优先级）- Static + Dynamic 分层注入
         profile_lines = []
         if data.profile.name:
-            profile_lines.append(f"用户名字：{data.profile.name}")
+            name_label = "群组名称" if is_group_track else "用户名字"
+            profile_lines.append(f"{name_label}：{data.profile.name}")
         if data.profile.static_facts:
-            profile_lines.append(f"稳定偏好：{'; '.join(data.profile.static_facts)}")
+            facts_label = "群规/群体氛围" if is_group_track else "稳定偏好"
+            profile_lines.append(f"{facts_label}：{'; '.join(data.profile.static_facts)}")
         if profile_lines:
-            section = f"=== [用户档案 · 最高优先级] ===\n" + "\n".join(profile_lines)
+            header_label = "=== [群组画像 · 群体设定] ===" if is_group_track else "=== [用户档案 · 最高优先级] ==="
+            section = f"{header_label}\n" + "\n".join(profile_lines)
             sections.append(section)
             used_chars += len(section)
 
@@ -55,7 +60,8 @@ class ContextBuilder:
 
         if dynamic_context:
             dynamic_lines = "\n".join(f"- {c}" for c in dynamic_context[-5:])
-            section = f"=== [当前状态] ===\n{dynamic_lines}"
+            status_header = "=== [群组近期讨论焦点] ===" if is_group_track else "=== [当前状态] ==="
+            section = f"{status_header}\n{dynamic_lines}"
             if used_chars + len(section) + 20 <= budget:
                 sections.append(section)
                 used_chars += len(section) + 20
@@ -64,12 +70,15 @@ class ContextBuilder:
         # 隔离靠"facts存在哪个store"决定：
         #   - Agent级store中的facts → 全局可见（蒸馏提升后的）
         #   - 对话级store中的facts → 仅当前对话可见（新提取的，待提升）
+        # 隐私安全：如果指定了 allowed_scopes，严格过滤不在白名单内的事实（如群聊过滤 private）
         all_facts = []
         # Agent级：全局可见的共享facts
         for f in data.facts:
             if not f.is_latest:
                 continue
-            if f.category not in FACT_SCOPE_AGENT:
+            if not is_group_track and f.category not in FACT_SCOPE_AGENT:
+                continue
+            if allowed_scopes is not None and getattr(f, "scope", "global") not in allowed_scopes:
                 continue
             if not f.pinned and f.confidence < self.CONFIDENCE_INJECT_FLOOR:
                 continue
@@ -86,6 +95,8 @@ class ContextBuilder:
             conv_data = conversation_store.load_data()
             for f in conv_data.facts:
                 if not f.is_latest:
+                    continue
+                if allowed_scopes is not None and getattr(f, "scope", "global") not in allowed_scopes:
                     continue
                 if not f.pinned and f.confidence < self.CONFIDENCE_INJECT_FLOOR:
                     continue
@@ -127,7 +138,8 @@ class ContextBuilder:
             truncated = False
             for fact in all_facts:
                 pin_mark = "📌 " if fact.pinned else ""
-                line = f"- {pin_mark}[{FACT_CATEGORY_LABELS.get(fact.category, fact.category)}|{fact.confidence:.1f}] {fact.content}"
+                scope_tag = "[私密] " if getattr(fact, "scope", "global") == "private" else ""
+                line = f"- {pin_mark}{scope_tag}[{FACT_CATEGORY_LABELS.get(fact.category, fact.category)}|{fact.confidence:.1f}] {fact.content}"
                 if fact.category == "correction":
                     line += " (仅代表用户对做法/偏好的纠正，与档案冲突时以档案为准)"
                 if fact.source_error:

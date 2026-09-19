@@ -14,10 +14,10 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
+from app.core.config import settings
 from app.core.utils import utc_now
 
-from app.core.config import settings
-from app.core.domain_policy import MAIN_AGENT_ID, TRACK_OWNER, TRACK_USERS
+from app.core.domain_policy import MAIN_AGENT_ID, TRACK_OWNER, TRACK_USERS, TRACK_GROUPS
 from app.infrastructure.database.base import Base
 from app.infrastructure.database.models.memory import (
     MemoryDaily,
@@ -136,6 +136,8 @@ def resolve_track_dir(track: str, user_key: str = "", base_dir: Path | None = No
         return base / "agents" / resolve_owner_agent_key(base / "agents")
     if track == TRACK_USERS:
         return base / "users" / sanitize_track_key(user_key)
+    if track == TRACK_GROUPS:
+        return base / "groups" / sanitize_track_key(user_key)
     raise ValueError(f"Unknown memory track: {track!r}")
 
 
@@ -147,13 +149,15 @@ def store_path_for_owner_key(
     """owner_key（+对话级）→ 规范存储目录（SQLite 行级隔离键的路径映射）。
 
     用于从 DB 反向枚举（如清理任务）：owner:{key} → memory/agents/{key}，
-    users:{key} → memory/users/{key}；tmp: 测试轨不映射（抛 ValueError）。
+    users:{key} → memory/users/{key}，groups:{key} → memory/groups/{key}；tmp: 测试轨不映射（抛 ValueError）。
     """
     root = Path(memory_root) if memory_root else Path(settings.DATA_DIR) / "memory"
     if owner_key.startswith(OWNER_PREFIX):
         base = root / "agents" / owner_key[len(OWNER_PREFIX):]
     elif owner_key.startswith("users:"):
         base = root / "users" / owner_key[len("users:"):]
+    elif owner_key.startswith("groups:"):
+        base = root / "groups" / owner_key[len("groups:"):]
     else:
         raise ValueError(f"owner_key not mappable to a store path: {owner_key!r}")
     if conversation_id:
@@ -170,6 +174,7 @@ def _derive_owner_key(storage_path: Path) -> str:
 
     - {DATA_DIR}/memory/agents/{key}/...   → owner:{key}
     - {DATA_DIR}/memory/users/{key}/...    → users:{key}
+    - {DATA_DIR}/memory/groups/{key}/...   → groups:{key}
     - 其他路径（测试/临时目录）            → tmp:{sha1[:12]}
     """
     p = Path(storage_path).resolve()
@@ -182,6 +187,8 @@ def _derive_owner_key(storage_path: Path) -> str:
     parts = rel.parts
     if parts and parts[0] == "users" and len(parts) > 1:
         return f"users:{parts[1]}"
+    if parts and parts[0] == "groups" and len(parts) > 1:
+        return f"groups:{parts[1]}"
     if parts and parts[0] == "agents" and len(parts) > 1:
         return owner_key_for(parts[1])
     if parts and parts[0] == "agents":
@@ -415,6 +422,8 @@ class MemoryStore:
             source_message=fact.source_message,
             history=[a.model_dump() for a in fact.history],
             pinned=fact.pinned,
+            scope=getattr(fact, "scope", "global") or "global",
+            group_id=getattr(fact, "group_id", "") or "",
         )
 
     @staticmethod
@@ -434,6 +443,8 @@ class MemoryStore:
             "source_message": row.source_message,
             "history": [ArchivedFact.model_validate(h) for h in (row.history or [])],
             "pinned": bool(getattr(row, "pinned", False)),
+            "scope": getattr(row, "scope", "global") or "global",
+            "group_id": getattr(row, "group_id", "") or "",
         })
 
     @staticmethod
@@ -664,3 +675,119 @@ class MemoryStore:
 
     def close(self) -> None:
         self._db.close()
+
+
+def query_stored_users(session: Session) -> list[dict]:
+    """从 SQLite 中直接聚合所有 users:* 轨道的信息（淘汰旧文件扫描）。
+    
+    返回包含 user_key, name, static_facts_count, fact_count, private_fact_count, updated_at 等字典列表。
+    """
+    from sqlalchemy import func
+
+    profiles = session.execute(
+        select(MemoryProfile).where(
+            MemoryProfile.owner_key.like("users:%"),
+            MemoryProfile.conversation_id == "",
+        )
+    ).scalars().all()
+    profile_map = {p.owner_key: p for p in profiles}
+
+    fact_counts = dict(
+        session.execute(
+            select(MemoryFact.owner_key, func.count())
+            .where(
+                MemoryFact.owner_key.like("users:%"),
+                MemoryFact.is_latest == 1,
+            )
+            .group_by(MemoryFact.owner_key)
+        ).all()
+    )
+
+    private_counts = dict(
+        session.execute(
+            select(MemoryFact.owner_key, func.count())
+            .where(
+                MemoryFact.owner_key.like("users:%"),
+                MemoryFact.scope == "private",
+                MemoryFact.is_latest == 1,
+            )
+            .group_by(MemoryFact.owner_key)
+        ).all()
+    )
+
+    all_keys = sorted(set(profile_map.keys()) | set(fact_counts.keys()))
+    results = []
+    for o_key in all_keys:
+        user_key = o_key[len("users:"):]
+        prof = profile_map.get(o_key)
+        name = prof.name if prof else ""
+        static_facts = prof.static_facts if prof and prof.static_facts else []
+        updated_at = prof.updated_at if prof else ""
+
+        platform = ""
+        if "_" in user_key:
+            parts = user_key.split("_")
+            if len(parts) >= 2 and parts[1] in ("onebot", "official", "gewechat", "itchat", "comwechat"):
+                platform = f"{parts[0]}_{parts[1]}"
+            else:
+                platform = parts[0]
+
+        results.append({
+            "user_key": user_key,
+            "name": name or user_key,
+            "platform": platform,
+            "fact_count": fact_counts.get(o_key, 0),
+            "private_fact_count": private_counts.get(o_key, 0),
+            "static_facts_count": len(static_facts),
+            "updated_at": updated_at,
+        })
+    return results
+
+
+def query_stored_groups(session: Session) -> list[dict]:
+    """从 SQLite 中直接聚合所有 groups:* 轨道的信息。"""
+    from sqlalchemy import func
+
+    profiles = session.execute(
+        select(MemoryProfile).where(
+            MemoryProfile.owner_key.like("groups:%"),
+            MemoryProfile.conversation_id == "",
+        )
+    ).scalars().all()
+    profile_map = {p.owner_key: p for p in profiles}
+
+    fact_counts = dict(
+        session.execute(
+            select(MemoryFact.owner_key, func.count())
+            .where(
+                MemoryFact.owner_key.like("groups:%"),
+                MemoryFact.is_latest == 1,
+            )
+            .group_by(MemoryFact.owner_key)
+        ).all()
+    )
+
+    all_keys = sorted(set(profile_map.keys()) | set(fact_counts.keys()))
+    results = []
+    for o_key in all_keys:
+        group_key = o_key[len("groups:"):]
+        prof = profile_map.get(o_key)
+        name = prof.name if prof else ""
+        updated_at = prof.updated_at if prof else ""
+
+        platform = ""
+        if "_" in group_key:
+            parts = group_key.split("_")
+            if len(parts) >= 2 and parts[1] in ("onebot", "official", "gewechat", "itchat", "comwechat"):
+                platform = f"{parts[0]}_{parts[1]}"
+            else:
+                platform = parts[0]
+
+        results.append({
+            "group_key": group_key,
+            "name": name or group_key,
+            "platform": platform,
+            "fact_count": fact_counts.get(o_key, 0),
+            "updated_at": updated_at,
+        })
+    return results

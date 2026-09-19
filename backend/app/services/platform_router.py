@@ -269,8 +269,9 @@ class LuomiNestPlatformRouter:
         messages = [{"role": "system", "content": full_system}] + history_messages + [user_message]
 
         messages = context_service.inject_timestamp_prompt(messages)
-        # 记忆注入（DomainPolicy，§9）：平台域读 owner（优先）+ 说话成员用户轨
-        # （私聊 = conv.user_key；群聊 = 群成员轨 §8.5.10）+ 在场成员群友画像块
+        group_id_val = message.group_id or (message.session_id if message.is_group else "")
+        # 记忆注入（DomainPolicy，§9）：平台域读 owner（优先）+ 群组画像(若群聊) + 说话成员用户轨
+        # （私聊 = conv.user_key；群聊 = 粉丝成员轨 + 群聊专属记忆，防隐私泄露）+ 在场成员群友画像块
         messages = await context_service.inject_memory(
             messages,
             agent_id=MAIN_AGENT_ID,
@@ -280,6 +281,7 @@ class LuomiNestPlatformRouter:
             domain=conv.get("domain") or f"platform:{instance_id}",
             scene=conv.get("scene") or "platform",
             user_key=effective_user_key,
+            group_id=group_id_val,
             group_members=group_members,
         )
 
@@ -482,6 +484,7 @@ class LuomiNestPlatformRouter:
             messages, conv_id, assistant_text,
             domain=conv.get("domain") or f"platform:{instance_id}",
             user_key=effective_user_key,
+            group_id=group_id_val,
             memory_write=memory_write_enabled,
         ))
 
@@ -708,13 +711,13 @@ class LuomiNestPlatformRouter:
     @staticmethod
     async def _schedule_memory_update(
         messages: list[dict], thread_id: str, assistant_text: str,
-        *, domain: str = "", user_key: str = "", memory_write: bool = False,
+        *, domain: str = "", user_key: str = "", group_id: str = "", memory_write: bool = False,
     ) -> None:
         try:
             await context_service.schedule_memory_update(
                 messages, thread_id, MAIN_AGENT_ID,
-                llm_adapter=None,
-                domain=domain, user_key=user_key,
+                llm_adapter=llm_adapter,
+                domain=domain, user_key=user_key, group_id=group_id,
                 platform_memory_write=memory_write,
             )
         except Exception as e:

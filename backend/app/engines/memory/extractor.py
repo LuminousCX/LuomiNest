@@ -6,7 +6,7 @@ from loguru import logger
 from app.core.utils import parse_llm_json, utc_now, extract_llm_text
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
-from .models import FACT_SCOPE_AGENT, FactItem, FACT_CATEGORIES
+from .models import FACT_SCOPE_AGENT, FactItem, FACT_CATEGORIES, FACT_SCOPES, SCOPE_GLOBAL
 from .prompts import _FACT_EXTRACT_PROMPT, _KNOWLEDGE_EXTRACT_PROMPT
 from .store import MemoryStore
 from .fact_manager import FactManager
@@ -45,7 +45,13 @@ class MemoryExtractor:
     # --- 事实提取 ---
 
     async def _extract_raw(
-        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = ""
+        self,
+        message: str,
+        llm_adapter=None,
+        correction_hint: str = "",
+        context_messages: str = "",
+        default_scope: str = SCOPE_GLOBAL,
+        group_id: str = "",
     ) -> tuple[str, list[FactItem], list[tuple[str, str]]]:
         """LLM 提取 + 解析（不落库）。
 
@@ -87,7 +93,12 @@ class MemoryExtractor:
                 return "", [], []
 
             profile_name = parsed.get("profile_name", "").strip()[:20]
-            facts, supersedes_ops = await self._parse_facts_from_raw(parsed.get("facts", []))
+            facts, supersedes_ops = await self._parse_facts_from_raw(
+                parsed.get("facts", []),
+                original_message=stripped,
+                default_scope=default_scope,
+                group_id=group_id,
+            )
 
             return profile_name, facts, supersedes_ops
 
@@ -96,10 +107,21 @@ class MemoryExtractor:
             return "", [], []
 
     async def extract_facts(
-        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = ""
+        self,
+        message: str,
+        llm_adapter=None,
+        correction_hint: str = "",
+        context_messages: str = "",
+        default_scope: str = SCOPE_GLOBAL,
+        group_id: str = "",
     ) -> tuple[str, list[FactItem]]:
         profile_name, facts, supersedes_ops = await self._extract_raw(
-            message, llm_adapter, correction_hint, context_messages
+            message,
+            llm_adapter=llm_adapter,
+            correction_hint=correction_hint,
+            context_messages=context_messages,
+            default_scope=default_scope,
+            group_id=group_id,
         )
 
         # supersedes 统一应用：1 次 load + 1 次 save（旧版每条一次全量替换）
@@ -115,10 +137,22 @@ class MemoryExtractor:
     # --- 档案更新（LLM 调用 + 数据写入，异步锁保护写入段） ---
 
     async def update_profile_from_message(
-        self, message: str, llm_adapter=None, correction_hint: str = "", context_messages: str = "", conversation_id: str | None = None
+        self,
+        message: str,
+        llm_adapter=None,
+        correction_hint: str = "",
+        context_messages: str = "",
+        conversation_id: str | None = None,
+        default_scope: str = SCOPE_GLOBAL,
+        group_id: str = "",
     ) -> dict[str, str]:
         profile_name, facts, supersedes_ops = await self._extract_raw(
-            message, llm_adapter, correction_hint, context_messages
+            message,
+            llm_adapter=llm_adapter,
+            correction_hint=correction_hint,
+            context_messages=context_messages,
+            default_scope=default_scope,
+            group_id=group_id,
         )
 
         # 给facts添加溯源信息
@@ -199,7 +233,13 @@ class MemoryExtractor:
     # JSON 解析已统一收口到 core.utils.parse_llm_json（原 _parse_llm_json 已删除）
 
     async def _parse_facts_from_raw(
-        self, raw_facts: list, source: str = "conversation", conversation_id: str | None = None, original_message: str = ""
+        self,
+        raw_facts: list,
+        source: str = "conversation",
+        conversation_id: str | None = None,
+        original_message: str = "",
+        default_scope: str = SCOPE_GLOBAL,
+        group_id: str = "",
     ) -> tuple[list[FactItem], list[tuple[str, str]]]:
         """从 LLM 返回的原始事实列表解析出有效的 FactItem。
 
@@ -224,6 +264,9 @@ class MemoryExtractor:
             source_error = raw.get("source_error", "").strip()[:200]
             expires_at = raw.get("expires_at", "") or None
             supersedes = raw.get("supersedes", "") or None
+            raw_scope = str(raw.get("scope", "")).strip().lower()
+            scope = raw_scope if raw_scope in FACT_SCOPES else default_scope
+            item_group_id = str(raw.get("group_id", "")).strip() or group_id
 
             if not content:
                 continue
@@ -247,6 +290,8 @@ class MemoryExtractor:
                     expires_at=expires_at,
                     source_conversation_id=conversation_id or "",
                     source_message=original_message[:200] if original_message else "",
+                    scope=scope,
+                    group_id=item_group_id,
                 )
             )
 

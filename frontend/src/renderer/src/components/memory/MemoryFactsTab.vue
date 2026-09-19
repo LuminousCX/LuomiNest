@@ -14,9 +14,11 @@ interface Props {
   showAddFact: boolean
   newFactContent: string
   newFactCategory: FactCategory
+  newFactScope?: string
   editingFactId: string | null
   editFactContent: string
   editFactCategory: FactCategory
+  editFactScope?: string
   searchQuery: string
   filterCategory: string
   saving: boolean
@@ -37,8 +39,10 @@ const emit = defineEmits<{
   (e: 'update:filterCategory', value: string): void
   (e: 'update:newFactContent', value: string): void
   (e: 'update:newFactCategory', value: FactCategory): void
+  (e: 'update:newFactScope', value: string): void
   (e: 'update:editFactContent', value: string): void
   (e: 'update:editFactCategory', value: FactCategory): void
+  (e: 'update:editFactScope', value: string): void
 }>()
 
 function formatExpiresAt(iso: string): string {
@@ -103,6 +107,16 @@ function formatExpiresAt(iso: string): string {
       <select :value="newFactCategory" @change="emit('update:newFactCategory', ($event.target as HTMLSelectElement).value as FactCategory)" class="add-fact-select">
         <option v-for="cat in FACT_CATEGORIES" :key="cat" :value="cat">{{ categoryLabel(cat) }}</option>
       </select>
+      <select
+        :value="newFactScope || 'global'"
+        @change="emit('update:newFactScope', ($event.target as HTMLSelectElement).value)"
+        class="add-fact-select add-fact-scope-select"
+        title="隐私隔离"
+      >
+        <option value="global">🌐 全局公开</option>
+        <option value="private">🔒 私密心事</option>
+        <option value="group">👥 群聊专属</option>
+      </select>
       <button class="h-btn primary" @click="emit('confirmAddFact')" :disabled="!newFactContent.trim() || saving">
         <Loader2 v-if="saving" :size="14" class="spin-animation" />
         <Save v-else :size="14" />
@@ -150,6 +164,16 @@ function formatExpiresAt(iso: string): string {
                 <select :value="editFactCategory" @change="emit('update:editFactCategory', ($event.target as HTMLSelectElement).value as FactCategory)" class="add-fact-select">
                   <option v-for="c in FACT_CATEGORIES" :key="c" :value="c">{{ categoryLabel(c) }}</option>
                 </select>
+                <select
+                  :value="editFactScope || fact.scope || 'global'"
+                  @change="emit('update:editFactScope', ($event.target as HTMLSelectElement).value)"
+                  class="add-fact-select add-fact-scope-select"
+                  title="隐私隔离"
+                >
+                  <option value="global">🌐 全局公开</option>
+                  <option value="private">🔒 私密心事</option>
+                  <option value="group">👥 群聊专属</option>
+                </select>
                 <button class="h-btn primary" @click="emit('saveEditFact')" :disabled="saving">
                   <Save :size="13" />
                 </button>
@@ -160,6 +184,9 @@ function formatExpiresAt(iso: string): string {
               <div class="fact-main">
                 <span class="fact-text" :class="{ 'fact-deprecated': !fact.is_latest }">{{ fact.content }}</span>
                 <span v-if="fact.pinned" class="fact-badge pinned">{{ t('memory.facts.pinned') }}</span>
+                <span v-if="fact.scope === 'private'" class="fact-badge scope-private" title="私聊专属隐私：群聊中绝不泄露">🔒 私密</span>
+                <span v-else-if="fact.scope === 'group'" class="fact-badge scope-group" title="群聊公开互动">👥 群聊</span>
+                <span v-else class="fact-badge scope-global" title="全局公开画像">🌐 全局</span>
                 <span v-if="!fact.is_latest" class="fact-badge deprecated">{{ t('memory.facts.deprecated') }}</span>
                 <span v-if="fact.expires_at" class="fact-badge expires">{{ t('memory.facts.expires', { date: formatExpiresAt(fact.expires_at) }) }}</span>
                 <span v-if="fact.source_error" class="fact-error">{{ t('memory.facts.avoid', { msg: fact.source_error }) }}</span>
@@ -438,6 +465,28 @@ function formatExpiresAt(iso: string): string {
 .fact-badge.expires {
   background: var(--lumi-warning-light);
   color: var(--lumi-warning);
+}
+
+.fact-badge.scope-private {
+  background: color-mix(in srgb, var(--lumi-danger, #ef4444) 14%, transparent);
+  color: var(--lumi-danger, #ef4444);
+  border: 1px solid color-mix(in srgb, var(--lumi-danger, #ef4444) 28%, transparent);
+}
+
+.fact-badge.scope-group {
+  background: color-mix(in srgb, var(--task-sky, #0ea5e9) 14%, transparent);
+  color: var(--task-sky, #0ea5e9);
+  border: 1px solid color-mix(in srgb, var(--task-sky, #0ea5e9) 28%, transparent);
+}
+
+.fact-badge.scope-global {
+  background: color-mix(in srgb, var(--lumi-success, #10b981) 14%, transparent);
+  color: var(--lumi-success, #10b981);
+  border: 1px solid color-mix(in srgb, var(--lumi-success, #10b981) 28%, transparent);
+}
+
+.add-fact-scope-select {
+  max-width: 130px;
 }
 
 .fact-actions {

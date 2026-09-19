@@ -17,12 +17,15 @@ import {
   ChevronDown,
   Check,
   Bot,
+  User,
+  Users,
 } from 'lucide-vue-next'
 import { useMemoryStore, categoryLabel, CATEGORY_COLORS, FACT_CATEGORIES } from '../stores/memory'
-import type { FactItem, FactCategory, MemoryAgent } from '../stores/memory'
+import type { FactItem, FactCategory, MemoryAgent, MemoryTrackType } from '../stores/memory'
 import { useToast } from '../composables/useToast'
 import LumiButton from '../components/common/LumiButton.vue'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
+import SearchInput from '../components/common/SearchInput.vue'
 import MemoryLayerNav from '../components/memory/MemoryLayerNav.vue'
 import MemoryProfileTab from '../components/memory/MemoryProfileTab.vue'
 import MemoryFactsTab from '../components/memory/MemoryFactsTab.vue'
@@ -160,20 +163,24 @@ const memoryStats = computed(() => {
 function switchTab(tabId: string) {
   activeTab.value = tabId
   if (tabId === 'knowledge' && !memoryStore.knowledgeContent) {
-    memoryStore.fetchKnowledge(selectedAgentId.value)
+    memoryStore.fetchKnowledge()
   }
   if (tabId === 'history' && memoryStore.dailies.length === 0) {
-    memoryStore.fetchDailies(selectedAgentId.value)
+    memoryStore.fetchDailies()
   }
   if (tabId === 'profile' && !memoryStore.summaryContent) {
-    memoryStore.fetchSummary(selectedAgentId.value)
+    memoryStore.fetchSummary()
   }
 }
+
+const newFactScope = ref<string>('global')
+const editFactScope = ref<string>('global')
 
 function startAddFact() {
   showAddFact.value = true
   newFactContent.value = ''
   newFactCategory.value = 'context'
+  newFactScope.value = memoryStore.currentTrack === 'users' ? 'private' : memoryStore.currentTrack === 'groups' ? 'group' : 'global'
 }
 
 function cancelAddFact() {
@@ -185,6 +192,7 @@ async function confirmAddFact() {
   await memoryStore.addFact({
     content: newFactContent.value.trim(),
     category: newFactCategory.value,
+    scope: newFactScope.value || (memoryStore.currentTrack === 'users' ? 'private' : memoryStore.currentTrack === 'groups' ? 'group' : 'global'),
     confidence: 0.8,
   })
   showAddFact.value = false
@@ -195,6 +203,7 @@ function startEditFact(fact: FactItem) {
   editingFactId.value = fact.id
   editFactContent.value = fact.content
   editFactCategory.value = fact.category as FactCategory
+  editFactScope.value = fact.scope || (memoryStore.currentTrack === 'users' ? 'private' : memoryStore.currentTrack === 'groups' ? 'group' : 'global')
 }
 
 function cancelEditFact() {
@@ -206,6 +215,7 @@ async function saveEditFact() {
   await memoryStore.updateFact(editingFactId.value, {
     content: editFactContent.value,
     category: editFactCategory.value,
+    scope: editFactScope.value,
   })
   editingFactId.value = null
   toast.success(t('memory.toast.factUpdated'))
@@ -272,14 +282,14 @@ async function saveEditSummary() {
 
 async function selectDaily(date: string) {
   selectedDailyDate.value = date
-  await memoryStore.fetchDaily(date, selectedAgentId.value, selectedConversationId.value)
+  await memoryStore.fetchDaily(date, selectedConversationId.value)
 }
 
 async function handleAddDaily() {
   if (!newDailyContent.value.trim()) return
   isAddingDaily.value = true
   try {
-    await memoryStore.appendDaily(newDailyContent.value.trim(), selectedDailyDate.value || undefined, selectedAgentId.value, selectedConversationId.value)
+    await memoryStore.appendDaily(newDailyContent.value.trim(), selectedDailyDate.value || undefined, selectedConversationId.value)
     newDailyContent.value = ''
     toast.success(t('memory.toast.recordAdded'))
   } finally {
@@ -290,9 +300,17 @@ async function handleAddDaily() {
 const isSaving = ref(false)
 const selectedAgentId = ref<string | null>(MAIN_AGENT_ID)
 
-// —— Agent 切换（记忆中枢可选择查看主工作台或某个子 Agent 的记忆）——
+// —— 记忆轨与主体切换 ——
 const showAgentPicker = ref(false)
 const agentPickerPosition = ref({ x: 0, y: 0 })
+
+const showFanPicker = ref(false)
+const fanPickerPosition = ref({ x: 0, y: 0 })
+const fanSearchQuery = ref('')
+
+const showGroupPicker = ref(false)
+const groupPickerPosition = ref({ x: 0, y: 0 })
+const groupSearchQuery = ref('')
 
 const agents = computed<MemoryAgent[]>(() => memoryStore.memoryAgents)
 
@@ -303,13 +321,51 @@ const currentAgentName = computed(() => {
   return hit?.name || selectedAgentId.value
 })
 
+const currentFanDisplayName = computed(() => {
+  if (!memoryStore.currentUserKey) return t('memory.tracks.currentFan')
+  const hit = memoryStore.memoryUsers.find(u => u.user_key === memoryStore.currentUserKey)
+  if (hit) {
+    return `${hit.name || hit.user_key} (${hit.platform.toUpperCase()})`
+  }
+  return memoryStore.currentUserKey
+})
+
+const currentGroupDisplayName = computed(() => {
+  if (!memoryStore.currentGroupKey) return t('memory.tracks.currentGroup')
+  const hit = memoryStore.memoryGroups.find(g => g.group_key === memoryStore.currentGroupKey)
+  if (hit) {
+    return `${hit.name || hit.group_key} (${hit.platform.toUpperCase()})`
+  }
+  return memoryStore.currentGroupKey
+})
+
+const filteredMemoryUsers = computed(() => {
+  if (!fanSearchQuery.value.trim()) return memoryStore.memoryUsers
+  const q = fanSearchQuery.value.toLowerCase()
+  return memoryStore.memoryUsers.filter(u =>
+    (u.name && u.name.toLowerCase().includes(q)) ||
+    (u.user_key && u.user_key.toLowerCase().includes(q)) ||
+    (u.platform && u.platform.toLowerCase().includes(q))
+  )
+})
+
+const filteredMemoryGroups = computed(() => {
+  if (!groupSearchQuery.value.trim()) return memoryStore.memoryGroups
+  const q = groupSearchQuery.value.toLowerCase()
+  return memoryStore.memoryGroups.filter(g =>
+    (g.name && g.name.toLowerCase().includes(q)) ||
+    (g.group_key && g.group_key.toLowerCase().includes(q)) ||
+    (g.platform && g.platform.toLowerCase().includes(q))
+  )
+})
+
 function toggleAgentPicker(event: MouseEvent) {
   event.stopPropagation()
   if (showAgentPicker.value) {
     showAgentPicker.value = false
     return
   }
-  showMenu.value = false
+  closeMenu()
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const menuWidth = 260
   let menuX = rect.left
@@ -320,21 +376,85 @@ function toggleAgentPicker(event: MouseEvent) {
   showAgentPicker.value = true
 }
 
+function toggleFanPicker(event: MouseEvent) {
+  event.stopPropagation()
+  if (showFanPicker.value) {
+    showFanPicker.value = false
+    return
+  }
+  closeMenu()
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const menuWidth = 280
+  let menuX = rect.left
+  if (menuX + menuWidth > window.innerWidth) {
+    menuX = window.innerWidth - menuWidth - 16
+  }
+  fanPickerPosition.value = { x: menuX, y: rect.bottom + 8 }
+  showFanPicker.value = true
+}
+
+function toggleGroupPicker(event: MouseEvent) {
+  event.stopPropagation()
+  if (showGroupPicker.value) {
+    showGroupPicker.value = false
+    return
+  }
+  closeMenu()
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const menuWidth = 280
+  let menuX = rect.left
+  if (menuX + menuWidth > window.innerWidth) {
+    menuX = window.innerWidth - menuWidth - 16
+  }
+  groupPickerPosition.value = { x: menuX, y: rect.bottom + 8 }
+  showGroupPicker.value = true
+}
+
+async function handleSelectTrack(track: MemoryTrackType) {
+  if (track === memoryStore.currentTrack) return
+  closeMenu()
+  if (track === 'owner') {
+    await memoryStore.switchTrack('owner')
+  } else if (track === 'users') {
+    let target = memoryStore.currentUserKey
+    if (!target && memoryStore.memoryUsers.length > 0) {
+      target = memoryStore.memoryUsers[0].user_key
+    }
+    await memoryStore.switchTrack('users', target)
+  } else if (track === 'groups') {
+    let target = memoryStore.currentGroupKey
+    if (!target && memoryStore.memoryGroups.length > 0) {
+      target = memoryStore.memoryGroups[0].group_key
+    }
+    await memoryStore.switchTrack('groups', target)
+  }
+}
+
+async function selectFan(userKey: string) {
+  showFanPicker.value = false
+  await memoryStore.switchTrack('users', userKey)
+}
+
+async function selectGroup(groupKey: string) {
+  showGroupPicker.value = false
+  await memoryStore.switchTrack('groups', groupKey)
+}
+
 async function selectAgent(agentId: string | null) {
   showAgentPicker.value = false
   selectedAgentId.value = agentId
   selectedConversationId.value = null
   selectedDailyDate.value = ''
-  await loadData()
+  await memoryStore.switchAgent(agentId)
 }
 
 async function switchConversation(convId: string | null) {
   selectedConversationId.value = convId
   selectedDailyDate.value = ''
-  await memoryStore.fetchDailies(selectedAgentId.value, convId)
+  await memoryStore.fetchDailies(convId)
   if (memoryStore.dailies.length > 0) {
     selectedDailyDate.value = memoryStore.dailies[memoryStore.dailies.length - 1]
-    await memoryStore.fetchDaily(selectedDailyDate.value, selectedAgentId.value, convId)
+    await memoryStore.fetchDaily(selectedDailyDate.value, convId)
   }
 }
 
@@ -342,16 +462,18 @@ async function loadData() {
   await Promise.all([
     memoryStore.fetchMemory(selectedAgentId.value),
     memoryStore.fetchMemoryAgents(),
-    memoryStore.fetchKnowledge(selectedAgentId.value),
-    memoryStore.fetchSummary(selectedAgentId.value),
-    memoryStore.fetchDailies(selectedAgentId.value),
-    memoryStore.fetchConversationDailies(selectedAgentId.value),
-    memoryStore.fetchFacts(undefined, selectedAgentId.value),
+    memoryStore.fetchMemoryUsers(),
+    memoryStore.fetchMemoryGroups(),
+    memoryStore.fetchKnowledge(),
+    memoryStore.fetchSummary(),
+    memoryStore.fetchDailies(),
+    memoryStore.fetchConversationDailies(),
+    memoryStore.fetchFacts(),
   ])
 
   if (memoryStore.dailies.length > 0) {
     selectedDailyDate.value = memoryStore.dailies[memoryStore.dailies.length - 1]
-    await memoryStore.fetchDaily(selectedDailyDate.value, selectedAgentId.value)
+    await memoryStore.fetchDaily(selectedDailyDate.value)
   }
 }
 
@@ -374,6 +496,8 @@ const toggleMenu = (event: MouseEvent) => {
 const closeMenu = () => {
   showMenu.value = false
   showAgentPicker.value = false
+  showFanPicker.value = false
+  showGroupPicker.value = false
 }
 
 const openConfirm = (action: ConfirmAction) => {
@@ -424,24 +548,24 @@ let executeConfirm = async () => {
   try {
     switch (confirmAction.value) {
       case 'clearFacts':
-        await memoryStore.clearFacts(selectedAgentId.value)
+        await memoryStore.clearFacts()
         toast.success(t('memory.toast.factsCleared'))
         break
       case 'clearKnowledge':
-        await memoryStore.clearKnowledge(selectedAgentId.value)
+        await memoryStore.clearKnowledge()
         toast.success(t('memory.toast.knowledgeCleared'))
         break
       case 'clearDailies':
-        await memoryStore.clearDailies(selectedAgentId.value)
+        await memoryStore.clearDailies()
         selectedDailyDate.value = ''
         toast.success(t('memory.toast.historyCleared'))
         break
       case 'clearSummary':
-        await memoryStore.clearSummary(selectedAgentId.value)
+        await memoryStore.clearSummary()
         toast.success(t('memory.toast.summaryReset'))
         break
       case 'resetAll':
-        await memoryStore.resetAll(selectedAgentId.value)
+        await memoryStore.resetAll()
         toast.success(t('memory.toast.allReset'))
         break
     }
@@ -576,11 +700,61 @@ window.addEventListener('click', closeMenu)
       <div class="memory-header__left">
         <h1 class="memory-title">{{ t('memory.title') }}</h1>
         <p class="memory-desc">{{ t('memory.desc') }}</p>
-        <div class="memory-agent-picker">
+
+        <!-- 3-Track switcher tabs: Owner / Users (Fans) / Groups -->
+        <div class="memory-track-nav">
+          <button
+            class="track-tab-btn"
+            :class="{ active: memoryStore.currentTrack === 'owner' }"
+            @click="handleSelectTrack('owner')"
+          >
+            <Sparkles :size="14" />
+            <span>{{ t('memory.tracks.owner') }}</span>
+          </button>
+          <button
+            class="track-tab-btn"
+            :class="{ active: memoryStore.currentTrack === 'users' }"
+            @click="handleSelectTrack('users')"
+          >
+            <User :size="14" />
+            <span>{{ t('memory.tracks.users') }}</span>
+            <span v-if="memoryStore.memoryUsers.length > 0" class="track-badge">{{ memoryStore.memoryUsers.length }}</span>
+          </button>
+          <button
+            class="track-tab-btn"
+            :class="{ active: memoryStore.currentTrack === 'groups' }"
+            @click="handleSelectTrack('groups')"
+          >
+            <Users :size="14" />
+            <span>{{ t('memory.tracks.groups') }}</span>
+            <span v-if="memoryStore.memoryGroups.length > 0" class="track-badge">{{ memoryStore.memoryGroups.length }}</span>
+          </button>
+        </div>
+
+        <!-- Track entity selector triggers -->
+        <div v-if="memoryStore.currentTrack === 'owner'" class="memory-agent-picker">
           <button class="agent-picker-trigger" @click="toggleAgentPicker">
             <Bot :size="15" />
             <span class="agent-picker-label">{{ t('memory.agentPicker.viewing') }}</span>
             <span class="agent-picker-current">{{ currentAgentName }}</span>
+            <ChevronDown :size="15" class="agent-picker-caret" />
+          </button>
+        </div>
+
+        <div v-else-if="memoryStore.currentTrack === 'users'" class="memory-agent-picker">
+          <button class="agent-picker-trigger" @click="toggleFanPicker">
+            <User :size="15" />
+            <span class="agent-picker-label">{{ t('memory.tracks.currentFan') }}：</span>
+            <span class="agent-picker-current">{{ currentFanDisplayName }}</span>
+            <ChevronDown :size="15" class="agent-picker-caret" />
+          </button>
+        </div>
+
+        <div v-else-if="memoryStore.currentTrack === 'groups'" class="memory-agent-picker">
+          <button class="agent-picker-trigger" @click="toggleGroupPicker">
+            <Users :size="15" />
+            <span class="agent-picker-label">{{ t('memory.tracks.currentGroup') }}：</span>
+            <span class="agent-picker-current">{{ currentGroupDisplayName }}</span>
             <ChevronDown :size="15" class="agent-picker-caret" />
           </button>
         </div>
@@ -601,7 +775,39 @@ window.addEventListener('click', closeMenu)
       </div>
     </div>
 
-    <div v-if="showAgentPicker" class="dropdown-menu agent-picker-menu" :style="{ left: agentPickerPosition.x + 'px', top: agentPickerPosition.y + 'px' }">
+    <!-- Quick pills bar for fans and groups -->
+    <div v-if="memoryStore.currentTrack === 'users' && memoryStore.memoryUsers.length > 0" class="quick-pill-bar">
+      <span class="pill-bar-label">快捷切换：</span>
+      <button
+        v-for="u in memoryStore.memoryUsers.slice(0, 8)"
+        :key="u.user_key"
+        class="quick-pill"
+        :class="{ active: memoryStore.currentUserKey === u.user_key }"
+        @click="selectFan(u.user_key)"
+      >
+        <span class="pill-platform">{{ u.platform }}</span>
+        <span class="pill-name">{{ u.name || u.user_key }}</span>
+        <span class="pill-count">({{ u.fact_count }})</span>
+      </button>
+    </div>
+
+    <div v-if="memoryStore.currentTrack === 'groups' && memoryStore.memoryGroups.length > 0" class="quick-pill-bar">
+      <span class="pill-bar-label">快捷切换：</span>
+      <button
+        v-for="g in memoryStore.memoryGroups.slice(0, 8)"
+        :key="g.group_key"
+        class="quick-pill"
+        :class="{ active: memoryStore.currentGroupKey === g.group_key }"
+        @click="selectGroup(g.group_key)"
+      >
+        <span class="pill-platform">{{ g.platform }}</span>
+        <span class="pill-name">{{ g.name || g.group_key }}</span>
+        <span class="pill-count">({{ g.fact_count }})</span>
+      </button>
+    </div>
+
+    <!-- Agent dropdown -->
+    <div v-if="showAgentPicker" class="dropdown-menu agent-picker-menu" :style="{ left: agentPickerPosition.x + 'px', top: agentPickerPosition.y + 'px' }" @click.stop>
       <div class="menu-item" :class="{ active: selectedAgentId === MAIN_AGENT_ID }" @click="selectAgent(MAIN_AGENT_ID)">
         <Bot :size="16" />
         <div class="agent-option">
@@ -628,6 +834,62 @@ window.addEventListener('click', closeMenu)
         </div>
       </template>
       <div v-else class="agent-picker-empty">{{ t('memory.agentPicker.noSubAgents') }}</div>
+    </div>
+
+    <!-- Fan dropdown -->
+    <div v-if="showFanPicker" class="dropdown-menu agent-picker-menu" :style="{ left: fanPickerPosition.x + 'px', top: fanPickerPosition.y + 'px' }" @click.stop>
+      <div class="picker-search-wrap">
+        <SearchInput
+          :model-value="fanSearchQuery"
+          :placeholder="t('memory.tracks.searchFans')"
+          @update:model-value="(v) => fanSearchQuery = String(v ?? '')"
+        />
+      </div>
+      <div v-if="filteredMemoryUsers.length > 0" class="picker-list">
+        <div
+          v-for="u in filteredMemoryUsers"
+          :key="u.user_key"
+          class="menu-item"
+          :class="{ active: memoryStore.currentUserKey === u.user_key }"
+          @click="selectFan(u.user_key)"
+        >
+          <User :size="16" />
+          <div class="agent-option">
+            <span class="agent-option-name">{{ u.name || u.user_key }}</span>
+            <span class="agent-option-sub">[{{ u.platform.toUpperCase() }}] · {{ t('memory.agentPicker.factCount', { n: u.fact_count }) }}</span>
+          </div>
+          <Check v-if="memoryStore.currentUserKey === u.user_key" :size="16" class="agent-check" />
+        </div>
+      </div>
+      <div v-else class="agent-picker-empty">{{ t('memory.tracks.noUsers') }}</div>
+    </div>
+
+    <!-- Group dropdown -->
+    <div v-if="showGroupPicker" class="dropdown-menu agent-picker-menu" :style="{ left: groupPickerPosition.x + 'px', top: groupPickerPosition.y + 'px' }" @click.stop>
+      <div class="picker-search-wrap">
+        <SearchInput
+          :model-value="groupSearchQuery"
+          :placeholder="t('memory.tracks.searchGroups')"
+          @update:model-value="(v) => groupSearchQuery = String(v ?? '')"
+        />
+      </div>
+      <div v-if="filteredMemoryGroups.length > 0" class="picker-list">
+        <div
+          v-for="g in filteredMemoryGroups"
+          :key="g.group_key"
+          class="menu-item"
+          :class="{ active: memoryStore.currentGroupKey === g.group_key }"
+          @click="selectGroup(g.group_key)"
+        >
+          <Users :size="16" />
+          <div class="agent-option">
+            <span class="agent-option-name">{{ g.name || g.group_key }}</span>
+            <span class="agent-option-sub">[{{ g.platform.toUpperCase() }}] · {{ t('memory.agentPicker.factCount', { n: g.fact_count }) }}</span>
+          </div>
+          <Check v-if="memoryStore.currentGroupKey === g.group_key" :size="16" class="agent-check" />
+        </div>
+      </div>
+      <div v-else class="agent-picker-empty">{{ t('memory.tracks.noGroups') }}</div>
     </div>
 
     <div v-if="showMenu" class="dropdown-menu" :style="{ left: menuPosition.x + 'px', top: menuPosition.y + 'px' }">
@@ -707,9 +969,11 @@ window.addEventListener('click', closeMenu)
           :show-add-fact="showAddFact"
           v-model:new-fact-content="newFactContent"
           v-model:new-fact-category="newFactCategory"
+          v-model:new-fact-scope="newFactScope"
           :editing-fact-id="editingFactId"
           v-model:edit-fact-content="editFactContent"
           v-model:edit-fact-category="editFactCategory"
+          v-model:edit-fact-scope="editFactScope"
           v-model:search-query="searchQuery"
           v-model:filter-category="filterCategory"
           :saving="memoryStore.saving"
@@ -720,7 +984,7 @@ window.addEventListener('click', closeMenu)
           @cancel-edit-fact="cancelEditFact"
           @save-edit-fact="saveEditFact"
           @delete-fact="deleteFact"
-          @toggle-pin="(fact: FactItem) => memoryStore.toggleFactPin(fact.id, !fact.pinned, selectedAgentId)"
+          @toggle-pin="(fact: FactItem) => memoryStore.toggleFactPin(fact.id, !fact.pinned)"
         />
 
         <MemoryKnowledgeTab
@@ -827,6 +1091,122 @@ window.addEventListener('click', closeMenu)
 .memory-header__left {
   display: flex;
   flex-direction: column;
+}
+
+.memory-track-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  margin-top: var(--space-3);
+  width: fit-content;
+}
+
+.track-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.track-tab-btn:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.track-tab-btn.active {
+  background: var(--lumi-brand);
+  color: #fff;
+  font-weight: var(--font-semibold);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--lumi-brand) 30%, transparent);
+}
+
+.track-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  font-size: 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 20%, transparent);
+}
+
+.quick-pill-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px var(--space-7) 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 50%, transparent);
+}
+
+.pill-bar-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.quick-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.quick-pill:hover {
+  background: var(--surface-hover);
+  border-color: var(--lumi-brand);
+}
+
+.quick-pill.active {
+  background: color-mix(in srgb, var(--lumi-brand) 12%, var(--surface));
+  border-color: var(--lumi-brand);
+  color: var(--lumi-brand);
+  font-weight: var(--font-semibold);
+}
+
+.pill-platform {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--border);
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.pill-count {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.picker-search-wrap {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.picker-list {
+  max-height: 280px;
+  overflow-y: auto;
 }
 
 .memory-agent-picker {
