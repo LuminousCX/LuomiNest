@@ -43,28 +43,14 @@ def _detect_current_platform() -> str:
 
 
 def _to_llm_function_with_tier(tool) -> dict[str, Any]:
-    """按 tier 转换为 OpenAI function 格式（S1b L1 轻量注入）。
+    """按 tier 转换为 OpenAI function 格式。
 
-    meta tier 工具若无必填参数，仅注入占位参数 schema（~50 token/个），
-    完整定义由 read_luominest_tool 按需拉取；有必填参数的 meta 工具
-    （如 read_luominest_tool 自身）保留完整 schema 以保证可调用性。
+    历史：meta 工具曾注入占位 schema 省 token（完整定义由 read_luominest_tool
+    按需拉取）。探索式合并后 meta 仅剩 tool_explore/skill_explore 两个工具，
+    参数全靠 description 描述，占位会让模型不知道 query/tool_name/name 参数
+    的存在——故一律注入完整 schema（仅 2 个，token 成本可忽略）。
     """
-    if tool.tier != "meta":
-        return tool.to_openai_function()
-    try:
-        required = tool.parameters.get("required") or []
-    except Exception:
-        required = []
-    if required:
-        return tool.to_openai_function()
-    return {
-        "type": "function",
-        "function": {
-            "name": tool.name,
-            "description": tool.description,
-            "parameters": {"type": "object", "properties": {}},
-        },
-    }
+    return tool.to_openai_function()
 
 
 async def discover_tool_compatibility(provider_name: str, model: str, llm_adapter=None) -> bool:
