@@ -162,7 +162,7 @@ Format: `<type>(<scope>): <subject>`
 ```
 feat(memory): add per-member group chat persona tracking
 fix(browser): restrict navigation tools to read-only visits
-docs(readme): update v0.8.1 release highlights and links
+docs(readme): update v0.8.2 release highlights and links
 refactor(security): unify token parsing and audit redaction
 ```
 

@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-09-20
+
+> 本版本聚焦「安全合规与加固」、「记忆系统性能与架构跃升」及「跨平台主 Agent 全量身份接管」：
+> 包含 6 批次安全与架构审计全量收口（命令沙箱管道绕过防御、JWT Token 细粒度版本吊销与类型校验、
+> 查询与日志深度脱敏、PBKDF2 动态盐密钥派生、跨库迁移与 WAL 恢复健全性）、
+> 记忆系统重大性能突破（向量索引 25x 批量化与长连接池、(n,d) 矩阵并发检索、事实原子读改写与死代码清除）、
+> 主 Agent 跨平台全量身份接管、多平台脚手架与防封实战指南、Minecraft 26.2 协议动态适配与遥测回退修复、
+> 以及全套中英日三语社区规范与指示性文件体系。
+>
+> This release focuses on security hardening, memory subsystem performance leap, and cross-platform agent identity takeover:
+> Comprehensive completion of security and architecture audit batches (command sandbox pipeline defense, JWT token version revocation,
+> query and log redaction, PBKDF2 salted keys, robust cross-database migration and WAL recovery),
+> major memory breakthroughs (vector retrieval 25x batching with keep-alive connection pool, (n,d) matmul candidate scoring, atomic store mutation),
+> cross-platform primary agent identity takeover, Minecraft 26.2 dynamic compatibility & telemetry fix,
+> and full trilingual (EN/ZH/JA) community health and indicator documentation.
+
+### Added（新增）
+
+- 平台与身份：统一主 Agent 跨平台全量身份接管、多平台脚手架与防封实战指南；Minecraft 26.2（协议 776）动态兼容补丁与自动 Bot 启动支持 — Platform & Identity: unified cross-platform identity takeover for the main agent, platform scaffolding & account safety guide; Minecraft 26.2 (protocol 776) dynamic compatibility patch & auto bot launcher
+- 记忆体系：子 Agent 独立记忆轨开通、记忆注入闸门、事实与向量生命周期联动、记忆中枢可选页 — Memory: dedicated memory tracks for sub-agents, memory injection gates, fact-vector lifecycle linkage, configurable memory center view
+- 国际化与社区：中英日三语指示性与规范文件体系（README / CONTRIBUTING / CODE_OF_CONDUCT / SECURITY）— Trilingual (EN/ZH/JA) community health & indicator documentation suite
+
+### Changed（变更）
+
+- 性能优化：记忆向量索引 25x 批量加速（HTTP RTT 6331ms→253ms）与长连接池、检索候选堆叠 (n,d) 单次 matmul 计算（10-100x）、分词预计算与词表剪枝 — Performance: 25x vector index batching (RTT 6331ms→253ms) with keep-alive pool, stacked (n,d) matmul candidate scoring (10-100x), tokenization precomputation
+- 数据持久化：BaseRepository.save 单语句原子 upsert、存储层 store.mutate 原子读写消灭竞态、跨库迁移表清单 ORM 动态化与行级校验 — Data persistence: single-statement atomic upsert, atomic store.mutate against write races, dynamic ORM schema migration with row verification
+- API 契约：RequestValidationError 422 统一转规范信封，回收站失败路径显式抛出 NotFoundError，调度器端点统一 ok 信封 — API Contracts: standardized 422 validation error envelopes, explicit NotFoundError on trash failure paths, unified scheduler ok envelopes
+
+### Security（安全加固）
+
+- 沙箱防御：validate_command 强化命令拆段安全审查，封堵管道符 `|` 与反引号/`$()` 命令替换绕过 — Sandbox: hardened command tokenization and validation, blocking pipe `|` and command substitution (`$()`, backticks) bypasses
+- 鉴权治理：JWT token_type 校验（区分 access/refresh）、登出/吊销校验 token_version 并实时清空缓存；SECRET_KEY 派生升级为 PBKDF2 动态随机盐 — Authentication: strict token_type check (access vs refresh), real logout token_version verification with cache invalidation; PBKDF2 random-salted SECRET_KEY derivation
+- 深度脱敏：请求日志 Query 参数与 URL 敏感键深度脱敏，禁止 HTTP ?token= query 鉴权回退，诊断日志导出自动抹除机密 — Redaction: deep query & URL secret parameter redaction, removal of HTTP ?token= query fallback, auto-redacted diagnostic logs
+- 供应链安全：插件与市场下载强制主机白名单与 500MB 大小上限，字符集与路径规范防止遍历逃逸 — Supply Chain: strict trusted download host whitelist, 500MB payload guard, character set and path traversal validation
+
+### Fixed（修复）
+
+- 修复平台工具调用跟进大模型 400 报错与遥测数据回退 — Fixed platform tool call upstream 400 errors and telemetry data fallback
+- 修复 OpenAI/DeepSeek 工具名称包含点号不兼容问题与 tool_call_id 规范化 — Sanitized dot-separated tool names for OpenAI/DeepSeek API compliance and normalized tool call IDs
+- 修复备份恢复 WAL/SHM 残留重放损坏与并发文件锁冲突 — Fixed backup recovery WAL/SHM remnant replay corruption and concurrent file lock races
+
 ## [0.8.1] - 2026-09-16
 
 > 本版本聚焦「可诊断性」与「首次体验」：统一日志中心与诊断上传、首启引导合规化
@@ -289,10 +330,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | 0.7.7 | 2026-08-11 | Theme system & marketplace enhancement, auth & security hardening |
 | 0.8.0 | 2026-09-12 | Desktop Electron shell, JSON→SQLite row-based storage, plugin/skill system, cross-platform packaging |
 | 0.8.1 | 2026-09-16 | Cloud access (device flow/PKCE), log hub, memory subsystem hardening |
+| 0.8.2 | 2026-09-20 | Security hardening, 25x memory overhaul, cross-platform agent takeover |
 
 ---
 
-[Unreleased]: https://github.com/LuminousCX/LuomiNest/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/LuminousCX/LuomiNest/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/LuminousCX/LuomiNest/releases/tag/v0.8.2
 [0.8.1]: https://github.com/LuminousCX/LuomiNest/releases/tag/v0.8.1
 [0.8.0]: https://github.com/LuminousCX/LuomiNest/releases/tag/v0.8.0
 [0.7.7]: https://github.com/LuminousCX/LuomiNest/releases/tag/v0.7.7

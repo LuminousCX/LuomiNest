@@ -161,7 +161,7 @@ pnpm build
 ```
 feat(memory): メンバー別グループチャットプロファイルトラックを追加
 fix(browser): ブラウザツールを読み取り専用ナビゲーションに限定
-docs(readme): v0.8.1 リリースのハイライトとリンクを更新
+docs(readme): v0.8.2 リリースのハイライトとリンクを更新
 refactor(security): トークン検証と監査ログのマスク処理を統一
 ```
 

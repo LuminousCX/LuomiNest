@@ -1,6 +1,6 @@
 [project]
 name = "luominest"
-version = "0.8.1"
+version = "0.8.2"
 description = "LuomiNest - Distributed Whole-House AI Companion System"
 requires-python = ">=3.12"
 license = {text = "AGPL-3.0"}

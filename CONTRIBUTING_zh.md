@@ -162,7 +162,7 @@ pnpm build
 ```
 feat(memory): 新增群聊成员独立画像轨追踪
 fix(browser): 将内嵌浏览器工具严格收敛为只读访问
-docs(readme): 更新 v0.8.1 发布说明与文档链接
+docs(readme): 更新 v0.8.2 发布说明与文档链接
 refactor(security): 统一令牌解析逻辑与诊断日志脱敏
 ```
 
