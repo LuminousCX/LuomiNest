@@ -24,10 +24,11 @@ const agentColors: string[] = [
   'var(--task-pink)',
 ]
 
-// 2026-08 全局模型统一：主智能体面板仅管理"人设"（系统提示词 / 头像 / 颜色）。
+// 2026-08 全局模型统一：主智能体面板管理"名称与人设"（名称 / 系统提示词 / 头像 / 颜色）。
 // 模型与生成参数（provider/model/temperature/maxTokens）统一在"模型设置"页配置，
 // 此处不再读写，避免把陈旧值写回全局配置。
 const mainAgentEdit = ref({
+  name: '主Agent',
   systemPrompt: '',
   color: '',
   avatar: null as string | null,
@@ -43,6 +44,7 @@ const loadMainAgentConfig = async () => {
     await platformStore.fetchMainAgent()
     if (platformStore.mainAgent) {
       mainAgentEdit.value = {
+        name: platformStore.mainAgent.name || '主Agent',
         systemPrompt: platformStore.mainAgent.systemPrompt,
         color: platformStore.mainAgent.color || 'var(--lumi-brand)',
         avatar: platformStore.mainAgent.avatar || null,
@@ -61,6 +63,7 @@ const handleSaveMainAgentConfig = async () => {
   mainAgentSaveMsg.value = null
   try {
     await platformStore.updateMainAgent({
+      name: mainAgentEdit.value.name?.trim() || '主Agent',
       systemPrompt: mainAgentEdit.value.systemPrompt,
       color: mainAgentEdit.value.avatarMode === 'color' ? mainAgentEdit.value.color : '',
       avatar: mainAgentEdit.value.avatarMode === 'preset' ? (mainAgentEdit.value.avatar || '') : '',
@@ -95,6 +98,17 @@ onMounted(() => {
           <span class="settings-card__title">{{ t('settingsEx.mainAgent.personaTitle') }}</span>
         </div>
         <div class="settings-card__body">
+          <div class="settings-form-row">
+            <label class="settings-form-label">{{ t('settingsEx.mainAgent.nameLabel') }}</label>
+            <input
+              v-model="mainAgentEdit.name"
+              type="text"
+              class="settings-form-input main-agent-name-input"
+              :placeholder="t('settingsEx.mainAgent.namePlaceholder')"
+            />
+            <span class="settings-form-hint">{{ t('settingsEx.mainAgent.nameHint') }}</span>
+          </div>
+
           <div class="settings-form-row">
             <label class="settings-form-label">{{ t('settingsEx.mainAgent.systemPrompt') }}</label>
             <textarea
@@ -181,6 +195,22 @@ onMounted(() => {
   color: var(--text-muted);
   font-size: var(--text-base);
   padding: var(--space-6) 0;
+}
+
+.main-agent-name-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-secondary);
+  border: 1px solid var(--workspace-border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.main-agent-name-input:focus {
+  border-color: var(--lumi-brand);
 }
 
 .main-agent-prompt {

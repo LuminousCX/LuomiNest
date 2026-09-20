@@ -16,10 +16,17 @@ from app.runtime.provider.llm.types import RouteHint
 
 
 def resolve_provider(agent: dict) -> str:
-    """解析 agent 应使用的 LLM provider。"""
-    agent_provider = agent.get("provider", "")
-    if agent_provider and agent_provider in llm_adapter.providers:
-        return agent_provider
+    """解析 agent 应使用的 LLM provider。
+
+    全局模型统一：Agent 不再拥有独立模型，一律返回全局主模型 provider。
+    agent 数据中的遗留 provider 字段不再读取（存量值已失效）。
+    """
+    from app.infrastructure.database.facades.model_selection import resolve_global_provider_model
+
+    del agent
+    provider, _model = resolve_global_provider_model()
+    if provider and provider in llm_adapter.providers:
+        return provider
     if llm_adapter.default_provider in llm_adapter.providers:
         return llm_adapter.default_provider
     for provider_key in llm_adapter.providers:
@@ -28,11 +35,17 @@ def resolve_provider(agent: dict) -> str:
 
 
 def resolve_model(agent: dict, provider_name: str) -> str:
-    """解析 agent 应使用的 LLM model。"""
-    agent_model = agent.get("model", "")
-    if agent_model:
-        return agent_model
-    provider = llm_adapter.providers.get(provider_name)
+    """解析 agent 应使用的 LLM model。
+
+    全局模型统一：Agent 不再拥有独立模型，一律返回全局主模型 model。
+    """
+    from app.infrastructure.database.facades.model_selection import resolve_global_provider_model
+
+    del agent, provider_name
+    _provider, model = resolve_global_provider_model()
+    if model:
+        return model
+    provider = llm_adapter.providers.get(resolve_provider({}))
     if provider:
         return provider.default_model
     return ""

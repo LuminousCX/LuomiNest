@@ -68,10 +68,10 @@ class Settings(BaseSettings):
     LLM_MAX_CONCURRENT_REQUESTS: int = 0  # 0 表示根据硬件自动计算
 
     # LLM 上下文压缩配置
+    # （全局模型统一：LLM_SUMMARY_MODEL/LLM_SUMMARY_PROVIDER 已移除，
+    #   上下文压缩/摘要统一走全局主模型）
     LLM_COMPRESS_ENABLED: bool = False
     LLM_COMPRESSION_THRESHOLD: float = 0.70
-    LLM_SUMMARY_MODEL: str = ""
-    LLM_SUMMARY_PROVIDER: str = ""
     LLM_SUMMARY_MAX_TOKENS: int = 512
     LLM_CONTEXT_WINDOW_SIZE: int = 0  # 0 表示自动从 provider 获取
     LLM_CONTEXT_STRATEGY: str = "truncate"  # "truncate"（截断）或 "summarize"（LLM 摘要）

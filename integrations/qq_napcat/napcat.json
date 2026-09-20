@@ -1,0 +1,32 @@
+{
+  "http": {
+    "enable": false,
+    "host": "",
+    "port": 3000,
+    "secret": "",
+    "enableHeartList": false,
+    "defaultAsync": false
+  },
+  "ws": {
+    "enable": false,
+    "host": "",
+    "port": 3001
+  },
+  "reverseWs": {
+    "enable": true,
+    "urls": [
+      "ws://127.0.0.1:8080/ws/qq"
+    ]
+  },
+  "GroupLocalTime": {
+    "Record": false,
+    "RecordList": []
+  },
+  "debug": false,
+  "heartInterval": 30000,
+  "messagePostFormat": "array",
+  "enableLocalFile2Url": false,
+  "musicSignUrl": "",
+  "reportSelfMessage": false,
+  "token": ""
+}

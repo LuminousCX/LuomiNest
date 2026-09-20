@@ -756,17 +756,22 @@ class WorkflowEngine:
 
         # 流式调用 LLM，实时推送 reasoning 和 content_delta 事件
         # 改造原因：原非流式 llm_adapter.chat 导致分析阶段无流式输出，用户长时间等待无反馈
+        # 路由：外部未显式指定 provider 时不传 provider_name，交给 REASONER hint
+        # 按设置页推理模型路由（未配置推理模型时 adapter 内部回退主模型）
+        route_kwargs: dict = {}
+        if provider:
+            route_kwargs["provider_name"] = provider
+            route_kwargs["model"] = model
         content = ""
         reasoning = ""
         finish_reason = "stop"
         logger.debug(f"[WorkflowEngine][DEBUG] Session {session_id} calling llm_adapter.chat_stream...")
         async for chunk in llm_adapter.chat_stream(
             messages=messages,
-            provider_name=actual_provider,
-            model=model,
             temperature=session.planning_temperature,
             max_tokens=session.planning_max_tokens,
             route_hint=RouteHint.REASONER,
+            **route_kwargs,
         ):
             if chunk.type == "content":
                 delta = chunk.data.get("content", "")
@@ -1185,18 +1190,19 @@ class WorkflowEngine:
             {"role": "user", "content": "请综合以上结果，给出最终回复。"},
         ]
 
-        actual_provider = provider or llm_adapter.default_provider
-        if model is None:
-            provider_obj = llm_adapter.get_provider(actual_provider)
-            model = provider_obj.default_model if provider_obj else ""
+        # 路由：外部未显式指定 provider 时不传 provider_name，交给 REASONER hint
+        # 按设置页推理模型路由（未配置时回退主模型）
+        route_kwargs: dict = {}
+        if provider:
+            route_kwargs["provider_name"] = provider
+            route_kwargs["model"] = model or llm_adapter.get_provider(provider).default_model
 
         result = await llm_adapter.chat(
             messages=messages,
-            provider_name=actual_provider,
-            model=model,
             temperature=session.synthesis_temperature,
             max_tokens=SYNTHESIS_MAX_TOKENS,
             route_hint=RouteHint.REASONER,
+            **route_kwargs,
         )
 
         return str(result)

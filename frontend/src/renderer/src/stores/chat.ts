@@ -255,15 +255,14 @@ export const useChatStore = defineStore('chat', () => {
     return isBackendReady.value
   }
 
-  const createConversation = async (title?: string, agentId?: string, model?: string, provider?: string, chatMode?: string, isHidden?: boolean) => {
+  const createConversation = async (title?: string, agentId?: string, chatMode?: string, isHidden?: boolean) => {
     const targetAgentId = agentId || activeAgentId.value
     if (!targetAgentId) return null
 
+    // 全局模型统一：不再传 model/provider，对话不快照模型，生成时由后端解析全局配置
     const conv = await apiPost<Conversation>('/chat/conversations', {
       title: title || i18n.global.t('chat.newConversation'),
       agent_id: targetAgentId,
-      model,
-      provider,
       chat_mode: chatMode || 'normal',
       is_hidden: isHidden || false,
     })
@@ -509,11 +508,6 @@ export const useChatStore = defineStore('chat', () => {
   const sendMessage = async (
     content: string,
     options?: {
-      model?: string
-      provider?: string
-      temperature?: number
-      maxTokens?: number
-      topP?: number
       agentId?: string
       systemPrompt?: string
       fileContent?: string
@@ -544,8 +538,6 @@ export const useChatStore = defineStore('chat', () => {
       const conv = await createConversation(
         content.slice(0, 30),
         targetAgentId,
-        options?.model,
-        options?.provider,
         options?.chatMode
       )
       convId = conv?.id || null
@@ -616,13 +608,10 @@ export const useChatStore = defineStore('chat', () => {
 
     const endpoint = `/chat/conversations/${convId}/messages`
 
+    // 全局模型统一：请求体不携带 model/provider/生成参数，
+    // 由后端按设置页全局主模型（专业模式→推理模型）与全局生成参数解析
     const requestBody: Record<string, unknown> = {
       messages: apiMessages,
-      model: options?.model,
-      provider: options?.provider,
-      temperature: options?.temperature,
-      max_tokens: options?.maxTokens,
-      top_p: options?.topP,
       stream: true,
       timestamp: Date.now() / 1000,
     }
@@ -774,9 +763,9 @@ export const useChatStore = defineStore('chat', () => {
     convStreaming.value = { ...convStreaming.value, [convId]: true }
     currentSuggestionMessageId.value = null
 
+    // 全局模型统一：重新生成不再携带上次回答的 model/provider，
+    // 后端统一按设置页全局配置解析（保留版本记录中的模型仅作展示）
     const requestBody: Record<string, unknown> = {
-      model: aiMsg.model || undefined,
-      provider: aiMsg.provider || undefined,
       stream: true,
       versions: existingVersions,
     }

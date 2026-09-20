@@ -82,6 +82,12 @@ def _patch_generation(monkeypatch):
     monkeypatch.setattr(
         chat_service_module.distillation_service, "maybe_distill", AsyncMock(return_value=None)
     )
+    # 全局模型统一后模型解析委托门面：固定返回测试模型，隔离真实 DB / 全局单例
+    monkeypatch.setattr(
+        chat_service_module,
+        "resolve_global_provider_model",
+        lambda: ("openai", "gpt-test"),
+    )
     fake_ctx_mgr = MagicMock()
     fake_ctx_mgr.process = AsyncMock(side_effect=lambda msgs, **kw: {"messages": msgs})
     monkeypatch.setattr(

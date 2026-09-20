@@ -4,9 +4,9 @@ import { useI18n } from 'vue-i18n'
 import {
   Cpu, Image as ImageIcon, RefreshCw, RotateCcw,
   AlertCircle, CheckCircle2, XCircle, Clock,
+  Sparkles, ShieldCheck, HelpCircle,
 } from 'lucide-vue-next'
 import { usePlatformStore } from '../../stores/platform'
-import { useModelStore } from '../../stores/model'
 import type { PlatformInstance, PlatformModelConfig } from '../../types'
 import LumiModal from '../../components/common/LumiModal.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
@@ -16,7 +16,6 @@ import { createLuomiNestRendererLogger } from '../../utils/logger'
 const logger = createLuomiNestRendererLogger('Platform')
 
 const store = usePlatformStore()
-const modelStore = useModelStore()
 const { t } = useI18n()
 
 const props = defineProps<{
@@ -25,8 +24,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  'update:visible': [value: boolean]
-  saved: []
+  (e: 'update:visible', value: boolean): void
+  (e: 'saved'): void
 }>()
 
 const editConfig = ref<Record<string, any>>({})
@@ -34,20 +33,66 @@ const modelConfigLoading = ref(false)
 const modelConfigSaving = ref(false)
 const modelEditConfig = ref<PlatformModelConfig>({})
 
-const availableProviders = computed(() => modelStore.providers)
-
 const isGameCategory = computed(() => {
   const inst = props.instance
   if (!inst) return false
   return inst.category === 'game' || inst.adapterType === 'minecraft' || inst.adapterType === 'game_websocket'
 })
 
-const availableModels = computed(() => {
-  const providerId = modelEditConfig.value.provider
-  if (!providerId) return []
-  const provider = availableProviders.value.find(p => p.id === providerId)
-  return provider?.models || []
+const platformTip = computed(() => {
+  const at = props.instance?.adapterType
+  if (at === 'minecraft') return t('platform.minecraftTip')
+  if (at === 'qq_onebot') return t('platform.qqOnebotTip')
+  if (at === 'wechat_personal') return t('platform.wechatPersonalTip')
+  if (at === 'discord') return t('platform.discordTip')
+  return ''
 })
+
+const getFieldLabel = (key: string) => {
+  const at = props.instance?.adapterType
+  if (at === 'minecraft') {
+    if (key === 'game_port') return '局域网/游戏端口 (game_port)'
+    if (key === 'game_host') return '服务器地址 (game_host)'
+    if (key === 'bot_name') return '伴侣玩家名称 (bot_name)'
+    if (key === 'auto_spawn_bot') return '自动派遣伴侣入服 (auto_spawn_bot)'
+    if (key === 'ws_port') return '模组通信端口 (ws_port)'
+    if (key === 'rcon_password') return 'RCON 密码 (rcon_password)'
+  } else if (at === 'qq_onebot') {
+    if (key === 'ws_port') return '反向 WS 监听端口 (ws_port)'
+    if (key === 'access_token') return '通信密钥 (access_token)'
+  } else if (at === 'wechat_personal') {
+    if (key === 'api_url') return 'GeweChat API 地址 (api_url)'
+    if (key === 'token') return 'API Token (token)'
+  } else if (at === 'discord') {
+    if (key === 'bot_token') return 'Discord Bot Token (bot_token)'
+  }
+  return key
+}
+
+const getFieldTip = (key: string) => {
+  const at = props.instance?.adapterType
+  if (at === 'minecraft') {
+    if (key === 'game_port') return '单人游戏“对局域网开放”时显示的5位数字端口（如 56587），或多人服务器端口'
+    if (key === 'game_host') return 'Minecraft 服务器地址，单人局域网填 127.0.0.1'
+    if (key === 'bot_name') return '虚拟玩家伴侣进服昵称。留空直接继承设置中设定的【主 Agent】名称'
+    if (key === 'ws_port') return 'Mineflayer 具身伴侣与系统通信的本地 WebSocket 端口，默认 8081'
+  } else if (at === 'qq_onebot') {
+    if (key === 'ws_port') return 'NapCatQQ 或 OneBot v11 反向 WebSocket 连接的端口，默认 8080'
+    if (key === 'access_token') return '鉴权令牌，需与 NapCat 配置的 access_token 保持一致'
+  } else if (at === 'wechat_personal') {
+    if (key === 'api_url') return 'GeweChat (iPad 协议网关) 本地或容器服务的 REST API 地址'
+    if (key === 'token') return 'GeweChat 服务调用 token'
+  } else if (at === 'discord') {
+    if (key === 'bot_token') return 'Discord Developer Portal 中生成的 Bot Token。请务必开启 Message Content Intent'
+  }
+  return ''
+}
+
+const getFieldPlaceholder = (key: string) => {
+  if (key === 'bot_name') return '留空继承主 Agent 名称'
+  if (key === 'game_port') return '56587'
+  return ''
+}
 
 const effectiveModelConfig = computed(() => store.instanceModelConfig)
 
@@ -105,28 +150,16 @@ const handleResetModelConfig = async () => {
   modelConfigSaving.value = true
   try {
     await store.updateInstanceModelConfig(props.instance.id, {
-      provider: '',
-      model: '',
       systemPrompt: '',
-      temperature: null,
-      maxTokens: null,
     })
     modelEditConfig.value = {
-      provider: '',
-      model: '',
       systemPrompt: '',
-      temperature: null,
-      maxTokens: null,
     }
   } catch (e: unknown) {
     logger.error('Failed to reset model config:', e)
   } finally {
     modelConfigSaving.value = false
   }
-}
-
-const handleProviderChange = () => {
-  modelEditConfig.value.model = ''
 }
 
 const resetConfigState = () => {
@@ -141,18 +174,11 @@ const loadInstanceConfig = async (instance: PlatformInstance) => {
   modelEditConfig.value = {}
   modelConfigLoading.value = true
   try {
-    await Promise.all([
-      store.fetchInstanceModelConfig(instance.id),
-      modelStore.fetchProviders(),
-    ])
+    await store.fetchInstanceModelConfig(instance.id)
     const cfg = store.instanceModelConfig
     if (cfg) {
       modelEditConfig.value = {
-        provider: cfg.instanceConfig.provider || '',
-        model: cfg.instanceConfig.model || '',
         systemPrompt: cfg.instanceConfig.systemPrompt || '',
-        temperature: cfg.instanceConfig.temperature ?? null,
-        maxTokens: cfg.instanceConfig.maxTokens ?? null,
       }
     }
   } catch (e: unknown) {
@@ -184,6 +210,27 @@ watch(() => props.instance, async (instance) => {
 <template>
   <LumiModal :visible="visible" :title="t('platform.configTitle', { name: instance?.name || '' })" size="lg" @close="closeConfigDialog" @update:visible="emit('update:visible', $event)">
     <div class="dialog-body">
+      <!-- Main Agent Persona & Identity Inheritance Banner -->
+      <div class="main-agent-banner">
+        <div class="banner-icon">
+          <Sparkles :size="16" />
+        </div>
+        <div class="banner-content">
+          <div class="banner-title">{{ t('platform.mainAgentBannerTitle') }}</div>
+          <div class="banner-desc">{{ t('platform.mainAgentBannerDesc') }}</div>
+        </div>
+      </div>
+
+      <!-- Platform Guidance & Anti-ban Tip Card -->
+      <div v-if="platformTip" class="platform-tip-card">
+        <div class="tip-icon">
+          <ShieldCheck :size="16" />
+        </div>
+        <div class="tip-content">
+          <span class="tip-text">{{ platformTip }}</span>
+        </div>
+      </div>
+
       <div class="form-group">
         <label class="form-label">{{ t('platform.statusLabel') }}</label>
         <div class="status-display">
@@ -224,37 +271,11 @@ watch(() => props.instance, async (instance) => {
                 {{ effectiveModelConfig?.effective?.supportsMultimodal ? 'Vision' : 'No Vision' }}
               </span>
             </div>
-            <div class="info-row main-agent-info">
-              <span class="info-label">{{ t('platform.mainAgentDefault') }}</span>
-              <span class="info-value">{{ effectiveModelConfig?.mainAgent?.providerName || effectiveModelConfig?.mainAgent?.provider || '-' }}</span>
-              <span class="info-sep">/</span>
-              <span class="info-value">{{ effectiveModelConfig?.mainAgent?.model || '-' }}</span>
-            </div>
           </div>
 
+          <p class="global-model-hint">{{ t('platform.globalModelHint') }}</p>
+
           <div class="config-fields">
-            <div class="config-field">
-              <label class="config-field-label">{{ t('platform.providerLabel') }}</label>
-              <select
-                v-model="modelEditConfig.provider"
-                class="form-input form-select"
-                @change="handleProviderChange"
-              >
-                <option value="">{{ t('platform.inheritMainAgent') }}</option>
-                <option v-for="p in availableProviders" :key="p.id" :value="p.id">
-                  {{ p.name }}{{ p.isDefault ? t('platform.defaultSuffix') : '' }}
-                </option>
-              </select>
-            </div>
-            <div class="config-field">
-              <label class="config-field-label">{{ t('platform.modelLabel') }}</label>
-              <select v-model="modelEditConfig.model" class="form-input form-select" :disabled="!modelEditConfig.provider">
-                <option value="">{{ t('platform.inheritMainAgent') }}</option>
-                <option v-for="m in availableModels" :key="m.id" :value="m.id">
-                  {{ m.name || m.id }}
-                </option>
-              </select>
-            </div>
             <div class="config-field">
               <label class="config-field-label">{{ t('platform.systemPromptLabel') }}</label>
               <textarea
@@ -263,28 +284,6 @@ watch(() => props.instance, async (instance) => {
                 rows="3"
                 :placeholder="t('platform.systemPromptPlaceholder')"
               ></textarea>
-            </div>
-            <div class="config-field-row">
-              <div class="config-field">
-                <label class="config-field-label">{{ t('platform.temperatureLabel') }}</label>
-                <LumiInput
-                  v-model.number="modelEditConfig.temperature"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="2"
-                  :placeholder="t('platform.inherit')"
-                />
-              </div>
-              <div class="config-field">
-                <label class="config-field-label">{{ t('platform.maxTokensLabel') }}</label>
-                <LumiInput
-                  v-model.number="modelEditConfig.maxTokens"
-                  type="number"
-                  min="1"
-                  :placeholder="t('platform.inherit')"
-                />
-              </div>
             </div>
           </div>
 
@@ -303,8 +302,13 @@ watch(() => props.instance, async (instance) => {
         <label class="form-label">{{ t('platform.connectionConfig') }}</label>
         <div class="config-fields">
           <div v-for="(_val, key) in editConfig" :key="key" class="config-field">
-            <label class="config-field-label">{{ key }}</label>
-            <LumiInput v-model="editConfig[key]" type="text" />
+            <div class="config-field-label-row">
+              <label class="config-field-label">{{ getFieldLabel(String(key)) }}</label>
+              <span v-if="getFieldTip(String(key))" class="field-tip-icon" :title="getFieldTip(String(key))">
+                <HelpCircle :size="13" />
+              </span>
+            </div>
+            <LumiInput v-model="editConfig[key]" type="text" :placeholder="getFieldPlaceholder(String(key))" />
           </div>
         </div>
       </div>
@@ -519,5 +523,82 @@ watch(() => props.instance, async (instance) => {
 .reset-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.main-agent-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  background: var(--lumi-brand-light);
+  border: 1px solid var(--lumi-brand-border, rgba(59, 130, 246, 0.2));
+  border-radius: var(--radius-md);
+}
+
+.main-agent-banner .banner-icon {
+  color: var(--lumi-brand);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.main-agent-banner .banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.main-agent-banner .banner-title {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  color: var(--lumi-brand);
+}
+
+.main-agent-banner .banner-desc {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.platform-tip-card {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  margin-bottom: var(--space-4);
+  background: var(--lumi-amber-soft);
+  border: 1px solid var(--lumi-amber-border);
+  border-radius: var(--radius-md);
+}
+
+.platform-tip-card .tip-icon {
+  color: var(--lumi-amber);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.platform-tip-card .tip-content {
+  font-size: var(--text-xs);
+  color: var(--lumi-amber-text, #b45309);
+  line-height: 1.4;
+}
+
+.config-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.field-tip-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  cursor: help;
+  transition: color var(--transition-fast);
+}
+
+.field-tip-icon:hover {
+  color: var(--lumi-brand);
 }
 </style>

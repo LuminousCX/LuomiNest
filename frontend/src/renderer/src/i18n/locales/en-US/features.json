@@ -751,6 +751,13 @@
     "inherit": "Inherit",
     "resetToInherit": "Reset to inherit main Agent",
     "connectionConfig": "Connection Config",
+    "mainAgentBannerTitle": "Agent Identity: Managed by [{name}]",
+    "mainAgentBannerDesc": "All messages and companion behaviors on this platform are handled by the Main Agent. Name, avatar, and persona synchronize directly from [Settings - Main Agent], maintaining cross-platform consistency.",
+    "platformTipTitle": "Integration Tips & Anti-Ban Advice",
+    "minecraftTip": "Minecraft Companion Guide: The companion entity joins LAN (Open to LAN) or multiplayer servers. Name and persona inherit from Main Agent. Supports embodied actions, telemetry, and screenshots.",
+    "qqOnebotTip": "QQ (NapCat / OneBot) Tips: Recommended to use NapCatQQ or OneBot v11. Set reverse WebSocket to ws://127.0.0.1:8080/ws. Built-in typing delay and rate limits.",
+    "wechatPersonalTip": "WeChat Personal (GeweChat) Tips: Connected via GeweChat gateway. Scan QR code in management menu to log in. Anti-ban delays and rate protection enabled.",
+    "discordTip": "Discord Bot Tips: Create a Bot in Discord Developer Portal, enable 'Message Content Intent', and paste the Bot Token.",
     "errorLabel": "Error",
     "saveConfig": "Save Config",
     "log": {
@@ -796,7 +803,8 @@
       "updateFailed": "Update failed: {msg}",
       "createConversationFailed": "Failed to create conversation: {msg}",
       "unknownError": "Unknown error"
-    }
+    },
+    "globalModelHint": "The model follows the global setting (Settings → AI Model). All platforms share the global fast-response model; below you can only customize this platform's persona prompt."
   },
   "browser": {
     "captchaBanner": "CAPTCHA detected. Please complete the verification below to continue browsing",

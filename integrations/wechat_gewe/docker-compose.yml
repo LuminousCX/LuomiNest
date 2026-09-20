@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  gewechat:
+    image: registry.cn-hangzhou.aliyuncs.com/gewe/gewe:latest
+    container_name: luominest-gewechat
+    restart: always
+    ports:
+      - "2531:2531" # GeweChat REST API 接口服务
+      - "2532:2532" # 文件/媒体下载与静态资源服务
+    volumes:
+      - ./data:/root/temp # 登录凭据与会话缓存持久化
+    environment:
+      - TZ=Asia/Shanghai

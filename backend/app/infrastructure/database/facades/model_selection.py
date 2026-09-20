@@ -34,7 +34,13 @@ def resolve_global_provider_model() -> tuple[str, str]:
         logger.debug(f"[ModelSelection] Global provider '{provider}' unavailable: {e}")
 
     # 配置的 provider 不可用，尝试任意已注册 provider
-    for provider_info in llm_adapter.list_providers():
+    try:
+        candidates = list(llm_adapter.list_providers())
+    except Exception as e:
+        # 运行时枚举失败（如存储不可用）：直接按"无可用 provider"处理
+        logger.debug(f"[ModelSelection] list_providers failed: {e}")
+        return "", model
+    for provider_info in candidates:
         fallback_provider = provider_info.get("id", "")
         if not fallback_provider:
             continue

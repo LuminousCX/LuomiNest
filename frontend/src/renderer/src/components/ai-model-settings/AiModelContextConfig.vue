@@ -26,22 +26,11 @@ const contextWindowSize = ref(0)
 const compressionThreshold = ref(0.82)
 const compressionRatio = ref(45)
 const llmCompressEnabled = ref(false)
-const summaryModel = ref('')
-const summaryProvider = ref('')
 
 const showInfo = ref(false)
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const saveValidationError = ref('')
 const expandedModels = ref<Set<string>>(new Set())
-
-const summaryAvailableModels = computed(() => {
-  const provider = providers.value.find(p => p.id === summaryProvider.value)
-  if (!provider) return []
-  if (provider.selectedModels.length > 0) {
-    return provider.selectedModels.map(id => ({ id, name: id }))
-  }
-  return provider.models
-})
 
 const groupedOverrides = computed(() => {
   const groups: Record<string, typeof contextOverrides.value> = {}
@@ -69,10 +58,6 @@ const isContextWindowValid = computed(() => {
   return { valid: true, error: '' }
 })
 
-const onSummaryProviderChange = () => {
-  summaryModel.value = ''
-}
-
 const handleSaveGlobal = async () => {
   saveValidationError.value = ''
   if (!isContextWindowValid.value.valid) {
@@ -89,8 +74,6 @@ const handleSaveGlobal = async () => {
       compressionThreshold: compressionThreshold.value,
       compressionRatio: compressionRatio.value,
       llmCompressEnabled: llmCompressEnabled.value,
-      summaryModel: summaryModel.value,
-      summaryProvider: summaryProvider.value,
     })
     saveStatus.value = 'saved'
     toast.success(t('aiModel.context.savedToast'))
@@ -160,8 +143,6 @@ onMounted(() => {
   compressionThreshold.value = cfg.compressionThreshold ?? 0.82
   compressionRatio.value = cfg.compressionRatio ?? 45
   llmCompressEnabled.value = cfg.llmCompressEnabled ?? false
-  summaryModel.value = cfg.summaryModel || ''
-  summaryProvider.value = cfg.summaryProvider || ''
 })
 
 watch(() => modelStore.modelConfig, (cfg) => {
@@ -169,8 +150,6 @@ watch(() => modelStore.modelConfig, (cfg) => {
   compressionThreshold.value = cfg.compressionThreshold ?? 0.82
   compressionRatio.value = cfg.compressionRatio ?? 45
   llmCompressEnabled.value = cfg.llmCompressEnabled ?? false
-  summaryModel.value = cfg.summaryModel || ''
-  summaryProvider.value = cfg.summaryProvider || ''
 }, { deep: true })
 </script>
 
@@ -259,7 +238,7 @@ watch(() => modelStore.modelConfig, (cfg) => {
           <span class="form-hint">{{ t('aiModel.context.ratioHint') }}</span>
         </div>
 
-        <!-- 启用 LLM 摘要压缩 -->
+        <!-- 启用 LLM 摘要压缩（全局模型统一：摘要统一使用主模型，无独立摘要模型） -->
         <div class="form-group">
           <div class="toggle-row">
             <label class="form-label">{{ t('aiModel.context.enableLlmCompress') }}</label>
@@ -272,36 +251,6 @@ watch(() => modelStore.modelConfig, (cfg) => {
           </div>
           <span class="form-hint">{{ t('aiModel.context.llmCompressHint') }}</span>
         </div>
-
-        <!-- 摘要模型（仅启用压缩时显示） -->
-        <Transition name="fade-slide">
-          <div v-if="llmCompressEnabled" class="summary-config-area">
-            <div class="form-group">
-              <label class="form-label">{{ t('aiModel.context.summaryProvider') }}</label>
-              <div class="form-select-wrap">
-                <select v-model="summaryProvider" class="form-select" @change="onSummaryProviderChange">
-                  <option value="">{{ t('aiModel.context.useMainProvider') }}</option>
-                  <option v-for="p in providers" :key="p.id" :value="p.id">{{ p.name }}</option>
-                </select>
-                <svg class="select-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label class="form-label">{{ t('aiModel.context.summaryModel') }}</label>
-              <div class="form-select-wrap">
-                <select v-model="summaryModel" class="form-select">
-                  <option value="">{{ t('aiModel.context.useMainModel') }}</option>
-                  <option v-for="m in summaryAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
-                </select>
-                <svg class="select-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
-              </div>
-              <span v-if="summaryProvider && summaryAvailableModels.length === 0" class="form-hint hint-warn">
-                {{ t('aiModel.context.noProviderModels') }}
-              </span>
-            </div>
-          </div>
-        </Transition>
 
         <button
           :class="['save-btn', { saving: saveStatus === 'saving', saved: saveStatus === 'saved', error: saveStatus === 'error' }]"
@@ -759,16 +708,6 @@ watch(() => modelStore.modelConfig, (cfg) => {
 
 .toggle-switch--sm.active .toggle-knob {
   transform: translateX(16px);
-}
-
-.summary-config-area {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  background: var(--workspace-panel);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--workspace-border);
 }
 
 .fade-slide-enter-active {

@@ -27,11 +27,6 @@ interface WorkspaceAgentChatComponent {
 
 /** 发送消息的 options（与 chatStore.sendMessage 兼容的子集） */
 export interface SendMessageOptions {
-  model?: string
-  provider?: string
-  temperature?: number
-  maxTokens?: number
-  topP?: number
   agentId?: string
   systemPrompt?: string
   fileContent?: string
@@ -75,7 +70,6 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
     chatModeOptions,
     isWorkflowMode,
     selectChatMode,
-    resolveSendParams,
   } = useChatSession({
     getActiveConvId: () => localSelectedConvId.value,
   })
@@ -144,8 +138,8 @@ export const useWorkspaceMessages = (options: UseWorkspaceMessagesOptions) => {
 
     const agent = localSelectedAgent.value
 
+    // 全局模型统一：不再携带 provider/model/生成参数，后端按设置页全局配置解析
     const sendOptions: SendMessageOptions = {
-      ...resolveSendParams(),
       chatMode: chatMode.value,
       skillIds: selectedSkillIds.value,
     }

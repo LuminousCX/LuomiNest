@@ -26,30 +26,34 @@ from app.infrastructure.database.config_store import luominest_config_store
 _CONFIG_KEY = "main_agent.config"
 
 _DEFAULT_MAIN_AGENT_CONFIG = {
-    "provider": "",
-    "model": "",
+    "name": "主Agent",
     "system_prompt": (
-        "你是 LuomiNest 的主控智能体，负责与用户通过多平台进行交互并控制 Live2D 皮套的行为和表情。"
+        "你是主控智能体，负责与用户通过多平台进行交互并控制 Live2D 皮套的行为和表情。"
         "你需要根据对话内容做出恰当的情感反应，保持角色一致性，并善用长期记忆了解用户偏好。"
         "你的回答应该简洁自然，适合通过皮套形象表达。"
     ),
-    "temperature": 0.7,
-    "max_tokens": 4096,
 }
 
 
 def load_luominest_main_agent_config() -> dict:
-    """加载主 Agent 人设配置（system_prompt / color / avatar）。
+    """加载主 Agent 人设配置（name / system_prompt / color / avatar）。
 
-    注意：返回 dict 中的 provider/model/temperature/max_tokens 为历史遗留字段，
-    仅为兼容旧调用方保留默认值，不再作为模型选择的权威来源。
+    全局模型统一后本配置仅剩人设与名称字段；模型与生成参数一律走
+    model_selection 门面（全局主模型 + 全局生成参数）。
     """
-    stored = luominest_config_store.get(_CONFIG_KEY)
+    try:
+        stored = luominest_config_store.get(_CONFIG_KEY)
+    except Exception as exc:
+        logger.warning(f"[MainAgentConfig] Failed to load from config_store, falling back to default: {exc}")
+        return dict(_DEFAULT_MAIN_AGENT_CONFIG)
+
     if stored is None or not isinstance(stored, dict):
         return dict(_DEFAULT_MAIN_AGENT_CONFIG)
     # 合并默认值（确保新字段有默认值）
     merged = dict(_DEFAULT_MAIN_AGENT_CONFIG)
     merged.update(stored)
+    if not merged.get("name"):
+        merged["name"] = "主Agent"
     return merged
 
 

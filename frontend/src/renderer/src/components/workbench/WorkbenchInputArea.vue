@@ -9,6 +9,7 @@ import {
 import LumiButton from '../common/LumiButton.vue'
 import SkillsPicker from '../common/SkillsPicker.vue'
 import { useAutoResizeTextarea } from '../../composables/useAutoResizeTextarea'
+import { useModelStore } from '../../stores/model'
 import type { ProviderLogo } from '../../types'
 import type { ChatModeLevel, WorkflowModeOption } from './types'
 
@@ -44,6 +45,16 @@ const inputTextModel = computed<string>({
 })
 
 const isWorkflowMode = computed(() => props.chatMode !== 'normal')
+
+// 徽章展示模型：普通模式 = 全局主模型（快速响应）；专业模式 = 推理模型
+// （未配置推理模型时 store 会回退主模型，与后端按轮路由行为一致）
+const modelStore = useModelStore()
+const badgeModel = computed(() => {
+  if (isWorkflowMode.value) {
+    return modelStore.resolveReasonerModel?.model || props.currentModel
+  }
+  return props.currentModel
+})
 
 const selectMode = (value: ChatModeLevel) => {
   emit('select-chat-mode', value)
@@ -94,7 +105,7 @@ defineExpose({
             <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
               {{ currentProviderLogo.initials }}
             </span>
-            <span class="model-btn-text">{{ currentModel }}</span>
+            <span class="model-btn-text">{{ badgeModel }}</span>
           </div>
           <LumiButton
             :class="['workflow-toggle', { active: isWorkflowMode }]"

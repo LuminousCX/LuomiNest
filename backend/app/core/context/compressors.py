@@ -105,15 +105,11 @@ class LLMSummaryCompressor:
         keep_recent: int = 4,
         instruction_text: str | None = None,
         compression_threshold: float = 0.70,
-        summary_provider: str | None = None,
-        summary_model: str | None = None,
         max_tokens: int = 512,
         context_window: int = 0,
     ) -> None:
         self.keep_recent = keep_recent
         self.compression_threshold = compression_threshold
-        self.summary_provider = summary_provider
-        self.summary_model = summary_model
         self.max_tokens = max_tokens
         self.context_window = context_window
 
@@ -220,20 +216,13 @@ class LLMSummaryCompressor:
         """调用 LLM 获取摘要文本。"""
         from app.runtime.provider.llm.adapter import llm_adapter
 
-        chat_kwargs: dict = {
-            "messages": llm_payload,
-            "temperature": SUMMARY_TEMPERATURE,
-            "max_tokens": max_tokens,
-            "route_hint": RouteHint.CHAT,
-        }
-        if self.summary_provider:
-            chat_kwargs["provider_name"] = self.summary_provider
-        else:
-            chat_kwargs["provider_name"] = llm_adapter.default_provider
-        if self.summary_model:
-            chat_kwargs["model"] = self.summary_model
-
-        raw = await llm_adapter.chat(**chat_kwargs)
+        # 全局模型统一：摘要/压缩统一走全局主模型（不再有独立摘要模型配置）
+        raw = await llm_adapter.chat(
+            messages=llm_payload,
+            temperature=SUMMARY_TEMPERATURE,
+            max_tokens=max_tokens,
+            route_hint=RouteHint.CHAT,
+        )
         return raw.get("content", "") if isinstance(raw, dict) else str(raw)
 
     async def _summarize(self, messages: list[dict], existing_summary: str | None = None) -> str:

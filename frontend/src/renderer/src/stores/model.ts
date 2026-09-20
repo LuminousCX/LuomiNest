@@ -461,10 +461,6 @@ interface RawModelConfig {
   compression_ratio?: number
   llmCompressEnabled?: boolean
   llm_compress_enabled?: boolean
-  summaryModel?: string
-  summary_model?: string
-  summaryProvider?: string
-  summary_provider?: string
 }
 
 /** 各引擎默认模型（模型 ID，非用户可见文案） */
@@ -894,8 +890,6 @@ export const useModelStore = defineStore('model', () => {
           compressionThreshold: config.compressionThreshold ?? config.compression_threshold ?? 0.70,
           compressionRatio: config.compressionRatio ?? config.compression_ratio ?? 40,
           llmCompressEnabled: config.llmCompressEnabled ?? config.llm_compress_enabled ?? false,
-          summaryModel: config.summaryModel || config.summary_model || '',
-          summaryProvider: config.summaryProvider || config.summary_provider || '',
         }
       }
     } catch {
@@ -934,8 +928,6 @@ export const useModelStore = defineStore('model', () => {
       if (config.compressionThreshold !== undefined) body.compressionThreshold = config.compressionThreshold
       if (config.compressionRatio !== undefined) body.compressionRatio = config.compressionRatio
       if (config.llmCompressEnabled !== undefined) body.llmCompressEnabled = config.llmCompressEnabled
-      if (config.summaryModel !== undefined) body.summaryModel = config.summaryModel
-      if (config.summaryProvider !== undefined) body.summaryProvider = config.summaryProvider
 
       try {
         await apiPatch('/models/config', body)

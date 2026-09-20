@@ -751,6 +751,13 @@
     "inherit": "继承",
     "resetToInherit": "重置为继承主 Agent",
     "connectionConfig": "连接配置",
+    "mainAgentBannerTitle": "智能体身份：由【{name}】接管",
+    "mainAgentBannerDesc": "该平台的所有消息与伴侣行为均由主 Agent 统一处理，名称、头像与人格设定直接同步自【设置 - 主智能体】。无需在每个平台单独配置，保持多平台人格统一。",
+    "platformTipTitle": "对接提示与防封建议",
+    "minecraftTip": "我的世界伴侣指南：伴侣实体将自动加入单人局域网（开启对局域网开放并填入端口）或多人服务器。实体名称与对话人设统一继承主 Agent。支持具身动作控制、环境遥测感知与截屏多模态分析。",
+    "qqOnebotTip": "QQ (NapCat / OneBot) 对接与防封提示：推荐使用 NapCatQQ 或 OneBot v11 协议端。配置 NapCat 反向 WebSocket 指向 ws://127.0.0.1:8080/ws。内置防风控机制（打字延迟、状态上报、速率保护）。",
+    "wechatPersonalTip": "微信个人号 (GeweChat) 对接与防封提示：通过 GeweChat (iPad 协议网关) 接入。保存后可在管理菜单点击获取登录二维码，手机扫码即可登录。已启用自然输入模拟与滑动窗口频率保护以防风控。",
+    "discordTip": "Discord Bot 对接提示：在 Discord 开发者后台创建 Bot，获取 Token 并务必在 Bot 设置中开启 'Message Content Intent' 权限，机器人回复自动继承主 Agent 人设。",
     "errorLabel": "错误信息",
     "saveConfig": "保存配置",
     "log": {
@@ -796,7 +803,8 @@
       "updateFailed": "更新失败：{msg}",
       "createConversationFailed": "创建对话失败：{msg}",
       "unknownError": "未知错误"
-    }
+    },
+    "globalModelHint": "模型跟随全局设置（设置 → 模型设置），所有平台统一使用全局快速响应模型；下方仅可为本平台自定义人格提示词。"
   },
   "browser": {
     "captchaBanner": "检测到人机验证页面，请在下方完成验证后继续浏览",

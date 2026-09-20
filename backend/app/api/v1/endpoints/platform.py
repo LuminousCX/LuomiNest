@@ -102,11 +102,10 @@ class PlatformMessageResponse(BaseModel):
 
 
 class PlatformModelConfigUpdate(BaseModel):
-    provider: str | None = None
-    model: str | None = None
+    # 全局模型统一：平台实例仅支持人设（system_prompt）覆盖，
+    # 主 Agent 设置支持名称与人设（name/system_prompt/color/avatar）
+    name: str | None = None
     system_prompt: str | None = None
-    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
-    max_tokens: int | None = Field(default=None, ge=1, le=128_000)
     color: str | None = None
     avatar: str | None = None
 
@@ -502,7 +501,7 @@ async def get_platform_model_config(
     instance_id: str,
     adapter=Depends(get_llm_adapter),
 ):
-    """获取平台实例的模型配置（含主 Agent 默认值回退信息）。"""
+    """获取平台实例生效的模型配置（全局模型统一：模型一律跟随全局主模型，仅人设可覆盖）。"""
     logger.info(f"[API] GET /platforms/instances/{instance_id}/model_config")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
@@ -513,6 +512,8 @@ async def get_platform_model_config(
 
     main_config = load_luominest_main_agent_config()
     main_provider, main_model = resolve_main_agent_provider_model()
+    from app.infrastructure.database.facades.model_selection import get_global_generation_defaults
+    global_temperature, global_max_tokens = get_global_generation_defaults()
 
     main_provider_name = main_provider
     main_supports_vision = False
@@ -524,19 +525,8 @@ async def get_platform_model_config(
         logger.warning(f"[PlatformAPI] Failed to resolve main provider info: {e}")
 
     inst_cfg = inst.config.get("model_config", {}) or {}
-    instance_provider = inst_cfg.get("provider", "")
-    instance_model = inst_cfg.get("model", "")
-
-    instance_provider_name = instance_provider
-    instance_supports_vision = False
-    is_overridden = bool(instance_provider or instance_model)
-    if is_overridden:
-        try:
-            provider_inst = adapter.get_provider(instance_provider or main_provider)
-            instance_provider_name = getattr(provider_inst, "display_name", None) or (instance_provider or main_provider)
-            instance_supports_vision = provider_inst.supports_multimodal(instance_model or main_model)
-        except Exception as e:
-            logger.warning(f"[PlatformAPI] Failed to resolve instance provider info: {e}")
+    instance_system_prompt = inst_cfg.get("system_prompt", "")
+    is_overridden = bool(instance_system_prompt)
 
     main_agent_dict = {
         "provider": main_provider,
@@ -547,28 +537,19 @@ async def get_platform_model_config(
         "supportsMultimodal": main_supports_vision,
         "system_prompt": main_config.get("system_prompt", ""),
         "systemPrompt": main_config.get("system_prompt", ""),
-        "temperature": main_config.get("temperature", 0.7),
-        "max_tokens": main_config.get("max_tokens", 4096),
-        "maxTokens": main_config.get("max_tokens", 4096),
-    }
-
-    effective_dict = {
-        "provider": instance_provider or main_provider,
-        "provider_name": instance_provider_name if is_overridden else main_provider_name,
-        "providerName": instance_provider_name if is_overridden else main_provider_name,
-        "model": instance_model or main_model,
-        "supports_multimodal": instance_supports_vision if is_overridden else main_supports_vision,
-        "supportsMultimodal": instance_supports_vision if is_overridden else main_supports_vision,
+        "temperature": float(global_temperature),
+        "max_tokens": int(global_max_tokens),
+        "maxTokens": int(global_max_tokens),
     }
 
     instance_cfg_dict = {
-        "provider": instance_provider,
-        "model": instance_model,
-        "system_prompt": inst_cfg.get("system_prompt", ""),
-        "systemPrompt": inst_cfg.get("system_prompt", ""),
-        "temperature": inst_cfg.get("temperature"),
-        "max_tokens": inst_cfg.get("max_tokens"),
-        "maxTokens": inst_cfg.get("max_tokens"),
+        "provider": "",
+        "model": "",
+        "system_prompt": instance_system_prompt,
+        "systemPrompt": instance_system_prompt,
+        "temperature": None,
+        "max_tokens": None,
+        "maxTokens": None,
     }
 
     return {
@@ -582,7 +563,7 @@ async def get_platform_model_config(
             "instanceConfig": instance_cfg_dict,
             "main_agent": main_agent_dict,
             "mainAgent": main_agent_dict,
-            "effective": effective_dict,
+            "effective": main_agent_dict,
             "category": inst.adapter_type,
         },
     }
@@ -594,18 +575,25 @@ async def update_platform_model_config(
     request: PlatformModelConfigUpdate,
     platforms_store=Depends(get_platforms_store),
 ):
-    """更新平台实例的模型配置（空值表示继承主 Agent）。"""
+    """更新平台实例的模型配置。
+
+    全局模型统一后仅支持 system_prompt（平台人设）覆盖；
+    请求中的 provider/model/temperature/max_tokens 一律忽略，
+    并顺带清除历史遗留的实例级模型覆盖。
+    """
     logger.info(f"[API] PATCH /platforms/instances/{instance_id}/model_config")
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
 
     model_cfg = inst.config.get("model_config", {}) or {}
     updates = request.model_dump(exclude_unset=True)
 
-    for key, val in updates.items():
-        if val is None:
-            model_cfg.pop(key, None)
+    for key in ("provider", "model", "temperature", "max_tokens"):
+        model_cfg.pop(key, None)
+    if "system_prompt" in updates:
+        if updates["system_prompt"] is None:
+            model_cfg.pop("system_prompt", None)
         else:
-            model_cfg[key] = val
+            model_cfg["system_prompt"] = updates["system_prompt"]
 
     inst.config["model_config"] = model_cfg
     inst.updated_at = utc_now()
@@ -618,9 +606,9 @@ async def update_platform_model_config(
 
     platform_logger.log(
         instance_id, "info", "model_config_updated",
-        f"模型配置已更新: {model_cfg}",
+        f"模型配置已更新（仅人设可覆盖，模型跟随全局）: {model_cfg}",
         adapter_type=inst.adapter_type,
-        details={"model_config": model_cfg, "is_overridden": bool(model_cfg.get("provider") or model_cfg.get("model"))},
+        details={"model_config": model_cfg, "is_overridden": bool(model_cfg.get("system_prompt"))},
     )
 
     return ok({"updated": True, "model_config": model_cfg})
@@ -897,6 +885,7 @@ async def get_main_agent_info(
     return {
         "error": None,
         "data": {
+            "name": config.get("name", "主Agent"),
             "provider": provider,
             "provider_name": provider_name,
             "model": model,
@@ -915,47 +904,23 @@ async def update_main_agent_info(
     request: PlatformModelConfigUpdate,
     adapter=Depends(get_llm_adapter),
 ):
-    """更新主 Agent 配置。
+    """更新主 Agent 人设（name/system_prompt/color/avatar）。
 
-    2026-08 全局模型统一后：
-    - provider/model 写入全局主模型配置（config_items['model_config']），
-      与设置页"模型设置"、工作台模型下拉共用同一权威源；
-    - temperature/max_tokens 写入全局生成参数；
-    - system_prompt/color/avatar 保存到主 Agent 人设配置。
-
-    前端可在此切换主 Agent 使用的供应商/模型，平台消息路由会自动复用新配置。
+    全局模型统一后本端点只负责人设：模型与生成参数的唯一配置入口是
+    设置页"模型设置"（PATCH /models/config），此处不再接受模型级写入。
     """
     from app.runtime.platform.main_agent_config import (
         load_luominest_main_agent_config,
         save_luominest_main_agent_config,
     )
-    from app.api.v1.endpoints.model import (
-        apply_global_model_selection,
-        apply_global_generation_defaults,
-    )
 
     update_data = request.model_dump(exclude_unset=True)
     updated_fields: list[str] = []
 
-    # 1) provider/model → 全局主模型（唯一权威源）
-    global_fields = apply_global_model_selection(
-        adapter,
-        provider=update_data.get("provider"),
-        model=update_data.get("model"),
-    )
-    updated_fields.extend(global_fields)
-
-    # 2) temperature/max_tokens → 全局生成参数
-    gen_fields = apply_global_generation_defaults(
-        temperature=update_data.get("temperature"),
-        max_tokens=update_data.get("max_tokens"),
-    )
-    updated_fields.extend(gen_fields)
-
-    # 3) system_prompt/color/avatar → 主 Agent 人设配置
+    # name/system_prompt/color/avatar → 主 Agent 人设与名称配置
     current = load_luominest_main_agent_config()
     persona_changed = False
-    for key in ("system_prompt", "color", "avatar"):
+    for key in ("name", "system_prompt", "color", "avatar"):
         if key in update_data and update_data[key] is not None:
             new_val = update_data[key]
             if key == "avatar":

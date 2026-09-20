@@ -274,10 +274,6 @@ export interface ModelConfig {
   compressionRatio?: number
   /** 是否启用 LLM 摘要压缩 */
   llmCompressEnabled?: boolean
-  /** 摘要模型 */
-  summaryModel?: string
-  /** 摘要供应商 */
-  summaryProvider?: string
 }
 
 export interface Skill {
@@ -571,12 +567,9 @@ export interface PlatformInstance {
   modelConfig?: PlatformModelConfig
 }
 
+/** 平台实例模型配置（全局模型统一后仅人设可覆盖，模型一律跟随全局主模型） */
 export interface PlatformModelConfig {
-  provider?: string
-  model?: string
   systemPrompt?: string
-  temperature?: number | null
-  maxTokens?: number | null
 }
 
 export interface PlatformModelConfigResponse {
@@ -663,6 +656,7 @@ export interface PlatformLogSummary {
 }
 
 export interface MainAgentInfo {
+  name?: string
   provider: string
   providerName: string
   model: string

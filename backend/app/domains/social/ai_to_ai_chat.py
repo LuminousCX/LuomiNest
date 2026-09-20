@@ -40,8 +40,11 @@ class AIToAIChat:
 
                 conv_messages = [{"role": "system", "content": system_prompt}] + conversation[-6:]
 
-                provider = current_speaker.get("provider") or llm_adapter.default_provider
-                model = current_speaker.get("model")
+                # 全局模型统一：AI 互聊不再按说话方 agent 选模型，统一走全局主模型
+                from app.infrastructure.database.facades.model_selection import resolve_global_provider_model
+                provider, model = resolve_global_provider_model()
+                if not provider:
+                    provider = llm_adapter.default_provider
 
                 result = await llm_adapter.chat(
                     messages=conv_messages,

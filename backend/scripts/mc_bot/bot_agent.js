@@ -27,7 +27,7 @@ function getArg(key, def) {
 const gameHost = getArg('--host', '127.0.0.1')
 const gamePort = parseInt(getArg('--port', '56587'), 10)
 const wsPort = parseInt(getArg('--ws-port', '8081'), 10)
-const botName = getArg('--name', 'LuomiNest')
+const botName = getArg('--name', '主Agent')
 const mcVersion = getArg('--version', '1.21.1')
 
 console.log(`[MC-Bot] 准备启动虚拟玩家伴侣: ${botName}`)

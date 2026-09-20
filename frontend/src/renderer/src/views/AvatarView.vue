@@ -689,27 +689,15 @@ async function handleChatSend() {
   isChatStreaming.value = true
   stopAvatarChat()
 
-  const resolved = modelStore.resolveModel
-
   const targetConvId = chatStore.agentCurrentConvId[MAIN_AGENT_ID] || undefined
 
   const options: {
     agentId: string
-    model?: string
-    provider?: string
-    temperature?: number
-    maxTokens?: number
-    topP?: number
     targetConvId?: string
     onChunk: (chunk: ChatStreamChunk) => void
   } = {
     agentId: MAIN_AGENT_ID,
-    // 2026-08 全局模型统一：皮套工坊使用全局主模型与全局生成参数
-    model: resolved?.model || undefined,
-    provider: resolved?.provider || undefined,
-    temperature: modelStore.modelConfig.defaultTemperature,
-    maxTokens: modelStore.modelConfig.defaultMaxTokens,
-    topP: modelStore.modelConfig.defaultTopP,
+    // 全局模型统一：皮套工坊对话由后端按设置页全局主模型解析，前端不再携带模型参数
     targetConvId,
     onChunk: (chunk: ChatStreamChunk) => {
       if (chunk.done) {

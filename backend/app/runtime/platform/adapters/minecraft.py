@@ -153,7 +153,7 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
         self._ws_port: int = 8081
         self._game_host: str = "127.0.0.1"
         self._game_port: int = 56587
-        self._bot_name: str = "LuomiNest"
+        self._bot_name: str = "主Agent"
         self._message_format: str = "tellraw"
         self._auto_spawn_bot: bool = True
         self._bot_process: Any = None
@@ -178,7 +178,13 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
 
         self._ws_host = config.get("ws_host", "0.0.0.0")
         self._ws_port = int(config.get("ws_port", 8081))
-        self._bot_name = config.get("bot_name", "LuomiNest")
+
+        # 优先使用显式指定的 bot_name，若未指定则统一继承设置里的主 Agent 名称
+        from app.runtime.platform.main_agent_config import load_luominest_main_agent_config
+        main_agent_cfg = load_luominest_main_agent_config()
+        configured_bot_name = config.get("bot_name")
+        self._bot_name = str(configured_bot_name or main_agent_cfg.get("name") or "主Agent").strip()
+
         self._message_format = config.get("message_format", "tellraw")
 
         auto_bot_val = config.get("auto_spawn_bot", True)

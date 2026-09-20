@@ -173,8 +173,6 @@ export const useWorkflowStore = defineStore('workflow', () => {
   const submitWorkflow = async (
     message: string,
     options?: {
-      provider?: string
-      model?: string
       mode?: WorkflowMode
       conversationId?: string
       onPhaseChange?: (phase: WorkflowPhase) => void
@@ -201,8 +199,7 @@ export const useWorkflowStore = defineStore('workflow', () => {
       '/workflow/submit/stream',
       {
         message,
-        provider: options?.provider,
-        model: options?.model,
+        // 全局模型统一：引擎按 REASONER hint 路由到设置页推理模型，前端不再携带 provider/model
         mode: options?.mode ?? 'standard',
         conversation_id: options?.conversationId,
       },

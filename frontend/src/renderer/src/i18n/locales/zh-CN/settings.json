@@ -416,8 +416,11 @@
     "mainAgent": {
       "loading": "正在加载主智能体配置...",
       "personaTitle": "人格与系统提示",
+      "nameLabel": "主 Agent 名称",
+      "namePlaceholder": "例如：主Agent、小洛、Luomi 等",
+      "nameHint": "该名称将直接同步作为各对接平台（Minecraft 实体名称与聊天前缀、QQ、微信、Discord 等）及工作台对话的统一智能体身份名称",
       "systemPrompt": "系统提示词",
-      "promptPlaceholder": "主智能体的系统提示词，决定其角色、人格与行为准则。例如：你是 LuomiNest 的主控智能体，负责与用户交互、调度子 Agent、管理记忆与工具...",
+      "promptPlaceholder": "主智能体的系统提示词，决定其角色、人格与行为准则。例如：你是主控智能体，负责与用户交互、管理记忆与工具...",
       "promptHint": "提示词会作为系统消息注入到主 Agent 的每次对话开头，影响其角色定位与行为方式",
       "avatarTitle": "主 Agent 头像",
       "modeColor": "颜色",
@@ -469,12 +472,12 @@
     },
     "tiles": {
       "main": {
-        "label": "主模型",
-        "tag": "快速响应"
+        "label": "快速响应模型",
+        "tag": "主模型"
       },
       "reasoner": {
         "label": "推理模型",
-        "tag": "Agent"
+        "tag": "复杂任务"
       },
       "context": {
         "label": "高级设置",
@@ -512,19 +515,19 @@
       "fetchFailed": "获取模型列表失败：{message}"
     },
     "main": {
-      "title": "主模型",
+      "title": "快速响应模型（主模型）",
       "tag": "快速响应",
-      "info": "主模型用于日常对话与快速响应场景。当推理模型未配置时，主模型也将承担复杂推理任务。",
-      "infoTip": "优先选择响应速度快、延迟低的模型，如 GPT-4o-mini、Claude Haiku 等。",
+      "info": "主模型追求快速响应，符合陪伴的本性：对话页、桌宠、皮套工坊以及 QQ / 微信 / Minecraft 等所有平台对接都使用它。用户发一句即回一句，也可调用工具回答；回复前会自动查看记忆。",
+      "infoTip": "优先选择响应速度快、延迟低的模型，如 GPT-4o-mini、Claude Haiku、DeepSeek-V3 等非思考型模型。",
       "noProviders": "暂无供应商，请先点击左侧\"添加供应商\"",
       "savedToast": "主模型配置已保存",
       "saveErrorToast": "主模型配置保存失败"
     },
     "reasoner": {
       "title": "推理模型",
-      "tag": "复杂 Agent 任务",
-      "info": "推理模型用于复杂逻辑推理、数学计算、代码分析等需要深度思考的场景。当主模型未配置时，推理模型将作为默认模型使用。",
-      "infoTip": "推荐使用 DeepSeek-R1、Claude Opus、o1 等具备推理能力的模型。",
+      "tag": "复杂任务",
+      "info": "推理模型用于主 Agent 工作台\"专业模式\"的长任务与复杂任务：生成执行计划、综合子任务结果、深度推理分析。普通陪伴对话不会用到它。",
+      "infoTip": "推荐使用 DeepSeek-R1、Claude Opus、o1 等具备推理能力的模型。未配置时专业模式自动退回主模型。",
       "reasoningEffort": "推理强度",
       "effortLow": "低",
       "effortMedium": "中",
@@ -553,11 +556,6 @@
       "ratioHint": "摘要后保留的历史上下文占比，数值越低压缩越激进；100% 表示不压缩",
       "enableLlmCompress": "启用 LLM 摘要压缩",
       "llmCompressHint": "开启后，超长对话将使用 LLM 生成摘要以压缩上下文",
-      "summaryProvider": "摘要供应商",
-      "useMainProvider": "使用主模型供应商",
-      "summaryModel": "摘要模型",
-      "useMainModel": "使用主模型",
-      "noProviderModels": "该供应商暂无模型列表",
       "saveGlobal": "保存全局配置",
       "savedToast": "上下文配置已保存",
       "saveErrorToast": "上下文配置保存失败",

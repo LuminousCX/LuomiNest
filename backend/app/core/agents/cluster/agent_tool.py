@@ -1,7 +1,7 @@
 """LuomiNest Agent 间调用工具（OpenAI 兼容 API 自回调模式）。
 
 参考 综合调查.md §5.1 与 claude-code-src 的 AgentTool 设计：
-Agent A 通过 HTTP 回调本服务的 `/chat/completions` 接口，将 `agent_id` 作为 model 参数，
+Agent A 通过 HTTP 回调本服务的 `/chat/completions` 接口，通过 `agent_id` 字段指定目标 Agent（模型统一走全局主模型），
 服务端路由到 Agent B 的配置执行其对话流程。
 
 核心机制：

@@ -726,6 +726,13 @@
     "inherit": "継承",
     "resetToInherit": "メイン Agent の継承にリセット",
     "connectionConfig": "接続設定",
+    "mainAgentBannerTitle": "エージェントID：【{name}】が管理",
+    "mainAgentBannerDesc": "このプラットフォームのメッセージとコンパニオン動作はすべてメイン Agent が処理します。名称・アバター・人格は【設定 - メイン Agent】から直接同期されます。",
+    "platformTipTitle": "連携のヒントと保護対策",
+    "minecraftTip": "Minecraft コンパニオンガイド: LAN（LANに公開）またはマルチサーバーに自動参加します。名前と人格はメイン Agent を継承します。具身アクション、テレメトリ、画面キャプチャをサポート。",
+    "qqOnebotTip": "QQ (NapCat / OneBot) ヒント: NapCatQQ または OneBot v11 推奨。逆方向 WebSocket を ws://127.0.0.1:8080/ws に設定。入力遅延・レート制限内蔵。",
+    "wechatPersonalTip": "WeChat 個人号 (GeweChat) ヒント: GeweChat ゲートウェイ経由で接続。管理メニューでQRコードを表示しログイン。BAN防止遅延と頻度制御が有効。",
+    "discordTip": "Discord Bot ヒント: Discord Developer Portal で Bot を作成し、'Message Content Intent' を有効にして Token を入力してください。",
     "errorLabel": "エラー情報",
     "saveConfig": "設定を保存",
     "log": {
@@ -771,7 +778,8 @@
       "updateFailed": "更新に失敗しました：{msg}",
       "createConversationFailed": "会話の作成に失敗しました：{msg}",
       "unknownError": "不明なエラー"
-    }
+    },
+    "globalModelHint": "モデルはグローバル設定（設定 → モデル設定）に従います。すべてのプラットフォームはグローバル高速応答モデルを使用し、以下ではこのプラットフォーム専用のペルソナプロンプトのみ設定できます。"
   },
   "browser": {
     "captchaBanner": "CAPTCHA（人間認証）ページを検出しました。認証を完了すると閲覧を続けられます",

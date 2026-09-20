@@ -416,8 +416,11 @@
     "mainAgent": {
       "loading": "Loading main agent configuration...",
       "personaTitle": "Persona & System Prompt",
+      "nameLabel": "Main Agent Name",
+      "namePlaceholder": "e.g., Main Agent, Luomi, etc.",
+      "nameHint": "This name synchronizes across all integrated platforms (Minecraft in-game entity name and chat prefix, QQ, WeChat, Discord, etc.) and workbench conversations",
       "systemPrompt": "System Prompt",
-      "promptPlaceholder": "The main agent's system prompt, which determines its role, persona, and code of conduct. Example: You are the master agent of LuomiNest, responsible for interacting with users, dispatching sub-Agents, and managing memory and tools...",
+      "promptPlaceholder": "The main agent's system prompt, which determines its role, persona, and code of conduct. Example: You are the main agent, responsible for interacting with users, managing memory and tools...",
       "promptHint": "The prompt is injected as a system message at the beginning of every main Agent conversation, shaping its role and behavior",
       "avatarTitle": "Main Agent Avatar",
       "modeColor": "Color",
@@ -469,12 +472,12 @@
     },
     "tiles": {
       "main": {
-        "label": "Main Model",
-        "tag": "Fast response"
+        "label": "Fast Response Model",
+        "tag": "Main model"
       },
       "reasoner": {
         "label": "Reasoning Model",
-        "tag": "Agent"
+        "tag": "Complex tasks"
       },
       "context": {
         "label": "Advanced Settings",
@@ -512,19 +515,19 @@
       "fetchFailed": "Failed to fetch the model list: {message}"
     },
     "main": {
-      "title": "Main Model",
+      "title": "Fast Response Model (Main)",
       "tag": "Fast response",
-      "info": "The main model handles everyday conversation and fast-response scenarios. When the reasoning model is not configured, the main model also takes on complex reasoning tasks.",
-      "infoTip": "Prefer models with fast responses and low latency, such as GPT-4o-mini and Claude Haiku.",
+      "info": "The main model prioritizes fast responses to stay companionable: the chat page, desktop pet, avatar workshop, and all platform integrations (QQ / WeChat / Minecraft etc.) use it. It replies instantly, can call tools, and automatically consults memory before replying.",
+      "infoTip": "Prefer fast, low-latency non-thinking models such as GPT-4o-mini, Claude Haiku, or DeepSeek-V3.",
       "noProviders": "No providers yet. Click \"Add Provider\" on the left first",
       "savedToast": "Main model configuration saved",
       "saveErrorToast": "Failed to save main model configuration"
     },
     "reasoner": {
       "title": "Reasoning Model",
-      "tag": "Complex Agent tasks",
-      "info": "The reasoning model is used for scenarios that require deep thinking, such as complex logical reasoning, math, and code analysis. When the main model is not configured, the reasoning model is used as the default model.",
-      "infoTip": "Recommended models with reasoning capabilities such as DeepSeek-R1, Claude Opus, and o1.",
+      "tag": "Complex tasks",
+      "info": "The reasoning model powers the main Agent workbench \"Pro mode\" for long and complex tasks: plan generation, subtask synthesis, and deep analysis. Everyday companion chats never use it.",
+      "infoTip": "Recommended models with reasoning capabilities such as DeepSeek-R1, Claude Opus, and o1. Pro mode falls back to the main model when unset.",
       "reasoningEffort": "Reasoning Effort",
       "effortLow": "Low",
       "effortMedium": "Medium",
@@ -553,11 +556,6 @@
       "ratioHint": "The proportion of history kept after summarization; lower values compress more aggressively; 100% means no compression",
       "enableLlmCompress": "Enable LLM Summary Compression",
       "llmCompressHint": "When enabled, overly long conversations are summarized by an LLM to compress the context",
-      "summaryProvider": "Summary Provider",
-      "useMainProvider": "Use main model provider",
-      "summaryModel": "Summary Model",
-      "useMainModel": "Use main model",
-      "noProviderModels": "This provider has no model list yet",
       "saveGlobal": "Save Global Configuration",
       "savedToast": "Context configuration saved",
       "saveErrorToast": "Failed to save context configuration",

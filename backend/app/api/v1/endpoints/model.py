@@ -65,70 +65,11 @@ def apply_model_config_from_db():
     logger.info(f"[ModelConfig] Applied saved config: provider={saved.get('default_provider')}, model={saved.get('default_model')}")
 
 
-# ── 全局模型选择统一写入助手（2026-08 全局模型统一重构）──
-# 所有"切换主模型"的入口（设置页模型设置 / 工作台模型下拉 / 主智能体面板）
-# 都必须经此助手写入，保证：运行时镜像同步 + 持久化 + 缓存失效，三者原子完成。
-
-def apply_global_model_selection(adapter, provider: str | None = None, model: str | None = None) -> list[str]:
-    """将全局主模型选择应用到运行时镜像并持久化。
-
-    Args:
-        adapter: LLMAdapter 实例（通常为 container.llm_adapter）
-        provider: 新的默认供应商（None 表示不修改）
-        model: 新的默认模型（None 表示不修改）
-
-    Returns:
-        实际更新的字段列表（用于日志/响应）
-    """
-    updated: list[str] = []
-    if provider is not None:
-        adapter.default_provider = provider
-        updated.append("default_provider")
-    if model is not None:
-        settings.LLM_DEFAULT_MODEL = model
-        updated.append("default_model")
-    if not updated:
-        return updated
-
-    existing = _load_model_config()
-    config_to_save = dict(existing) if isinstance(existing, dict) else {}
-    config_to_save["default_provider"] = adapter.default_provider
-    config_to_save["default_model"] = settings.LLM_DEFAULT_MODEL
-    _save_model_config(config_to_save)
-    adapter.apply_reasoner_config(config_to_save)
-    # 切换主模型后失效上下文缓存（与 PATCH /models/config 行为一致）
-    invalidate_context_cache()
-    logger.success(f"[ModelConfig] Global model selection updated: {updated}")
-    return updated
-
-
-def apply_global_generation_defaults(
-    temperature: float | None = None,
-    max_tokens: int | None = None,
-    top_p: float | None = None,
-) -> list[str]:
-    """将全局生成参数（temperature/max_tokens/top_p）应用到运行时并持久化。"""
-    updated: list[str] = []
-    if temperature is not None:
-        settings.LLM_DEFAULT_TEMPERATURE = temperature
-        updated.append("default_temperature")
-    if max_tokens is not None:
-        settings.LLM_DEFAULT_MAX_TOKENS = max_tokens
-        updated.append("default_max_tokens")
-    if top_p is not None:
-        settings.LLM_DEFAULT_TOP_P = top_p
-        updated.append("default_top_p")
-    if not updated:
-        return updated
-
-    existing = _load_model_config()
-    config_to_save = dict(existing) if isinstance(existing, dict) else {}
-    config_to_save["default_temperature"] = settings.LLM_DEFAULT_TEMPERATURE
-    config_to_save["default_max_tokens"] = settings.LLM_DEFAULT_MAX_TOKENS
-    config_to_save["default_top_p"] = settings.LLM_DEFAULT_TOP_P
-    _save_model_config(config_to_save)
-    logger.success(f"[ModelConfig] Global generation defaults updated: {updated}")
-    return updated
+# ── 全局模型选择写入说明（全局模型统一）──
+# 模型的唯一配置入口是设置页"模型设置"（GET/PATCH /models/config）。
+# 对话/平台/工作流等所有 LLM 调用方在生成时经
+# model_selection.resolve_global_provider_model() 解析全局主模型，
+# 推理模型由 llm_adapter.get_reasoner_provider() 提供（RouteHint.REASONER）。
 
 
 class ProviderCreate(BaseModel):
@@ -218,12 +159,11 @@ class ModelConfigUpdate(BaseModel):
     stt_auto_send_delay: int | None = Field(alias="sttAutoSendDelay", default=None)
     stt_engine: str | None = Field(alias="sttEngine", default=None)
     # LLM 上下文窗口与压缩配置
+    # （全局模型统一：摘要/压缩不再有独立模型配置，统一走主模型）
     context_window_size: int | None = Field(alias="contextWindowSize", default=None, ge=0, le=1_000_000)
     compression_threshold: float | None = Field(alias="compressionThreshold", default=None, ge=0.5, le=0.95)
     compression_ratio: int | None = Field(alias="compressionRatio", default=None, ge=1, le=100)
     llm_compress_enabled: bool | None = Field(alias="llmCompressEnabled", default=None)
-    summary_model: str | None = Field(alias="summaryModel", default=None)
-    summary_provider: str | None = Field(alias="summaryProvider", default=None)
 
 
 class ProviderModelResponse(BaseModel):
@@ -720,25 +660,26 @@ async def get_model_config(adapter=Depends(get_llm_adapter)):
         "default_top_p": settings.LLM_DEFAULT_TOP_P,
     }
     # 返回扩展字段（reasoner_*/tts_*/stt_*），从 model_config 读取
+    # （摘要模型字段已随全局模型统一移除：压缩/摘要统一走主模型）
     saved = _load_model_config()
+    saved.pop("summary_model", None)
+    saved.pop("summary_provider", None)
     for field in ["reasoner_provider", "reasoner_model", "reasoner_temperature",
                    "reasoner_max_tokens", "reasoner_effort", "tts_provider",
                    "tts_model", "tts_voice", "tts_speed", "stt_provider",
                    "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay",
                    "stt_engine", "context_window_size", "compression_threshold",
-                   "compression_ratio", "llm_compress_enabled", "summary_model", "summary_provider"]:
+                   "compression_ratio", "llm_compress_enabled"]:
         if field in saved:
             config[field] = saved[field]
     # 上下文配置也可从 settings 读取默认值
-    for field in ["context_window_size", "compression_threshold", "compression_ratio", "llm_compress_enabled", "summary_model", "summary_provider"]:
+    for field in ["context_window_size", "compression_threshold", "compression_ratio", "llm_compress_enabled"]:
         if field not in config:
             settings_key = {
                 "context_window_size": "LLM_CONTEXT_WINDOW_SIZE",
                 "compression_threshold": "LLM_COMPRESSION_THRESHOLD",
                 "compression_ratio": "LLM_COMPRESSION_RATIO",
                 "llm_compress_enabled": "LLM_COMPRESS_ENABLED",
-                "summary_model": "LLM_SUMMARY_MODEL",
-                "summary_provider": "LLM_SUMMARY_PROVIDER",
             }.get(field)
             if settings_key:
                 config[field] = getattr(settings, settings_key)
@@ -810,14 +751,11 @@ async def update_model_config(request: ModelConfigUpdate, adapter=Depends(get_ll
     if request.llm_compress_enabled is not None:
         settings.LLM_COMPRESS_ENABLED = request.llm_compress_enabled
         updated_fields.append("llm_compress_enabled")
-    if request.summary_model is not None:
-        settings.LLM_SUMMARY_MODEL = request.summary_model
-        updated_fields.append("summary_model")
-    if request.summary_provider is not None:
-        settings.LLM_SUMMARY_PROVIDER = request.summary_provider
-        updated_fields.append("summary_provider")
 
     existing_config = _load_model_config()
+    # 摘要模型字段已废弃（全局模型统一：压缩/摘要统一走主模型），顺带清除历史遗留
+    existing_config.pop("summary_model", None)
+    existing_config.pop("summary_provider", None)
     config_to_save = {
         "default_provider": adapter.default_provider,
         "default_model": settings.LLM_DEFAULT_MODEL,
@@ -831,7 +769,7 @@ async def update_model_config(request: ModelConfigUpdate, adapter=Depends(get_ll
                    "tts_model", "tts_voice", "tts_speed", "stt_provider",
                    "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay",
                    "stt_engine", "context_window_size", "compression_threshold",
-                   "compression_ratio", "llm_compress_enabled", "summary_model", "summary_provider"]:
+                   "compression_ratio", "llm_compress_enabled"]:
         val = getattr(request, field, None)
         if val is not None:
             config_to_save[field] = val

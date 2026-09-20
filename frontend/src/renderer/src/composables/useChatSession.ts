@@ -10,7 +10,6 @@
 import { ref, computed } from 'vue'
 import { i18n } from '../i18n'
 import { useChatStore } from '../stores/chat'
-import { useModelStore } from '../stores/model'
 import { useToast } from './useToast'
 import type { ChatModeLevel, WorkflowModeOption } from '../components/workbench/types'
 
@@ -21,7 +20,6 @@ export interface UseChatSessionOptions {
 
 export const useChatSession = (options: UseChatSessionOptions) => {
   const chatStore = useChatStore()
-  const modelStore = useModelStore()
   const toast = useToast()
 
   // —— 输入与 UI 状态 ——
@@ -54,17 +52,9 @@ export const useChatSession = (options: UseChatSessionOptions) => {
     chatMode.value = mode
   }
 
-  // —— 全局生成参数（2026-08 全局模型统一：发送一律使用全局主模型与全局生成参数） ——
-  const resolveSendParams = () => {
-    const resolved = modelStore.resolveModel
-    return {
-      model: resolved?.model || undefined,
-      provider: resolved?.provider || undefined,
-      temperature: modelStore.modelConfig.defaultTemperature,
-      maxTokens: modelStore.modelConfig.defaultMaxTokens,
-      topP: modelStore.modelConfig.defaultTopP,
-    }
-  }
+  // 全局模型统一：前端不再随请求携带 provider/model/生成参数，
+  // 统一由后端按设置页"模型设置"的全局配置解析（主模型快速响应 /
+  // 专业模式推理模型），设置页切换立即对全部对话生效。
 
   return {
     // 输入与 UI 状态
@@ -76,7 +66,5 @@ export const useChatSession = (options: UseChatSessionOptions) => {
     chatModeOptions,
     isWorkflowMode,
     selectChatMode,
-    // 全局生成参数
-    resolveSendParams,
   }
 }

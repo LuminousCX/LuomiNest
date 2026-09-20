@@ -58,14 +58,14 @@ class LuomiNestPlatformRouter:
         return await self._processing_locks.get(session_key)
 
     def _resolve_instance_model(self, instance_id: str) -> tuple[str, str, str, float, int]:
-        """解析平台实例的模型配置，空值回退到全局主模型配置。
+        """解析平台实例生效的模型配置。
 
         返回 (provider, model, system_prompt, temperature, max_tokens)。
 
-        2026-08 全局模型统一后：
-        - provider/model 回退到全局主模型（resolve_main_agent_provider_model 已委托全局）；
-        - temperature/max_tokens 回退到全局生成参数（不再读 main_agent 人设配置）；
-        - system_prompt 仍取主 Agent 人设。
+        全局模型统一后：
+        - provider/model/temperature/max_tokens 一律取全局主模型与全局生成参数
+          （设置→模型设置），平台实例不再支持模型级覆盖；
+        - system_prompt 仍支持实例级覆盖（平台人格），未设置时取主 Agent 人设。
         """
         from app.infrastructure.database.facades.model_selection import get_global_generation_defaults
 
@@ -84,28 +84,15 @@ class LuomiNestPlatformRouter:
             )
 
         inst_cfg = inst.config.get("model_config", {}) or {}
-        provider = inst_cfg.get("provider") or main_provider
-        model = inst_cfg.get("model") or main_model
         system_prompt = inst_cfg.get("system_prompt") or main_config.get("system_prompt", "")
-        temperature = inst_cfg.get("temperature")
-        if temperature is None:
-            temperature = float(global_temperature)
-        else:
-            temperature = float(temperature)
-        max_tokens = inst_cfg.get("max_tokens")
-        if max_tokens is None:
-            max_tokens = int(global_max_tokens)
-        else:
-            max_tokens = int(max_tokens)
 
-        try:
-            provider_inst = llm_adapter.get_provider(provider)
-            model = model or provider_inst.default_model
-        except Exception:
-            provider = main_provider
-            model = main_model
-
-        return provider, model, system_prompt, temperature, max_tokens
+        return (
+            main_provider,
+            main_model,
+            system_prompt,
+            float(global_temperature),
+            int(global_max_tokens),
+        )
 
     async def handle_platform_message(
         self,
@@ -135,6 +122,8 @@ class LuomiNestPlatformRouter:
         )
 
         async with lock:
+            main_config = load_luominest_main_agent_config()
+            agent_name = str(main_config.get("name") or "主Agent").strip()
             try:
                 # /new 命令：为当前平台会话创建新对话（参考 AstrBot 流程）
                 if (message.content or "").strip() == "/new":
@@ -148,14 +137,14 @@ class LuomiNestPlatformRouter:
                             details={"session": session_key, "command": "/new"},
                         )
                         return PlatformResponse(
-                            content="[LuomiNest] 已为您开启新对话，之前的上下文已保留在历史记录中。",
+                            content=f"[{agent_name}] 已为您开启新对话，之前的上下文已保留在历史记录中。",
                             message_type="text",
                         )
                     except Exception as e:
                         # 服务端日志保留完整异常；对平台用户只返回固定提示，不暴露内部错误
                         logger.error(f"[PlatformRouter] /new command failed: {e}", exc_info=True)
                         return PlatformResponse(
-                            content="[LuomiNest] 新建对话失败，请稍后重试",
+                            content=f"[{agent_name}] 新建对话失败，请稍后重试",
                             message_type="text",
                         )
 
@@ -189,7 +178,7 @@ class LuomiNestPlatformRouter:
                     },
                 )
                 return PlatformResponse(
-                    content=f"[LuomiNest] 消息处理失败，请稍后重试",
+                    content=f"[{agent_name}] 消息处理失败，请稍后重试",
                     message_type="text",
                 )
 
@@ -360,8 +349,9 @@ class LuomiNestPlatformRouter:
                 },
             )
             await self._persist_conv(conv_id, conv)
+            agent_name = str(load_luominest_main_agent_config().get("name") or "主Agent").strip()
             return PlatformResponse(
-                content=f"[LuomiNest] 模型调用失败：{e}",
+                content=f"[{agent_name}] 模型调用失败：{e}",
                 message_type="text",
             )
 
@@ -454,8 +444,9 @@ class LuomiNestPlatformRouter:
                 self._save_assistant_message(conv, assistant_text, provider, model)
                 await self._persist_conv(conv_id, conv)
                 increment_message_count(instance_id)
+                agent_name = str(load_luominest_main_agent_config().get("name") or "主Agent").strip()
                 return PlatformResponse(
-                    content=assistant_text or "[LuomiNest] 工具调用后模型响应失败",
+                    content=assistant_text or f"[{agent_name}] 工具调用后模型响应失败",
                     message_type="text",
                     reply_to=message.message_id,
                 )

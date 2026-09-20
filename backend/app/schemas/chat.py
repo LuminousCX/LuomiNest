@@ -88,6 +88,7 @@ class ChatStreamChunk(BaseModel):
 class ConversationCreate(BaseModel):
     title: str | None = None
     agent_id: str | None = None
+    # 遗留字段：全局模型统一后对话不再快照模型，创建时忽略
     model: str | None = None
     provider: str | None = None
     chat_mode: str | None = None

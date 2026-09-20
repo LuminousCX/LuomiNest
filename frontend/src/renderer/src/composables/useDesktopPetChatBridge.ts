@@ -134,18 +134,11 @@ export const useDesktopPetChatBridge = (): void => {
     // 确保 TTS drivers 路由到桌宠 IPC
     updateTtsDriversForDesktopPet()
 
-    const resolved = modelStore.resolveModel
-
     // 方案 B：如果当前没有共享对话，chatStore.sendMessage 会自动创建
     // targetConvId 传 undefined，sendMessage 内部会调用 createConversation
     const options = {
       agentId: MAIN_AGENT_ID,
-      // 2026-08 全局模型统一：桌宠使用全局主模型与全局生成参数
-      model: resolved?.model || undefined,
-      provider: resolved?.provider || undefined,
-      temperature: modelStore.modelConfig.defaultTemperature,
-      maxTokens: modelStore.modelConfig.defaultMaxTokens,
-      topP: modelStore.modelConfig.defaultTopP,
+      // 全局模型统一：桌宠对话由后端按设置页全局主模型解析，前端不再携带模型参数
       chatMode: 'normal' as const,
       targetConvId: getMainAgentConvId() || undefined, // 三端共享的 MAIN_AGENT 对话
       onChunk: (chunk: ChatStreamChunk) => {

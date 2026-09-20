@@ -84,8 +84,6 @@ async def run_workflow_test():
         # 这样测试脚本可以无人值守运行
         async for event in workflow_engine.submit_stream(
             user_message=MOCK_LONG_TASK,
-            provider="deepseek",
-            model="deepseek-chat",
             mode=WorkflowMode.STANDARD,
             skip_confirmation=True,
         ):

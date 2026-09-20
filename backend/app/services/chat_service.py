@@ -24,6 +24,7 @@ from app.core.tools import tool_registry
 from app.core.tools.orchestrator import tool_orchestrator
 from app.core.utils import require_store, sse_data, sse_response, utc_now
 from app.infrastructure.database.conversation_store import conversation_store
+from app.infrastructure.database.facades.model_selection import resolve_global_provider_model
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import LLMResponse, RouteHint
 from app.schemas.chat import ChatStreamChunk
@@ -724,8 +725,23 @@ class ChatService:
         由路由层整形响应/错误码。
         """
         start_time = time.time()
-        resolved_provider = body.provider or adapter.default_provider
-        resolved_model = body.model or adapter.get_provider(resolved_provider).default_model
+        # 全局模型统一：/chat/completions 不再接受请求级 provider/model 覆盖，
+        # 统一走设置页全局主模型（快速响应模型），保证"只能从设置页配置两种模型"
+        try:
+            resolved_provider, resolved_model = resolve_global_provider_model()
+        except Exception as e:
+            logger.warning(f"[ChatService] Global model resolve failed, using adapter defaults: {e}")
+            resolved_provider, resolved_model = "", ""
+        if not resolved_provider:
+            resolved_provider = adapter.default_provider
+            resolved_model = adapter.get_provider(resolved_provider).default_model
+        # 生成参数兜底：请求未显式携带时使用设置页全局默认
+        if body.temperature is None:
+            body.temperature = settings.LLM_DEFAULT_TEMPERATURE
+        if body.max_tokens is None:
+            body.max_tokens = settings.LLM_DEFAULT_MAX_TOKENS
+        if body.top_p is None:
+            body.top_p = settings.LLM_DEFAULT_TOP_P
         request_ts = body.timestamp or time.time()
         logger.info(
             f"[ChatService] POST /chat/completions - "
@@ -888,10 +904,10 @@ class ChatService:
                 if not mid or not await conversation_store.update_message_async(conv_id, mid, last):
                     await self.persist_conv(conv_id, conv)
 
-        # ── 模型解析（2026-08 全局模型统一）──
+        # ── 模型解析（全局模型统一）──
         # 专业模式（standard）路由到推理模型（设置→模型设置→推理模型）；
         # 推理模型不可用时退化为主模型，并通过 notice 通知前端（右上角 toast）。
-        # 其余情况使用主模型解析链：请求级显式指定 → 对话级快照 → 全局默认。
+        # 其余情况一律使用全局主模型（快速响应模型），不再读请求级/对话级快照覆盖。
         chat_mode_for_route = (
             conv.get("chat_mode") or getattr(request, "chat_mode", None) or "normal"
         )
@@ -907,7 +923,7 @@ class ChatService:
                 r_provider_inst = adapter.get_provider(r_provider)
                 resolved_provider = r_provider
                 resolved_model = r_model or r_provider_inst.default_model
-                # 推理模型自有的生成参数优先（未配置则沿用请求/全局默认）
+                # 推理模型自有的生成参数优先（未配置则沿用全局默认）
                 if r_temp is not None:
                     request.temperature = r_temp
                 if r_maxtok is not None:
@@ -921,13 +937,24 @@ class ChatService:
                 reasoner_cfg = None
 
         if not reasoner_cfg:
-            resolved_provider = (
-                request.provider or conv.get("provider") or adapter.default_provider
-            )
-            resolved_model = (
-                request.model or conv.get("model")
-                or adapter.get_provider(resolved_provider).default_model
-            )
+            # 全局主模型：走权威解析门面（含 DB 回退链）；
+            # 门面异常（如测试环境无存储）时退回注入的 adapter 默认值
+            try:
+                resolved_provider, resolved_model = resolve_global_provider_model()
+            except Exception as e:
+                logger.warning(f"[ChatService] Global model resolve failed, using adapter defaults: {e}")
+                resolved_provider, resolved_model = "", ""
+            if not resolved_provider:
+                resolved_provider = adapter.default_provider
+                resolved_model = adapter.get_provider(resolved_provider).default_model
+
+        # 生成参数兜底：请求未显式携带时使用设置页全局默认（主模型参数）
+        if request.temperature is None:
+            request.temperature = settings.LLM_DEFAULT_TEMPERATURE
+        if request.max_tokens is None:
+            request.max_tokens = settings.LLM_DEFAULT_MAX_TOKENS
+        if request.top_p is None:
+            request.top_p = settings.LLM_DEFAULT_TOP_P
 
         user_query = self._context.get_user_query(conv["messages"])
         system_prompt = self._context.build_system_prompt(conv.get("agent_id"), user_context=user_query)
@@ -1052,8 +1079,14 @@ class ChatService:
     async def compress_conversation(self, conv_id: str, conv: dict, adapter) -> dict:
         """手动压缩对话上下文，返回 {"tokens_before", "tokens_after"}。"""
         agent_id = await self.resolve_agent_id(conv)
-        resolved_provider = conv.get("provider") or adapter.default_provider
-        resolved_model = conv.get("model") or adapter.get_provider(resolved_provider).default_model
+        try:
+            resolved_provider, resolved_model = resolve_global_provider_model()
+        except Exception as e:
+            logger.warning(f"[ChatService] Global model resolve failed, using adapter defaults: {e}")
+            resolved_provider, resolved_model = "", ""
+        if not resolved_provider:
+            resolved_provider = adapter.default_provider
+            resolved_model = adapter.get_provider(resolved_provider).default_model
 
         # 构建完整消息列表
         user_query = self._context.get_user_query(conv.get("messages", []))

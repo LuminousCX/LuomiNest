@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    container_name: luominest-napcat
+    restart: always
+    environment:
+      - ACCOUNT= # 你的 QQ 账号（也可在首次扫码登录后自动识别保存）
+      - HTTP_ENABLE=false
+      - WS_ENABLE=false
+      - REVERSE_WS_ENABLE=true
+      - REVERSE_WS_URL=ws://host.docker.internal:8080/ws/qq # LuomiNest QQ 适配器反向 WS 监听端点
+      - REVERSE_WS_TOKEN= # 若在 LuomiNest 中设置了通信密钥(access_token)，请在此填入相同字符串
+      - NAPCAT_GID=0
+      - NAPCAT_UID=0
+    volumes:
+      - ./config:/app/napcat/config
+      - ./data:/app/napcat/data
+      - ./logs:/app/napcat/logs
+    ports:
+      - "6099:6099" # NapCat WebUI 控制台端口 (访问 http://localhost:6099 网页扫码与配置)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

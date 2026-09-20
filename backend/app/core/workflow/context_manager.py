@@ -189,19 +189,19 @@ class WorkflowContextManager:
         try:
             from app.runtime.provider.llm.adapter import llm_adapter
 
-            actual_provider = provider or llm_adapter.default_provider
-            if model is None:
-                provider_obj = llm_adapter.get_provider(actual_provider)
-                model = provider_obj.default_model if provider_obj else ""
+            # 路由：外部未显式指定 provider 时不传 provider_name，交给 REASONER hint
+            # 按设置页推理模型路由（未配置时回退主模型）
+            chat_kwargs: dict = {
+                "messages": summary_prompt,
+                "temperature": 0.3,
+                "max_tokens": HISTORY_SUMMARY_MAX_TOKENS,
+                "route_hint": RouteHint.REASONER,
+            }
+            if provider:
+                chat_kwargs["provider_name"] = provider
+                chat_kwargs["model"] = model or llm_adapter.get_provider(provider).default_model
 
-            result = await llm_adapter.chat(
-                messages=summary_prompt,
-                provider_name=actual_provider,
-                model=model,
-                temperature=0.3,
-                max_tokens=HISTORY_SUMMARY_MAX_TOKENS,
-                route_hint=RouteHint.REASONER,
-            )
+            result = await llm_adapter.chat(**chat_kwargs)
 
             # dict/str 返回值文本提取统一走 core.utils.extract_llm_text
             summary_content = extract_llm_text(result)

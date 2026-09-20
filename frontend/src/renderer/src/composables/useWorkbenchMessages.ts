@@ -10,7 +10,6 @@ import { ref, computed, watch, nextTick } from 'vue'
 import type { Ref } from 'vue'
 import { i18n } from '../i18n'
 import { useChatStore } from '../stores/chat'
-import { useModelStore } from '../stores/model'
 import { useWorkflowStore } from '../stores/workflow'
 import { useStatsStore } from '../stores/stats'
 import { useTaskStreamStore } from '../stores/taskStream'
@@ -46,11 +45,6 @@ const parseInterceptionCommand = (text: string): string => {
 /** 发送消息选项（chatStore.sendMessage 的 options 子集） */
 interface WorkbenchSendMessageOptions {
   agentId: string
-  model?: string
-  provider?: string
-  temperature: number
-  maxTokens: number
-  topP: number
   chatMode: ChatModeLevel
   skillIds?: string[]
   onChunk: (chunk: ChatStreamChunk) => void
@@ -86,7 +80,6 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
   } = options
 
   const chatStore = useChatStore()
-  const modelStore = useModelStore()
   const workflowStore = useWorkflowStore()
   const statsStore = useStatsStore()
   const taskStreamStore = useTaskStreamStore()
@@ -101,7 +94,6 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     chatModeOptions: CHAT_MODE_OPTIONS,
     isWorkflowMode,
     selectChatMode,
-    resolveSendParams,
   } = useChatSession({
     getActiveConvId: () => chatStore.currentConvId,
   })
@@ -268,10 +260,8 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     inputAreaRef.value?.resetTextareaHeight()
     statsStore.recordPrompt(content)
 
-    const resolved = modelStore.resolveModel
-
     if (isWorkflowMode.value) {
-      await submitWorkflowTask(content, resolved)
+      await submitWorkflowTask(content)
       return
     }
 
@@ -280,7 +270,6 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
 
     const sendOptions: WorkbenchSendMessageOptions = {
       agentId,
-      ...resolveSendParams(),
       chatMode: chatMode.value,
       skillIds: selectedSkillIds.value,
       onChunk: createChunkHandler(false),
@@ -298,10 +287,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     scrollToBottom(true)
   }
 
-  const submitWorkflowTask = async (
-    content: string,
-    resolved: { model?: string; provider?: string } | null,
-  ): Promise<void> => {
+  const submitWorkflowTask = async (content: string): Promise<void> => {
     toolActivities.value = []
     subagentActivities.value = []
     isNearBottom.value = true
@@ -313,8 +299,6 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
         const conv = await chatStore.createConversation(
           content.slice(0, 30) || i18n.global.t('chat.newConversation'),
           agentId,
-          resolved?.model,
-          resolved?.provider,
           chatMode.value,
         )
         convId = conv?.id || ''
@@ -377,8 +361,6 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
             id: generateId('workflow'),
             content: finalContent,
             reasoning_content: '',
-            model: resolved?.model || '',
-            provider: resolved?.provider || '',
             done: true,
           } as ChatStreamChunk)
         } catch (ttsErr) {
@@ -390,9 +372,9 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     }
 
     try {
+      // 全局模型统一：工作流引擎由后端按 REASONER hint 路由到设置页推理模型
+      // （未配置时回退主模型），前端不再携带 provider/model
       await workflowStore.submitWorkflow(content, {
-        provider: resolved?.provider || undefined,
-        model: resolved?.model || undefined,
         mode: 'standard',
         conversationId: convId,
         onPhaseChange: (phase: string) => {

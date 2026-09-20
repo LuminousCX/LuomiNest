@@ -26,10 +26,12 @@ router = APIRouter(prefix="/workflow", tags=["workflow"])
 
 
 class WorkflowSubmitRequest(BaseModel):
-    """工作流提交请求"""
+    """工作流提交请求
+
+    全局模型统一：不携带 provider/model，引擎按 REASONER hint 路由
+    到设置页推理模型（未配置时回退主模型）。
+    """
     message: str = Field(..., description="用户的长任务请求")
-    provider: str | None = Field(None, description="LLM provider（可选）")
-    model: str | None = Field(None, description="LLM model（可选）")
     mode: WorkflowMode = Field(
         WorkflowMode.STANDARD,
         description="工作流执行模式：standard(标准)；历史值 ultra 自动归一",
@@ -59,8 +61,6 @@ async def submit_workflow(req: WorkflowSubmitRequest):
     try:
         session = await workflow_engine.submit(
             user_message=req.message,
-            provider=req.provider,
-            model=req.model,
             mode=req.mode,
             conversation_id=req.conversation_id,
         )
@@ -86,8 +86,6 @@ async def submit_workflow_stream(req: WorkflowSubmitRequest):
         try:
             async for event in workflow_engine.submit_stream(
                 user_message=req.message,
-                provider=req.provider,
-                model=req.model,
                 mode=req.mode,
                 conversation_id=req.conversation_id,
             ):

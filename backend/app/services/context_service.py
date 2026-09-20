@@ -220,8 +220,8 @@ class ContextService:
                     main_cfg = load_luominest_main_agent_config()
                     if main_cfg.get("system_prompt"):
                         base_prompt = main_cfg["system_prompt"]
-                    agent_name = "LuomiNest 主智能体"
-                    agent_description = "the main agent of LuomiNest workbench, driving Live2D, memory, tools, MCP and sub-agents"
+                    agent_name = str(main_cfg.get("name") or "主Agent").strip()
+                    agent_description = "the main agent of the workbench and integrated platforms, driving Live2D, memory, tools, and sub-agents"
                 except Exception as e:
                     logger.warning(f"[ContextService] load main_agent_config failed: {e}")
             else:

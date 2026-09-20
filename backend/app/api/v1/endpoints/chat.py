@@ -154,12 +154,12 @@ async def create_conversation(
 
     conversation_id = str(uuid.uuid4())
     now = utc_now()
+    # 全局模型统一：对话不再快照 model/provider，生成时统一解析全局主模型
+    # （专业模式按轮路由推理模型），设置页切换后对所有对话立即生效
     conv = {
         "id": conversation_id,
         "title": request.title or "New Conversation",
         "agent_id": request.agent_id,
-        "model": request.model,
-        "provider": request.provider,
         "chat_mode": chat_mode,
         "is_hidden": request.is_hidden,
         # 对话域（B3）：创建时写入，决定列表隔离与 DomainPolicy 记忆/工具策略

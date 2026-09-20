@@ -20,8 +20,6 @@ class ContextManager:
         llm_compress: bool = False,
         llm_compress_keep_recent: int = 4,
         llm_compress_instruction: str | None = None,
-        summary_provider: str | None = None,
-        summary_model: str | None = None,
         summary_max_tokens: int = 512,
         context_window: int = 0,
     ) -> None:
@@ -37,8 +35,6 @@ class ContextManager:
                 keep_recent=llm_compress_keep_recent,
                 instruction_text=llm_compress_instruction,
                 compression_threshold=compression_threshold,
-                summary_provider=summary_provider,
-                summary_model=summary_model,
                 max_tokens=summary_max_tokens,
                 context_window=context_window,
             )
@@ -197,8 +193,6 @@ def get_context_manager(
         compression_threshold=compression_threshold,
         llm_compress=llm_compress,
         llm_compress_keep_recent=4,
-        summary_provider=settings.LLM_SUMMARY_PROVIDER or None,
-        summary_model=settings.LLM_SUMMARY_MODEL or None,
         summary_max_tokens=settings.LLM_SUMMARY_MAX_TOKENS,
         context_window=context_window,
     )

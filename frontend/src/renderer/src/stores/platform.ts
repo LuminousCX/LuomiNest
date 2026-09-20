@@ -320,11 +320,7 @@ export const usePlatformStore = defineStore('platform', () => {
         instanceId: raw.instance_id || raw.instanceId || instanceId,
         isOverridden: raw.is_overridden ?? raw.isOverridden ?? false,
         instanceConfig: {
-          provider: rawInst.provider || '',
-          model: rawInst.model || '',
           systemPrompt: rawInst.system_prompt || rawInst.systemPrompt || '',
-          temperature: rawInst.temperature ?? null,
-          maxTokens: rawInst.max_tokens ?? rawInst.maxTokens ?? null,
         },
         mainAgent: {
           provider: rawMain.provider || '',
@@ -349,12 +345,9 @@ export const usePlatformStore = defineStore('platform', () => {
   }
 
   const updateInstanceModelConfig = async (instanceId: string, updates: PlatformModelConfig) => {
+    // 全局模型统一：仅人设（system_prompt）可实例级覆盖，模型跟随全局主模型
     const body: Record<string, unknown> = {}
-    if (updates.provider !== undefined) body.provider = updates.provider || null
-    if (updates.model !== undefined) body.model = updates.model || null
     if (updates.systemPrompt !== undefined) body.system_prompt = updates.systemPrompt || null
-    if (updates.temperature !== undefined) body.temperature = updates.temperature
-    if (updates.maxTokens !== undefined) body.max_tokens = updates.maxTokens
     await apiPatch(`/platforms/instances/${instanceId}/model_config`, body)
     await fetchInstanceModelConfig(instanceId)
     await fetchInstances()
@@ -414,6 +407,7 @@ export const usePlatformStore = defineStore('platform', () => {
   }
 
   interface RawMainAgentInfo {
+    name?: string
     provider?: string
     provider_name?: string
     providerName?: string
@@ -447,6 +441,7 @@ export const usePlatformStore = defineStore('platform', () => {
         const result = await apiGet<{ data?: RawMainAgentInfo } | RawMainAgentInfo>('/platforms/main_agent')
         const data = (result as { data?: RawMainAgentInfo })?.data || (result as RawMainAgentInfo)
         mainAgent.value = {
+          name: data.name || '主Agent',
           provider: data.provider || '',
           providerName: data.provider_name || data.providerName || data.provider || '',
           model: data.model || '',
@@ -476,12 +471,10 @@ export const usePlatformStore = defineStore('platform', () => {
 
   const updateMainAgent = async (updates: Partial<MainAgentInfo>) => {
     const toast = useToast()
+    // 全局模型统一：模型/生成参数只在设置页"模型设置"配置，这里仅名称与人设字段
     const body: Record<string, unknown> = {}
-    if (updates.provider !== undefined) body.provider = updates.provider
-    if (updates.model !== undefined) body.model = updates.model
+    if (updates.name !== undefined) body.name = updates.name
     if (updates.systemPrompt !== undefined) body.system_prompt = updates.systemPrompt
-    if (updates.temperature !== undefined) body.temperature = updates.temperature
-    if (updates.maxTokens !== undefined) body.max_tokens = updates.maxTokens
     if (updates.color !== undefined) body.color = updates.color
     if (updates.avatar !== undefined) body.avatar = updates.avatar || ''
     try {
