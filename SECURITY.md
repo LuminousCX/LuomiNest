@@ -1,108 +1,82 @@
 # Security Policy
 
-## Supported Versions
+[English](SECURITY.md) | [简体中文](SECURITY_zh.md) | [日本語](SECURITY_ja.md)
 
-Security fixes are applied to the latest code on the `master` branch and backported
-to the most recent stable release when applicable.
-
-| Version | Supported |
-| ------- | --------- |
-| master  | ✅ |
-| 0.7.x   | ✅ |
-| 0.1.x   | ❌ |
-
-## Reporting a Vulnerability
-
-**Do not report security vulnerabilities in public GitHub Issues!**
-
-Please report privately via email:
-
-- Email: `luminouschenxi@outlook.com`
-- Subject: `LuomiNest Security Report`
-
-### What to Include
-
-Please include:
-
-- A clear description of the issue
-- Steps to reproduce
-- Affected versions or commit hashes
-- Potential impact assessment
-- Suggested fix or mitigation (optional)
-
-### Response Expectations
-
-- Initial acknowledgment target: within 72 hours
-- Status updates shared via email while triage is in progress
-- A patch and release advisory will be coordinated before public disclosure
-
-### Responsible Disclosure
-
-Please allow time for investigation and remediation before public disclosure.
-We ask reporters to follow the [Coordinated Disclosure](https://en.wikipedia.org/wiki/Coordinated_vulnerability_disclosure)
-guideline and refrain from sharing details publicly until a fix is available.
-
-## Security Best Practices
-
-### API Keys and Secrets
-
-**Never hardcode sensitive information in code!**
-
-- Use environment variables to store API Keys
-- Use `.env.example` as template, do not commit `.env` files
-- Use secure key management services in production
-
-### Database Security
-
-- Always use parameterized queries to prevent SQL injection
-- Do not log sensitive data
-- Update database passwords regularly
-
-### Authentication
-
-- Use strong password policies
-- Set reasonable expiration times for JWT Tokens
-- Implement proper access control (RBAC)
-- All WebSocket connections require authentication
-
-### Network Security
-
-- Use HTTPS in production
-- Use WSS for WebSocket connections
-- Use TLS encryption for MQTT
-
-### Command and Prompt Security
-
-- Run untrusted commands inside the local sandbox
-- Command Guard and rate limiting are enabled by default
-- Prompt injection filters are applied to user input
-
-## Security Features
-
-LuomiNest includes the following security features:
-
-- JWT authentication mechanism (local token issuance and validation)
-- OAuth integration
-- AES-256 data encryption
-- TLS/SSL support
-- RBAC permission control
-- Local sandbox for untrusted commands
-- Command Guard and command policy enforcement
-- Rate limiting (SlowAPI)
-- Prompt security filtering
-- Security audit logs
-- Parameterized SQL queries
-- WebSocket connection authentication
-- Safe URL validation for external requests
-
-## Security Audit
-
-We conduct regular security audits:
-
-- Code review process includes security checks (CodeRabbit)
-- Dependency vulnerability scanning
-- Automated security testing
+The LuomiNest team takes the security and privacy of our software and user data very seriously. This policy outlines our supported versions, vulnerability reporting process, and baseline security practices.
 
 ---
 
-Thank you for helping keep LuomiNest secure!
+## Supported Versions
+
+Security patches are actively applied to the `master` branch and released in minor patch updates for supported versions.
+
+| Version | Supported | Status |
+| ------- | --------- | ------ |
+| `master` branch | ✅ | Actively developed |
+| `0.8.x` | ✅ | Current stable release branch |
+| `0.7.x` | ⚠️ | Security critical fixes only |
+| `< 0.7.0` | ❌ | End of Life (upgrade recommended) |
+
+---
+
+## Reporting a Vulnerability
+
+**Please do NOT report security vulnerabilities through public GitHub Issues or public pull requests!**
+
+If you discover a security vulnerability or suspect a security flaw in LuomiNest, please report it privately via email:
+
+- **Email**: [luminouschenxi@outlook.com](mailto:luminouschenxi@outlook.com)
+- **Subject**: `[SECURITY] LuomiNest Vulnerability Report`
+
+### What to Include in Your Report
+To help us triage and resolve the issue quickly, please provide:
+1. **Description**: A clear summary of the vulnerability and its potential impact.
+2. **Reproduction Steps**: Step-by-step instructions or a Minimal Working Example (PoC) to reproduce the vulnerability.
+3. **Affected Versions**: The release version, commit hash, or affected operating environment (Windows / Linux / macOS / Docker).
+4. **Proposed Fix / Mitigation**: Any suggested remediation steps or code patches (if available).
+
+### Response SLA & Coordination
+- **Initial Acknowledgment**: We target an initial response within **72 hours** of receiving your report.
+- **Triage & Patching**: We will assess the severity, keep you updated on progress, and prepare a fix privately.
+- **Coordinated Disclosure**: We follow the principle of [Coordinated Vulnerability Disclosure](https://en.wikipedia.org/wiki/Coordinated_vulnerability_disclosure). We kindly request that you allow sufficient time for remediation before any public disclosure. Once fixed, release notes will credit your contribution (unless you prefer anonymity).
+
+---
+
+## Security Architecture & Built-in Protections
+
+LuomiNest incorporates multi-layered security controls designed for safe multi-user agent execution:
+
+1. **Authentication & Token Governance**:
+   - Dual-mode JWT and local internal token authentication for API and WebSocket connections.
+   - Granular RBAC definitions and route-level dependency injection guardrails.
+2. **Local Isolation & Command Sandbox**:
+   - Untrusted system command tools run through a Command Guard with whitelist enforcement.
+   - Built-in sandboxing prevents unauthorized system tampering or arbitrary code execution.
+3. **Prompt Safety & Injection Filtering**:
+   - Built-in defense against prompt injection and jailbreak payloads across user inputs and external platform adapters.
+4. **Data Privacy & Storage Encryption**:
+   - 100% local database storage (SQLite in WAL mode) for conversation histories and distilled memory.
+   - AES-256 encryption for stored provider credentials and sensitive keys in application settings.
+5. **Rate Limiting & Anti-Abuse**:
+   - Request throttling using SlowAPI middleware on critical authentication and dialogue endpoints.
+6. **Diagnostic Privacy Redaction**:
+   - Exported and uploaded diagnostic logs automatically redact authentication tokens, private credentials, and binary attachments. Logs are never uploaded without explicit user action.
+
+---
+
+## Security Best Practices for Operators & Developers
+
+- **Secrets Handling**: Never commit `.env` files or hardcode API keys. Use `.env.example` as a template and set production secrets via environment variables.
+- **Network Deployment**: Always front public deployments with TLS/HTTPS for web traffic and WSS for WebSockets. Ensure MQTT brokers utilize encrypted TLS ports.
+- **Sandboxed Execution**: Keep the Command Guard and sandbox enabled when allowing autonomous Agent tool calls on production systems.
+
+---
+
+## Security Auditing
+
+We practice continuous security assessment:
+- Automated code reviews and security policy verification (CodeRabbit).
+- Automated dependency vulnerability scanning.
+- Regular integration test suites verifying authentication barriers and domain access controls.
+
+Thank you for helping keep LuomiNest and our community secure!

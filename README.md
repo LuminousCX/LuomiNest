@@ -4,10 +4,10 @@
 
 # LuomiNest
 
-**分布式多用户关系型 AI 智能体平台**
+**Distributed Multi-User Relational AI Agent Platform**
 
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.8.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.8.1-green.svg)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB.svg?logo=python&logoColor=white)](https://www.python.org/)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D.svg?logo=vuedotjs&logoColor=white)](https://vuejs.org/)
 [![Electron](https://img.shields.io/badge/Electron-44-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
@@ -19,250 +19,212 @@
 [![GitHub Last Commit](https://img.shields.io/github/last-commit/LuminousCX/LuomiNest)](https://github.com/LuminousCX/LuomiNest/commits/master)
 [![Code Size](https://img.shields.io/github/languages/code-size/LuminousCX/LuomiNest)](https://github.com/LuminousCX/LuomiNest)
 
-[English](#english) | [中文](#luominest)
+[English](README.md) | [简体中文](README_zh.md) | [日本語](README_ja.md)
 
 </div>
 
 ---
 
-<a id="luominest"></a>
+## Introduction
 
-## 简介
+LuomiNest is an open-source, **distributed multi-user relational AI agent platform** architected around a relationship-driven paradigm. Through its primary/secondary dual-layer memory system, LuomiNest automatically extracts independent profiles for individual participants in group chats (secondary memory) and seamlessly activates the user's specific context during direct conversations (primary memory linking). This powers authentic, tailored multi-user interactions while facilitating cross-platform group collaboration among humans, AI, and autonomous AI-to-AI networks.
 
-LuomiNest 是一个开源的**分布式多用户关系型 AI 智能体平台**，以"关系驱动"为核心设计理念。它通过主/从双层记忆架构，在群聊中自动提取每位用户的独立画像（从记忆），私聊时自动加载该用户的记忆（主记忆联动），实现真正个性化的多用户对话；同时支持人、AI、AI 与 AI 跨平台群聊协作。它可运行于桌面电脑、嵌入式终端（ESP32）、智能家居设备之上，覆盖自然语言对话、语音交互、Live2D 虚拟形象、工作流自动化与浏览器操作等能力，提供懂每一个人的长期智能体服务。
+Designed to operate seamlessly on standard desktop PCs, embedded edge devices (ESP32), and smart home hardware, LuomiNest integrates multi-turn natural language dialogue, real-time voice synthesis and recognition, Cubism 5 Live2D avatar drivers, visual workflow automation, and browser interactions into a durable, private AI companion that understands every user.
 
-核心设计理念：**一台普通电脑即可运行，数据 100% 本地闭环。**
+Core design tenet: **Runs smoothly on a single consumer PC with 100% local data sovereignty.**
 
-产品主打三件事：**记得住你（记忆性）、像一个生命（陪伴性）、装得上任何能力（扩展性）**。工具与 MCP 是基石级基础设施，不是卖点本身。
+The product centers on three pillars: **Memory (remembers who you are), Companionship (feels genuinely alive), and Extensibility (effortlessly integrates any capability)**. Tools and MCP form the bedrock infrastructure, serving the companion rather than complicating it.
 
-## 核心特性
+## Key Features
 
-- **双轨记忆系统** — 主人记忆 / 平台用户记忆行级隔离，自动事实抽取、蒸馏沉淀、画像与知识库，向量检索全量落 SQLite
-- **Live2D 虚拟形象** — Cubism 5 引擎驱动，口型同步、表情驱动、情感映射，支持 PngTuber 像素化头像与桌面宠物（VRM 规划中）
-- **插件与技能系统** — CxPlugin 插件热加载 + CxSkill 轻技能双轨扩展，内置扩展市场与多 CDN 发布源
-- **沉浸式对话** — 多轮自然语言对话，支持多 LLM Provider（OpenAI 兼容 32 模板 / Anthropic 原生 / DeepSeek / Ollama 等），SSE 流式响应
-- **多平台接入** — QQ（OneBot / 官方）、微信（公众号 / 企业微信）、Telegram、Discord、Minecraft、米家、Home Assistant 等 13 种适配器
-- **语音交互** — SherpaOnnx / FunASR / Faster-Whisper 语音识别（ASR）+ Edge TTS / SherpaOnnx / 本地 TTS 等 7 引擎合成，能力声明与语言感知回退
-- **MCP 工具协议** — 标准 MCP 协议支持，工具注册与调用，内置 CLI、文件操作、子 Agent 委派等 20+ 工具
-- **多 Agent 协作** — 任务分析 → 子任务调度 → 并行执行 → 结果综合，支持 A2A 协议 AI-AI 自主对话
-- **工作流引擎** — 可视化节点编排、模板库、定时任务调度（APScheduler）、工具调用记录与持久化
-- **内嵌浏览器** — 内置浏览器与开发者面板（脚本 / DOM / 源码 / 截图），Agent 可读取当前页 HTML 与页面截图
-- **主题系统** — 预设主题与外观设置，注册表源管理与扩展市场（插件 / 技能安装）
-- **IoT 智能控制** — MQTT 设备通信，ESP32-P4 硬件终端，设备 / 场景 / 房间 / 自动化统一视图
-- **桌面客户端** — Electron 桌面应用，内置浏览器、桌面宠物、Live2D 皮套工坊、控制台终端
-- **安全体系** — JWT / Token 双模式认证、RBAC（定义中）、本地沙箱、命令守卫、速率限制、安全审计日志、24h 自动备份
-- **隐私优先** — 对话与记忆数据全部本地存储（单 SQLite 库），敏感配置 AES 加密
+- **Dual-Track Memory System** — Row-level isolation between owner memory and platform user profiles; experimental per-member group chat persona tracks (cross-group sharing); automatic fact extraction, distillation, user profiling, and full SQLite vector retrieval.
+- **Live2D Virtual Avatars** — Powered by Cubism 5 runtime with real-time lip synchronization, expression drivers, and emotional mapping; supports pixel avatars (PngTuber), desktop pet modes, and upcoming VRM support.
+- **Extensible Plugin & Skill Ecosystem** — Dual-track extensibility combining dynamic `CxPlugin` hot-reloading with lightweight `CxSkill` extensions; built-in extension marketplace supporting multi-CDN registries.
+- **Immersive Multi-Provider Dialogue** — Robust multi-turn conversations supporting OpenAI-compatible APIs (32 provider templates), native Anthropic, DeepSeek, local Ollama, and full SSE streaming.
+- **Omnichannel Platform Adapters** — Out-of-the-box adapters for 13 platforms: QQ (OneBot / Official API), WeChat (Official Accounts / Enterprise WeCom), Telegram, Discord, Minecraft, Xiaomi IoT, Home Assistant, and more.
+- **Multi-Engine Voice Interaction** — High-accuracy speech recognition via SherpaOnnx, FunASR, and Faster-Whisper; speech synthesis across 7 engines (Edge TTS, SherpaOnnx, local offline TTS, Gemini, MiniMax, SiliconFlow, Fish Audio) with capability negotiation and language-aware fallback.
+- **Model Context Protocol (MCP)** — Native implementation of the MCP protocol with dynamic tool registration and execution; 20+ built-in system tools covering CLI execution, file manipulation, and sub-agent delegation.
+- **Multi-Agent Orchestration & A2A** — Structured task decomposition: problem analysis → sub-task scheduling → concurrent execution → result synthesis; supports native AI-to-AI autonomous dialogue via the A2A protocol.
+- **Visual Workflow Engine** — Drag-and-drop node orchestration, workflow template library, cron and interval scheduling (APScheduler), with persistent tool call audits.
+- **Secure Embedded Browser** — Hardened read-only navigation mode with automated page snapshots, thumbnail previews, and constrained AI tools (`browser_visit` / `browser_screenshot`) to eliminate external DOM injection hazards.
+- **Unified Log Center** — Unified log pipeline aggregating renderer, main process, backend, and platform adapters; supports recent log search, severity filtering, live tailing, and privacy-redacted diagnostic uploads.
+- **IoT & Smart Home Automation** — MQTT protocol communication, hardware integration with ESP32-P4, Home Assistant integration (12 device domains with read-only sensors), and unified scene/device status views.
+- **Electron Desktop Client** — Polished desktop environment featuring floating desktop pets, Avatar Workshop, interactive terminal, and adaptable theme styling.
+- **Enterprise Security & Compliance** — Multi-jurisdiction onboarding gate for Terms of Service and Privacy Policy (PIPL, CCPA/CPRA, etc.); JWT/Token dual authentication; command sandbox; rate limiting; AES-256 encrypted configurations; and 24-hour scheduled backups.
+- **Privacy First** — Dialogue and memory databases reside entirely on your local machine (single SQLite WAL file); sensitive credentials stay secure and are never uploaded without explicit consent.
 
-## 技术栈
+## Technology Stack
 
-| 层级 | 技术选型 |
-|------|---------|
-| **前端** | Electron 44 + Vue 3 + TypeScript + Pinia + PixiJS (Live2D) |
-| **后端** | Python 3.12+ + FastAPI + Uvicorn + SQLAlchemy 2 (async) + APScheduler |
-| **存储** | SQLite (SQLAlchemy ORM, WAL 单库) + JSON 缓存；PostgreSQL / Redis 为云端化预留 |
-| **通信** | WebSocket + MQTT + HTTP/REST + SSE 流式响应 |
-| **AI/LLM** | OpenAI / Anthropic / DeepSeek / Ollama，多厂商适配器 + 中间件管道 |
-| **语音** | SherpaOnnx / FunASR / Faster-Whisper (ASR) + Edge TTS / SherpaOnnx / 本地 TTS / Gemini / MiniMax / SiliconFlow / Fish Audio |
-| **硬件** | ESP-IDF (ESP32-P4) |
-| **部署** | Docker Compose + PyInstaller + Electron Builder + Inno Setup |
+| Layer | Technologies |
+|-------|--------------|
+| **Frontend** | Electron 44 + Vue 3 + TypeScript + Pinia + PixiJS (Live2D Cubism 5) |
+| **Backend** | Python 3.12+ + FastAPI + Uvicorn + SQLAlchemy 2 (async) + APScheduler |
+| **Storage** | SQLite (SQLAlchemy ORM, WAL mode single DB) + JSON caching; PostgreSQL / Redis reserved for cloud scaling |
+| **Communication** | WebSocket + MQTT + HTTP/REST + SSE (Server-Sent Events) |
+| **AI / LLM** | OpenAI / Anthropic / DeepSeek / Ollama, multi-vendor adapters + middleware pipeline |
+| **Speech** | SherpaOnnx / FunASR / Faster-Whisper (ASR) + Edge TTS / SherpaOnnx / Local / Cloud TTS engines |
+| **Hardware** | ESP-IDF (ESP32-P4) |
+| **Distribution** | Docker Compose + PyInstaller + Electron Builder + NSIS |
 
-## 快速开始
+## Quick Start
 
-### 环境要求
+### Prerequisites
 
 - Python 3.12+
 - Node.js 22+
-- pnpm
+- pnpm (recommended 10.x+)
 
-### 一键启动（Make）
+### Quick Launch with Make
 
 ```bash
-# 克隆仓库
+# Clone the repository
 git clone https://github.com/LuminousCX/LuomiNest.git
 cd LuomiNest
 
-# 安装全部依赖（前端 + 后端）
+# Install all dependencies (Frontend + Backend)
 make install
 
-# 配置环境变量
+# Configure environment variables
 make config
 
-# 启动后端
+# Start backend service (port 18000)
 make dev-backend
 
-# 新终端，启动前端
+# In a new terminal, launch the desktop client
 make dev-frontend
 ```
 
-### 手动启动
+### Manual Setup
 
 <details>
-<summary><strong>后端</strong></summary>
+<summary><strong>Backend Setup</strong></summary>
 
 ```bash
 cd backend
 
-# 创建虚拟环境
+# Create and activate virtual environment
 python -m venv .venv
 .venv\Scripts\activate        # Windows
 # source .venv/bin/activate   # Linux/macOS
 
-# 安装依赖
+# Install development dependencies
 pip install -e ".[dev]"
 
-# 配置环境变量
+# Configure environment
 cp config/.env.example config/.env
-# 编辑 config/.env，填入 API Key
+# Edit config/.env and configure your LLM API keys
 
-# 启动
+# Start backend server
 python main.py
 ```
 
-后端默认运行在 `http://127.0.0.1:18000`，API 文档访问 `http://127.0.0.1:18000/docs`。
+The backend server will run at `http://127.0.0.1:18000`. Interactive API documentation is available at `http://127.0.0.1:18000/docs`.
 
 </details>
 
 <details>
-<summary><strong>前端</strong></summary>
+<summary><strong>Frontend Setup</strong></summary>
 
 ```bash
 cd frontend
 
-# 安装依赖
+# Install dependencies
 pnpm install
 
-# 开发模式
+# Launch Vite development server with Electron
 pnpm dev
 
-# 构建生产版本
+# Build production artifacts
 pnpm build
 ```
 
 </details>
 
 <details>
-<summary><strong>Docker 部署</strong></summary>
+<summary><strong>Docker Deployment</strong></summary>
 
 ```bash
 cd docker
 
-# 开发环境（backend + PostgreSQL + Redis + MQTT；后端当前使用 SQLite，pg/redis 为预留）
+# Development environment (backend + PostgreSQL + Redis + MQTT; backend currently uses SQLite, pg/redis reserved)
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
-# 生产环境
+# Production environment
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 ```
 
 </details>
 
-## 项目结构
+## Project Structure
 
 ```
 LuomiNest/
-├── backend/                     # Python 后端服务
+├── backend/                     # Python backend service
 │   ├── app/
-│   │   ├── api/v1/endpoints/    # REST API 端点（24 个模块）
-│   │   ├── api/ws/              # WebSocket（浏览器自动化、Avatar 驱动）
-│   │   ├── core/                # 配置、容器、端口、工具、工作流引擎、Agent 编排、调度器
-│   │   ├── domains/             # 领域逻辑（社交、群聊、AI-AI 对话）
-│   │   ├── engines/             # 引擎（记忆）
-│   │   ├── infrastructure/      # 基础设施（数据库 28 表、备份、MQTT、同步、适配器）
-│   │   ├── runtime/             # 运行时（平台适配器 ×13、插件、技能、Provider）
-│   │   ├── security/            # 安全（JWT、内部鉴权、RBAC、沙箱、审计、速率限制）
-│   │   └── services/            # 业务服务
-│   ├── config/                  # 环境配置
-│   ├── plugins/                 # 内置插件（4 个）
-│   ├── skills/                  # 内置技能（21 个）
-│   └── tests/                   # 测试
+│   │   ├── api/v1/endpoints/    # REST API endpoints (24 modules)
+│   │   ├── api/ws/              # WebSocket endpoints (browser automation, avatar driver)
+│   │   ├── core/                # Configuration, container, context, workflow, agent orchestration
+│   │   ├── domains/             # Domain logic (social, group chat, AI-to-AI interaction)
+│   │   ├── engines/             # Engine subsystems (dual-track memory, voice)
+│   │   ├── infrastructure/      # Infrastructure (28 database tables, backup, MQTT, adapters)
+│   │   ├── runtime/             # Runtimes (13 platform adapters, plugins, skills, providers)
+│   │   ├── security/            # Security (JWT, internal auth, RBAC, sandbox, audit, rate limits)
+│   │   └── services/            # Application business services
+│   ├── config/                  # Environment configuration templates
+│   ├── plugins/                 # Built-in plugins (4 plugins)
+│   ├── skills/                  # Built-in lightweight skills (21 skills)
+│   └── tests/                   # Automated test suite
 │
-├── frontend/                    # Electron + Vue 3 桌面客户端
+├── frontend/                    # Electron + Vue 3 desktop application
 │   ├── src/
-│   │   ├── main/                # Electron 主进程（IPC、浏览器自动化、后端托管）
-│   │   ├── preload/             # 预加载脚本
-│   │   └── renderer/            # Vue 渲染进程（24 个页面）
-│   └── resources/               # 静态资源（图标、Live2D 模型）
+│   │   ├── main/                # Electron main process (IPC, backend management, window state)
+│   │   ├── preload/             # Electron preload scripts
+│   │   └── renderer/            # Vue 3 renderer application (24 functional views)
+│   └── resources/               # Static assets (application icons, Live2D models)
 │
-├── firmware/                    # ESP32 嵌入式固件
-│   └── embedded/esp32-p4/       # ESP32-P4 主控（组件化：app / bsp / drivers）
+├── firmware/                    # ESP32 embedded firmware
+│   └── embedded/esp32-p4/       # ESP32-P4 controller (modular: app / bsp / drivers)
 │
-├── templates/                   # 插件开发模板
-└── docker/                      # Docker 部署配置
+├── templates/                   # Plugin and skill development templates
+└── docker/                      # Docker deployment configurations
 ```
 
-## 文档
+## Documentation
 
-项目维护着一套完整的中文文档体系（概览 / 架构 / 接口 / 数据模型 / 功能实现 / 部署 / 开发指南 / 路线图），**仅随本地工作区提供，不随本仓库分发**。
+The project maintains a comprehensive technical documentation suite (architecture, API specs, data models, deployment guides, and roadmaps). **This documentation is maintained in the local workspace directory (`文档/`) and is not distributed through the public git repository.** Please consult the `文档/` directory in your local checkout.
 
-## 贡献
+### Packaging & Release
 
-我们欢迎社区贡献！请先阅读 [贡献指南](CONTRIBUTING.md)。
-
-1. Fork 本仓库
-2. 创建特性分支：`git checkout -b feature/amazing-feature`
-3. 提交更改：`git commit -m "feat(scope): add amazing feature"`
-4. 推送分支：`git push origin feature/amazing-feature`
-5. 提交 Pull Request
-
-报告 Bug：[提交 Bug 报告](https://github.com/LuminousCX/LuomiNest/issues/new?template=bug_report.yaml)
-功能建议：[提交功能请求](https://github.com/LuminousCX/LuomiNest/issues/new?template=feature_request.yaml)
-
-## 安全
-
-如发现安全漏洞，请**不要**在公开 Issue 中提交。请通过邮件私下报告：
-
-- 邮箱：`luminouschenxi@outlook.com`
-- 主题：`LuomiNest Security Report`
-
-详见 [安全策略](SECURITY.md)。
-
-## 许可证
-
-本项目基于 [GNU Affero General Public License v3.0](LICENSE) 开源。
-
----
-
-<a id="english"></a>
-
-## Introduction
-
-LuomiNest is an open-source distributed multi-user relational AI agent platform built on a relationship-driven design. Its dual-layer memory architecture (primary memory pool + per-user persona memory) automatically extracts each user's profile during group chats and loads it back in private conversations, enabling truly personalized multi-user dialogue. It supports human, AI, and AI-to-AI collaboration across platforms (QQ / WeChat / Telegram / Discord, etc.). It runs on desktop computers, embedded terminals (ESP32), and smart home devices, delivering natural language dialogue, voice interaction, Live2D virtual avatars, workflow automation, and browser operations for a long-term agent experience that knows every single user.
-
-Core design principle: **Runs on a single ordinary computer with 100% local data retention.**
-
-The product bets on three things: **memory (it remembers you), companionship (it feels alive), and extensibility (it accepts any capability)**. Tools and MCP are cornerstone infrastructure, not the selling point.
-
-## Key Features
-
-- **Dual-Track Memory** — Owner memory / platform-user memory with row-level isolation; automatic fact extraction, distillation, profiling and knowledge base; vector search fully on SQLite
-- **Live2D Avatar** — Cubism 5 engine with lip sync, expression drive, emotion mapping; PngTuber pixel avatar and desktop pet support (VRM planned)
-- **Plugin & Skill System** — CxPlugin hot-reload + CxSkill lightweight extension dual-track architecture, built-in marketplace with multi-CDN registries
-- **Immersive Dialogue** — Multi-turn natural language conversations with multiple LLM providers (OpenAI-compatible ×32 templates / Anthropic native / DeepSeek / Ollama), SSE streaming
-- **Multi-Platform Access** — 13 adapter types: QQ (OneBot / Official), WeChat (MP / Work), Telegram, Discord, Minecraft, Xiaomi IoT, Home Assistant, and more
-- **Voice Interaction** — SherpaOnnx / FunASR / Faster-Whisper ASR + 7 TTS engines (Edge TTS / SherpaOnnx / local / Gemini / MiniMax / SiliconFlow / Fish Audio) with capability declarations and language-aware fallback
-- **MCP Tool Protocol** — Standard MCP protocol support with tool registration and invocation; 20+ built-in tools (CLI, file ops, sub-agent delegation, …)
-- **Multi-Agent Collaboration** — Task analysis → sub-task scheduling → parallel execution → result synthesis; A2A AI-to-AI autonomous dialogue
-- **Workflow Engine** — Visual node orchestration, template library, scheduled tasks (APScheduler), tool-call recording and persistence
-- **Embedded Browser** — Built-in browser with developer panel (script / DOM / page source / screenshot); the agent can read the current page's HTML and take screenshots
-- **Theme System** — Preset themes and appearance settings, registry source management and extension marketplace
-- **IoT Smart Control** — MQTT device communication, ESP32-P4 hardware terminals, unified devices / scenes / rooms / automations view
-- **Desktop Client** — Electron app with built-in browser, desktop pet, Live2D avatar workshop, and console terminal
-- **Security** — JWT / token dual-mode authentication, RBAC (planned), local sandbox, command guard, rate limiting, audit logs, 24h scheduled backup
-- **Privacy First** — All dialogue and memory data stored locally in a single SQLite database; sensitive config AES-encrypted
-
-## Quick Start
-
-```bash
-git clone https://github.com/LuminousCX/LuomiNest.git
-cd LuomiNest
-make install    # Install all dependencies
-make config     # Setup environment variables
-make dev-backend   # Start backend (port 18000)
-make dev-frontend  # Start frontend (new terminal)
-```
+For details on packaging and multi-platform distribution, please see **[frontend/BUILD.md](frontend/BUILD.md)**:
+- One-click local builds (`build-all.ps1`)
+- GitHub Actions CI/CD workflows (`v*` tags trigger production releases; changes to `master` trigger dev pre-releases)
+- Platform distribution formats (Windows NSIS/portable, Linux AppImage/deb, macOS dmg/zip) and troubleshooting.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We warmly welcome community contributions! Please review our guides before getting started:
+- [Contributing Guidelines](CONTRIBUTING.md) ([中文版](CONTRIBUTING_zh.md) / [日本語](CONTRIBUTING_ja.md))
+- [Code of Conduct](CODE_OF_CONDUCT.md) ([中文版](CODE_OF_CONDUCT_zh.md) / [日本語](CODE_OF_CONDUCT_ja.md))
+
+Quick contribution steps:
+1. Fork the repository
+2. Create your feature branch: `git checkout -b feature/amazing-feature`
+3. Commit your changes: `git commit -m "feat(scope): add amazing feature"`
+4. Push to the branch: `git push origin feature/amazing-feature`
+5. Open a Pull Request
+
+- Report a Bug: [Submit Bug Report](https://github.com/LuminousCX/LuomiNest/issues/new?template=bug_report.yaml)
+- Request a Feature: [Submit Feature Request](https://github.com/LuminousCX/LuomiNest/issues/new?template=feature_request.yaml)
+- Community Discussions: [GitHub Discussions](https://github.com/LuminousCX/LuomiNest/discussions)
+
+## Security Policy
+
+If you discover a security vulnerability, please **do not** create a public issue. Report it confidentially to:
+
+- Email: `luminouschenxi@outlook.com`
+- Subject: `LuomiNest Security Report`
+
+For complete disclosure policies, see [SECURITY.md](SECURITY.md) ([中文版](SECURITY_zh.md) / [日本語](SECURITY_ja.md)).
 
 ## License
 

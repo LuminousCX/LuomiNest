@@ -1,365 +1,185 @@
 # Contributing to LuomiNest
 
-Thank you for your interest in contributing to LuomiNest - Distributed AI Companion Platform! This guide will help you set up your development environment and understand our development workflow.
+[English](CONTRIBUTING.md) | [简体中文](CONTRIBUTING_zh.md) | [日本語](CONTRIBUTING_ja.md)
 
-## Quick Start
+Thank you for your interest in contributing to **LuomiNest - Distributed Multi-User Relational AI Agent Platform**! We welcome contributions of all forms, including bug reports, feature suggestions, documentation enhancements, and code contributions.
 
-1. Check existing [Issues](https://github.com/LuminousCX/LuomiNest/issues) and [Discussions](https://github.com/LuminousCX/LuomiNest/discussions)
-2. Fork the repository and create a branch
-3. Run the local development environment
-4. Make focused changes
-5. Run checks and open a Pull Request
+Please review this guide to help you set up your development environment and adhere to our development workflow.
 
 ---
 
-## Trae Code Modification Rules (Final Version)
+## Code of Conduct
 
-**Highest Priority Principle: Better to delete and rewrite than patch on incorrect code. Any modification that breaks correctness must be completely deleted, no matter how powerful the functionality.**
+All contributors and participants in the LuomiNest community are expected to uphold our [Code of Conduct](CODE_OF_CONDUCT.md) ([中文版](CODE_OF_CONDUCT_zh.md) / [日本語](CODE_OF_CONDUCT_ja.md)). Please report any unacceptable behavior to [luminouschenxi@outlook.com](mailto:luminouschenxi@outlook.com).
 
-### I. Pre-Check Rules (Must be 100% Complete Before Modification)
+---
 
-1. **Must Read All Related Files Completely**
-   - First look at existing code implementation logic, then start writing any code
-   - Must confirm whether the feature you want to implement **already exists**, absolutely no duplicate implementation
-   - Must understand the design intent of existing architecture, cannot break the overall structure
-   - Forbidden: Giving "complete implementation" without reading the code first
+## How to Contribute
 
-2. **Must Verify Original Logic is Correct First**
-   - First run existing code, confirm where the problem actually lies
-   - Distinguish between "design flaw" and "code bug"
-   - If it's a design flaw, directly refactor the entire module, don't patch
-   - If it's a code bug, only fix the bug itself, don't change other unrelated logic
+### 1. Reporting Bugs and Suggesting Features
+- **Bug Reports**: Before reporting a bug, search existing [Issues](https://github.com/LuminousCX/LuomiNest/issues) to ensure it hasn't already been reported. Use our [Bug Report Template](https://github.com/LuminousCX/LuomiNest/issues/new?template=bug_report.yaml) and provide complete reproduction steps, logs, and environment details.
+- **Feature Requests**: Discuss major feature proposals in [Discussions](https://github.com/LuminousCX/LuomiNest/discussions) or submit a [Feature Request](https://github.com/LuminousCX/LuomiNest/issues/new?template=feature_request.yaml) describing the problem, intended use case, and proposed interface.
 
-3. **Must Clearly Define Modification Scope**
-   - Only modify files directly related to the current task
-   - Absolutely cannot modify parts the user didn't request
-   - Forbidden: Casual refactoring, style optimization, adjusting unrelated code
-
-### II. Error Handling Rules (Must Execute When Errors Found)
-
-1. **Found You Misunderstood the Requirement → Stop Immediately, Full Rollback**
-   - Delete all code from this modification, including new files, functions, variables
-   - Don't leave any commented-out code, unused functions
-   - Re-confirm requirements, then write correct code from scratch
-   - Forbidden: Continue modifying based on wrong understanding, trying to "compat"
-
-2. **Found Previous Modification Was Wrong → Delete All Immediately**
-   - Find all changes from your last commit, complete rollback
-   - Don't just change part, don't leave any residue
-   - Don't use "fix later", "just use it for now" as excuses to keep wrong code
-   - Forbidden: Stack new modifications on wrong code, trying to "fix"
-
-3. **Found Original Design Has Problems → Directly Refactor, Don't Bypass**
-   - If original architecture can't meet requirements, directly delete wrong design
-   - Re-design correct architecture, then implement
-   - Forbidden: Use various hacks, patches, special judgments to bypass design flaws
-
-### III. Modification Principles (All Modifications Must Follow)
-
-1. **Better to Rewrite Than Patch**
-   - If a function/component has more than 3 bugs, directly delete and rewrite
-   - If code needs more than 2 special judgments, directly delete and rewrite
-   - If modification amount exceeds 50% of original code, directly delete and rewrite
-   - Forbidden: Patch one after another on bad code
-
-2. **Incremental Modification Must Be Based on Correct Existing Logic**
-   - All new code must match existing code style
-   - All new features must integrate into existing architecture, cannot be standalone
-   - Forbidden: Introduce new design patterns, new dependencies, new code styles unless user explicitly requests
-
-3. **Minimal Modification Principle**
-   - Use minimal code to solve the problem
-   - Don't add any features user didn't request
-   - Don't do "pre-optimization", "reserve for future"
-   - Forbidden: Write "comprehensive" generic solutions, only solve current specific problems
-
-### IV. Code Quality Rules
-
-1. **Absolutely No Garbage Code**
-   - Delete all commented-out code
-   - Delete all unused variables, functions, files
-   - Delete all console.log, print and other debug code
-   - Delete all TODO, FIXME comments, either solve or delete
-
-2. **Must Match Existing Code Style Completely**
-   - Naming conventions, indentation, spaces, line breaks must be exactly the same as existing code
-   - Must use dependencies already introduced in the project, cannot add unnecessary dependencies
-   - Must follow existing project directory structure and module division
-
-3. **Must Handle All Edge Cases**
-   - Null values, exceptions, error conditions must be handled
-   - Cannot leave any code that might cause crashes
-   - All async operations must have error handling
-
-### V. Delivery and Acceptance Rules
-
-1. **Each Delivery Must Be Complete and Runnable**
-   - Cannot just give code snippets, must give complete files or complete functions
-   - Must ensure code can run directly after copy-paste
-   - Must test yourself first, confirm no syntax errors, no obvious bugs
-
-2. **Must Explain Modification Scope and Impact**
-   - Clearly state which files you modified
-   - Clearly state what features your modification affects
-   - Clearly state what operations user needs to do for it to take effect
-
-3. **Must Self-Verify First**
-   - Run code, confirm functionality is normal
-   - Confirm original functionality isn't broken
-   - Confirm no new bugs introduced
-
-### VI. Absolutely Forbidden Behaviors (Violating Any One Requires Full Rewrite)
-
-- ❌ Forbidden: Stack modifications on wrong code, trying to "fix"
-- ❌ Forbidden: Leave any commented-out code, debug code, unused code
-- ❌ Forbidden: Duplicate implement already existing functionality
-- ❌ Forbidden: Modify parts user didn't request
-- ❌ Forbidden: Fabricate non-existent metrics, data, effects
-- ❌ Forbidden: Use "compat with old code" as excuse to keep wrong logic
-- ❌ Forbidden: Introduce unnecessary dependencies, libraries, frameworks
-- ❌ Forbidden: Do any "pre-optimization", "reserve for future" design
-- ❌ Forbidden: Start modifying without understanding existing code
-- ❌ Forbidden: Keep forcing solutions after finding you were wrong
-
-### VII. Anti-Examples (Must Remember)
-
-**❌ Wrong Approach:**
-- Folding animation has white bar, just add `margin-top: -1px` to fix
-- Recommendation persistence to JSON is wrong, just add frontend hiding logic
-- Scroll lagging, just add `setTimeout` to delay execution
-- Misunderstood requirement, keep changing on wrong basis trying to "align"
-
-**✅ Correct Approach:**
-- Delete entire wrong animation logic, rewrite synchronous transition
-- Delete all recommendation write/read code, re-implement temporary display
-- Delete entire lagging scroll implementation, rewrite smooth scroll based on requestAnimationFrame
-- Delete all wrong code, re-confirm requirement and write from scratch
-
-### VIII. Self-Check List After Each Modification
-
-After writing code, must check against this list, all pass before delivery:
-
-1. I completely read all related existing code
-2. I confirmed this feature isn't duplicate implemented
-3. I only modified files related to current task
-4. I didn't leave any garbage code, debug code
-5. My code style matches existing code completely
-6. I ran the code myself, confirmed functionality is normal
-7. I confirmed original functionality isn't broken
-8. If I found previous modification was wrong, I already fully rolled back and rewrote correct code
+### 2. Contributing Code
+1. Check existing [Issues](https://github.com/LuminousCX/LuomiNest/issues) or create a new issue to discuss your planned changes.
+2. Fork the repository and create a descriptive branch:
+   ```bash
+   git checkout -b feature/your-feature-name
+   # or
+   git checkout -b fix/issue-description
+   ```
+3. Set up the local environment, make your changes, and write relevant automated tests.
+4. Run code formatting, type checking, and test suites locally.
+5. Push your branch and open a Pull Request against the `master` branch.
 
 ---
 
 ## Local Development Environment Setup
 
-### System Requirements
-
-- Python 3.12+
-- Node.js 22+
-- pnpm (Frontend package manager)
-- Docker (Optional, for infrastructure services)
+### System Prerequisites
+- **Python**: 3.12 or newer
+- **Node.js**: 22 or newer
+- **pnpm**: 10.x or newer
+- **Docker**: Optional (for PostgreSQL, Redis, MQTT infrastructure)
 
 ### Backend Setup
 
 ```bash
-# Clone repository
-git clone https://github.com/YOUR_USERNAME/LuomiNest.git
-cd LuomiNest/backend
+cd backend
 
-# Install dependencies (uv recommended)
-pip install uv
+# Create and activate a Python virtual environment
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # Linux/macOS
+
+# Install package in editable mode with development dependencies
 pip install -e ".[dev]"
 
-# Configure environment variables
+# Configure local environment variables
 cp config/.env.example config/.env
-# Edit .env file, set necessary API Keys
+# Edit config/.env to add your LLM API keys and model parameters
 
-# Start infrastructure services (optional)
-docker compose -f ../docker/docker-compose.dev.yml up -d
-
-# Run development server
-uv run python main.py
+# Launch the backend development server
+python main.py
 ```
+
+The backend server runs on `http://127.0.0.1:18000` by default. Swagger API docs are accessible at `http://127.0.0.1:18000/docs`.
 
 ### Frontend Setup
 
 ```bash
-cd LuomiNest/frontend
+cd frontend
 
-# Install dependencies
+# Install dependencies via pnpm
 pnpm install
 
-# Run development server
+# Start the Vite development server with Electron desktop app
 pnpm dev
 
-# Build production version
+# Build production artifacts
 pnpm build
 ```
 
-### TypeScript Type Checking
+### Docker Infrastructure Services (Optional)
 
 ```bash
-cd frontend
+cd docker
 
-# Run type check
-pnpm typecheck
-
-# Or use vue-tsc directly
-vue-tsc --noEmit -p tsconfig.web.json && vue-tsc --noEmit -p tsconfig.node.json
+# Start development infrastructure (PostgreSQL, Redis, MQTT)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 ```
 
-### Docker Development Environment (Recommended)
+> **Note**: LuomiNest runs locally with a single SQLite database (WAL mode) by default. The PostgreSQL and Redis containers in Docker are reserved for cloud and distributed test environments.
 
-```bash
-# Start infrastructure services (PostgreSQL + Redis + MQTT)
-cd LuomiNest/docker
-docker compose -f docker-compose.dev.yml up -d
+---
 
-# Backend API: http://localhost:18000  (docs at /docs)
-# PostgreSQL: localhost:5432 / Redis: localhost:6379 / MQTT: localhost:1883
-# Then run the backend & frontend locally as described above.
-```
+## Quality Standards & Pre-Commit Verification
 
-## Project Structure
+Before submitting a Pull Request, please ensure all relevant tests and linting checks pass cleanly.
 
-```
-LuomiNest/
-├── backend/                 # Python FastAPI backend
-│   ├── app/                 # Application core code
-│   │   ├── api/             # REST API routes and WebSocket endpoints
-│   │   ├── core/            # Config, DI container, workflow engine, agent orchestration
-│   │   ├── domains/         # Business domain logic (social, group chat)
-│   │   ├── engines/         # Engine modules (voice, render, memory, location)
-│   │   ├── infrastructure/  # Infrastructure (database, MQTT, Redis, sync)
-│   │   ├── runtime/         # Runtime platform adapters, plugins, providers
-│   │   ├── security/        # Security (JWT, OAuth, RBAC, sandbox, audit)
-│   │   └── services/        # Business services
-│   ├── config/              # Configuration files
-│   ├── plugins/             # Plugin directory
-│   ├── skills/              # Skills directory
-│   ├── scripts/             # Script tools
-│   └── tests/               # Test code
-│
-├── frontend/                # Electron + Vue frontend
-│   ├── src/                 # Source code
-│   │   ├── main/            # Electron main process (IPC, browser automation)
-│   │   ├── preload/         # Preload scripts
-│   │   └── renderer/        # Vue render process
-│   └── resources/           # Resource files
-│
-├── firmware/                # ESP32 firmware
-│   └── embedded/esp32-p4/   # ESP32-P4 main controller (components: app / bsp / drivers)
-│
-├── docker/                  # Docker configuration
-├── 文档/                    # Project documentation (single source, entry README.md)
-└── .github/                 # GitHub configuration
-```
-
-## Pre-Commit Checks
-
-### Backend Checks
+### Backend Verification
 
 ```bash
 cd backend
 
-# Run tests
-uv run pytest tests/
+# Run automated test suite
+pytest tests/
 
-# Code format check
-uv run ruff check app tests
-uv run ruff format app tests
+# Check code formatting and linting
+ruff check app tests
+ruff format --check app tests
 
-# Type check
-uv run mypy app
+# Run strict type checking
+mypy app
 ```
 
-### Frontend Checks
+### Frontend Verification
 
 ```bash
 cd frontend
 
-# Type check
+# Run TypeScript type check across web and node contexts
 pnpm typecheck
 
-# Code format
-pnpm format:write
+# Verify production build compilation
+pnpm build
 ```
+
+---
 
 ## Coding Standards
 
-### Python Code Standards
+### Python Standards
+- Adhere strictly to **PEP 8**.
+- Use explicit type annotations for all function arguments and return types.
+- Format with **Ruff** (line length limit: `120`).
+- Use `async`/`await` for all asynchronous I/O and database operations.
+- Avoid wildcard imports (`from module import *`). Prefer explicit imports.
+- Naming conventions: `snake_case` for functions/variables, `PascalCase` for classes, `UPPER_SNAKE_CASE` for module constants.
 
-- Follow PEP 8 conventions
-- Use type annotations (Type Hints)
-- Use `async/await` for I/O operations
-- Use Black formatter, line length 120
-- Use absolute imports, avoid wildcard imports (`from x import *`)
-- Functions and variables use snake_case
-- Classes use PascalCase
-- Constants use UPPER_SNAKE_CASE
+### TypeScript / Vue Standards
+- Follow the Vue 3 Composition API with `<script setup lang="ts">`.
+- Strict typing with TypeScript — avoid `any` wherever possible.
+- Manage global UI state using Pinia stores.
+- Clean component separation and reusable composables.
+- Component filenames in `PascalCase.vue`, helper modules in `camelCase.ts`.
 
-### TypeScript/Vue Code Standards
+### Git Commit Conventions
+Follow the [Conventional Commits](https://www.conventionalcommits.org/) specification:
 
-- Use ES Modules (`import/export`)
-- Prefer destructuring imports: `import { foo } from 'bar'`
-- Use `const` for immutable variables, `let` for mutable
-- Prefer arrow functions
-- Components use PascalCase: `UserProfile.tsx`
-- Utility functions use camelCase: `formatDate.ts`
-- CSS class names use kebab-case: `user-profile`
-- Add linear animations with `ease-in-out` for frontend
+Format: `<type>(<scope>): <subject>`
 
-### Git Commit Standards
-
-Commit message format: `<type>(<scope>): <subject>`
-
-**Available types:**
-- `feat`: New feature
+**Allowed types:**
+- `feat`: New feature or capability
 - `fix`: Bug fix
 - `docs`: Documentation update
-- `style`: Code format adjustment
-- `refactor`: Code refactoring
-- `test`: Test related
-- `chore`: Build/tool related
+- `style`: Formatting, missing semicolons, etc. (no production code change)
+- `refactor`: Refactoring code without changing external behavior
+- `test`: Adding or updating test cases
+- `chore`: Maintenance, build tasks, dependency updates
 
 **Examples:**
 ```
-feat(voice): add Whisper ASR engine integration
-fix(memory): handle empty session context
-docs(api): update WebSocket API documentation
-refactor(render)!: simplify Live2D model loader
+feat(memory): add per-member group chat persona tracking
+fix(browser): restrict navigation tools to read-only visits
+docs(readme): update v0.8.1 release highlights and links
+refactor(security): unify token parsing and audit redaction
 ```
 
-## Branch Naming Standards
+### Branch Naming Conventions
+- `feature/<name>` — New feature development
+- `fix/<name>` — Bug fixes
+- `docs/<name>` — Documentation changes
+- `refactor/<name>` — Code refactoring without behavioral change
 
-Recommended branch names:
-- `feature/<short-name>` - New feature development
-- `fix/<short-name>` - Bug fix
-- `docs/<short-name>` - Documentation update
-- `refactor/<short-name>` - Code refactoring
-
-## Pull Request Requirements
-
-Please include:
-- Description of changes and reasons
-- Related Issue (if any)
-- Testing method and results
-- Screenshots for UI changes (if applicable)
-
-Keep PRs focused. Smaller PRs review faster.
+---
 
 ## Model Assets Policy (Avatar / Voice Models)
 
-Model asset files distributed with LuomiNest — built-in avatar models (Live2D, PixelPet,
-PNG Tuber, and future VRM/Spine samples) and bundled voice models — follow a
-**maintainer-only distribution** rule. This section explains what that means, why it
-exists, and what you can still contribute.
+Model asset files distributed with LuomiNest — built-in avatar models (Live2D, PixelPet, PNG Tuber, and future VRM/Spine samples) and bundled voice models — follow a **maintainer-only distribution** policy.
 
 ### Official Built-in Assets Are Maintained by the Core Team Only
-
-The following paths are **not open for community contributions**. Pull Requests whose
-purpose is to add, replace, or swap model assets under these paths will be closed
-without review:
+The following paths are **not open for community asset submissions**. Pull Requests aiming to add, replace, or swap model binary assets under these paths will be closed without review:
 
 - `frontend/src/renderer/public/live2d/` — built-in Live2D models
 - `frontend/src/renderer/public/pixel/` — built-in PixelPet models
@@ -367,71 +187,37 @@ without review:
 - `backend/models/` — bundled voice models
 - `backend/app/data/avatar-manifest.json` — built-in model manifest
 
-Code changes that happen to touch these paths (e.g. a renderer fix that also adjusts a
-manifest entry) are fine; wholesale asset additions/replacements are not.
+> Code changes that touch these paths (e.g., bug fixes to the model loader or manifest schema adjustments) are welcomed; additions of external model binaries are not.
 
-### Why This Rule Exists
+### Why This Policy Exists
+1. **Copyright and Redistribution Licenses**: Many avatar models and voice checkpoints circulating online lack redistribution permissions. Re-hosting them would expose the project and downstream users to copyright claims.
+2. **Reviewability**: Binary archives cannot be inspected for malicious payloads, hidden licenses, or tampering. To maintain trust, only core maintainers provide verified models.
 
-- Most avatar and voice model files circulating online **do not carry a license that
-  permits redistribution**. Re-hosting them in this repository would expose every user
-  of the project — and the project itself — to copyright claims.
-- Binary model archives cannot be meaningfully reviewed for safety or licensing. Given
-  that LuomiNest is an open platform anyone can clone and re-run, accepting third-party
-  model submissions would turn the official repository into an unreviewed distribution
-  channel. The only safe default is: official assets only.
+### User-Imported Models Stay on Your Local Machine
+Models imported through the in-app Avatar Workshop (**皮套工坊 → Import Model**) are copied directly into the local application data directory (Electron `userData`), which resides **outside the git repository**. They are never committed and must not be submitted via PR.
 
-### Your Own Models Stay on Your Machine
-
-Models you import through the in-app avatar workshop (**皮套工坊 → Import Model**) are
-copied into the application data directory (Electron `userData`), which lives **outside
-the git repository**. They are never committed, and must not be submitted back to this
-repository — through a PR or any other channel.
-
-Locally you are free to do what you want:
-
-- Import and delete your own models (deletion removes the local copy)
-- Hide built-in models you don't want (a local preference, restorable at any time)
-- Modify or experiment with models in your local data directory
-
-None of this affects the repository, and none of it can be pushed back to it.
-
-### Want a New Official Built-in Model?
-
-Open an Issue **before** preparing any PR, including:
-
-1. The model's source and a link to its license
-2. Confirmation that the license permits redistribution in an AGPL project
-
-Maintainers will decide case by case. Once approved, the asset is added by the core
-team so that every built-in model in the repository has a verified, documented license.
-
-## Report Bugs and Feature Requests
-
-- Bug report: [Submit Bug Report](https://github.com/LuminousCX/LuomiNest/issues/new?template=bug_report.yaml)
-- Feature request: [Submit Feature Request](https://github.com/LuminousCX/LuomiNest/issues/new?template=feature_request.yaml)
-
-## Security Vulnerability Reporting
-
-**Do not report security vulnerabilities in public Issues!**
-
-Please report privately via email:
-- Email: `luminouschenxi@outlook.com`
-- Subject: `LuomiNest Security Report`
-
-See: [Security Policy](SECURITY.md)
-
-## License
-
-By contributing, you agree your contributions will be licensed under the [GNU AGPL v3 License](LICENSE) used by this project.
-
-## Get Help
-
-- Check [Issues](https://github.com/LuminousCX/LuomiNest/issues)
-- Join [Discussions](https://github.com/LuminousCX/LuomiNest/discussions)
-- Documentation: the 文档/ directory ships with the local workspace only
-  (it is excluded from the repository via .gitignore), so it is not browsable
-  on GitHub. Refer to it in your local checkout.
+### Requesting Official Built-in Models
+If you represent an author or have models with verified redistributable open licenses (compatible with AGPL-3.0), please open an Issue detailing:
+1. Model source and verified public license link.
+2. Explicit permission for redistribution within an AGPL-3.0 project.
 
 ---
 
-Thank you for contributing to LuomiNest!
+## Pull Request Guidelines
+
+1. **Keep PRs Focused**: One PR should ideally solve one problem or implement one coherent feature. Smaller PRs are reviewed and merged much faster.
+2. **Complete the Checklist**: Fill out the provided [Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md).
+3. **Verify Locally**: Ensure unit tests, `ruff`, `mypy`, and `pnpm typecheck` all pass before requesting a review.
+4. **Respond to Reviews**: Engage constructively with review comments. We are happy to help get your code merged!
+
+---
+
+## Documentation Policy
+
+The internal architecture and developer documentation suite (`文档/` directory) is retained in the local workspace only and is excluded from git via `.gitignore`. Do not attempt to commit local documentation drafts to git unless explicitly coordinated.
+
+---
+
+## License Agreement
+
+By contributing to LuomiNest, you agree that your contributions will be licensed under the project's [GNU Affero General Public License v3.0](LICENSE).

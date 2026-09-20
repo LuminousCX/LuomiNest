@@ -1,11 +1,11 @@
 blank_issues_enabled: true
 contact_links:
-  - name: LuomiNest Documentation
-    url: "https://github.com/LuminousCX/LuomiNest/tree/master/docs"
-    about: "Check project documentation for more information"
-  - name: Discussions
+  - name: Community Discussions
     url: "https://github.com/LuminousCX/LuomiNest/discussions"
-    about: "Join the community to ask questions or share ideas"
-  - name: Security Issue
+    about: "Ask questions, share ideas, or discuss features with the community"
+  - name: Build & Packaging Guide
+    url: "https://github.com/LuminousCX/LuomiNest/blob/master/frontend/BUILD.md"
+    about: "Guides on local packaging, release artifacts, and CI troubleshooting"
+  - name: Security Vulnerability Reporting
     url: "https://github.com/LuminousCX/LuomiNest/security/policy"
-    about: "Report security vulnerabilities through the security policy, do not report in public Issues"
+    about: "Report security vulnerabilities through our security policy (do not report in public issues)"
