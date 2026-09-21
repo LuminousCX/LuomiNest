@@ -249,7 +249,11 @@ class LuomiNestPlatformRouter:
 
         # 使用 context_service 的完整系统提示词构建流程（含人设、身份、规则）
         user_text = message.content or ""
-        base_system = context_service.build_system_prompt(MAIN_AGENT_ID, user_context=user_text)
+        base_system = context_service.build_system_prompt(
+            MAIN_AGENT_ID,
+            user_context=user_text,
+            include_avatar_emotion=False,
+        )
         platform_context = self._build_platform_context(message)
         full_system = f"{base_system}\n\n{platform_context}"
 
@@ -390,6 +394,7 @@ class LuomiNestPlatformRouter:
                 assistant_msg["reasoning_content"] = reasoning_content
             messages.append(assistant_msg)
 
+            turn_screenshots: list[str] = []
             for tc in tool_calls:
                 tool_name = tc.get("function", {}).get("name", "")
                 tool_args = tc.get("function", {}).get("arguments", {})
@@ -407,6 +412,10 @@ class LuomiNestPlatformRouter:
                     tool_name, tool_args, platform_adapter,
                 )
 
+                sc = (tool_result.get("metadata") or {}).get("screenshot")
+                if sc:
+                    turn_screenshots.append(sc)
+
                 # 获取工具输出（确保非空字符串，避免下游被清洗或 LLM 抛 400）
                 tool_output = (
                     tool_result.get("output")
@@ -421,6 +430,11 @@ class LuomiNestPlatformRouter:
                     "tool_call_id": tc_id,
                     "content": str(tool_output),
                 })
+
+            if turn_screenshots and supports_vision:
+                # 复用 runner 的注入逻辑：同一会话内仅保留最新一张截图反馈
+                from app.core.agents.middleware.runner import AgentRunner
+                AgentRunner._append_vision_feedback(messages, turn_screenshots[-1])
 
             # 再次调用 LLM（带工具结果）
             try:
@@ -704,7 +718,12 @@ class LuomiNestPlatformRouter:
         if tool:
             try:
                 result = await tool.execute(arguments)
-                return {"success": result.success, "output": result.output, "error": result.error}
+                return {
+                    "success": result.success,
+                    "output": result.output,
+                    "error": result.error,
+                    "metadata": result.metadata,
+                }
             except Exception as e:
                 return {"success": False, "output": "", "error": str(e)}
 

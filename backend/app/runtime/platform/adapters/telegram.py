@@ -552,3 +552,98 @@ class TelegramAdapter(BasePlatformAdapter):
             _, chat_id = target.split(":", 1)
             return chat_id
         return target
+
+    @property
+    def available_tools(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "telegram.send_message",
+                    "description": "向指定的 Telegram 群组或用户发送消息",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "chat_id": {
+                                "type": "string",
+                                "description": "Telegram 目标 Chat ID（群组通常为负数，如 -100xxx）",
+                            },
+                            "text": {
+                                "type": "string",
+                                "description": "要发送的消息文本内容",
+                            },
+                        },
+                        "required": ["chat_id", "text"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "telegram.delete_message",
+                    "description": "删除 Telegram 会话中的某条消息（需具备相应删除权限）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "chat_id": {
+                                "type": "string",
+                                "description": "Chat ID",
+                            },
+                            "message_id": {
+                                "type": "string",
+                                "description": "要删除的消息 ID",
+                            },
+                        },
+                        "required": ["chat_id", "message_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "telegram.pin_message",
+                    "description": "置顶 Telegram 群组或会话中的某条消息",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "chat_id": {
+                                "type": "string",
+                                "description": "Chat ID",
+                            },
+                            "message_id": {
+                                "type": "string",
+                                "description": "要置顶的消息 ID",
+                            },
+                        },
+                        "required": ["chat_id", "message_id"],
+                    },
+                },
+            },
+        ]
+
+    async def execute_platform_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if not self._http_client:
+            return {"success": False, "output": "", "error": "Telegram HTTP 客户端未初始化"}
+
+        try:
+            if tool_name == "telegram.send_message":
+                chat_id = str(arguments.get("chat_id", ""))
+                text = str(arguments.get("text", ""))
+                res = await self._call_api("sendMessage", {"chat_id": chat_id, "text": text})
+                return {"success": True, "output": f"消息已发送至 {chat_id}", "error": ""}
+
+            elif tool_name == "telegram.delete_message":
+                chat_id = str(arguments.get("chat_id", ""))
+                message_id = int(arguments.get("message_id", 0))
+                res = await self._call_api("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
+                return {"success": True, "output": f"已删除消息 {message_id}", "error": ""}
+
+            elif tool_name == "telegram.pin_message":
+                chat_id = str(arguments.get("chat_id", ""))
+                message_id = int(arguments.get("message_id", 0))
+                res = await self._call_api("pinChatMessage", {"chat_id": chat_id, "message_id": message_id})
+                return {"success": True, "output": f"已置顶消息 {message_id}", "error": ""}
+        except Exception as e:
+            return {"success": False, "output": "", "error": f"Telegram 工具执行失败: {e}"}
+
+        return await super().execute_platform_tool(tool_name, arguments)

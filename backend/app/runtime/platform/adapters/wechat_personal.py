@@ -81,6 +81,9 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
         self._poll_task: asyncio.Task | None = None
         self._is_stopping: bool = False
 
+        # 最近成功发送的消息记录（按目标分组），供撤回工具闭环使用
+        self._recent_sent: dict[str, list[dict[str, Any]]] = {}
+
     def initialize(self, config: dict[str, Any]) -> None:
         super().initialize(config)
         self._api_url = config.get("api_url", "http://127.0.0.1:2531/v2/api").rstrip("/")
@@ -281,6 +284,22 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
     # 消息发送
     # ------------------------------------------------------------------
 
+    def _record_sent_message(self, target: str, resp_data: dict[str, Any]) -> None:
+        """记录成功发送的消息 ID，供 wechat.revoke_msg 撤回闭环使用。"""
+        msg_id = str(resp_data.get("newMsgId") or resp_data.get("msgId") or "")
+        if not msg_id:
+            return
+        records = self._recent_sent.setdefault(target, [])
+        records.append(
+            {
+                "ts": time.time(),
+                "msg_id": msg_id,
+                "client_id": str(resp_data.get("clientId") or ""),
+            }
+        )
+        # 每个目标仅保留最近 20 条（撤回窗口只有 2 分钟，无需更长历史）
+        self._recent_sent[target] = records[-20:]
+
     async def send_message(self, response: PlatformResponse, target: str) -> bool:
         if not target:
             self._log("warning", "send_failed", "目标联系人或群聊标识为空")
@@ -318,6 +337,7 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
                         success = False
                         self._log("error", "send_failed", f"微信文本发送失败: {data.get('msg')}")
                     else:
+                        self._record_sent_message(target, data.get("data", {}))
                         self._log("success", "message_sent", f"微信消息已发送至 {target}: {response.content[:50]}")
             except Exception as e:
                 self._log("error", "send_failed", f"微信接口调用异常: {e}")
@@ -425,6 +445,27 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
             {
                 "type": "function",
                 "function": {
+                    "name": "wechat.send_text_message",
+                    "description": "向指定的个人微信好友、群聊或文件传输助手(filehelper)发送文本消息",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target": {
+                                "type": "string",
+                                "description": "目标微信 ID (wxid_xxx)、群聊 ID (xxx@chatroom) 或文件传输助手 (filehelper)",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "要发送的文本消息内容",
+                            },
+                        },
+                        "required": ["target", "content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "wechat.send_image",
                     "description": "向指定的个人微信好友或微信群发送图片",
                     "parameters": {
@@ -446,8 +487,33 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
             {
                 "type": "function",
                 "function": {
+                    "name": "wechat.send_file",
+                    "description": "向微信好友或群聊发送文件或文档链接",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target": {
+                                "type": "string",
+                                "description": "目标微信 ID 或群聊 ID",
+                            },
+                            "file_url": {
+                                "type": "string",
+                                "description": "文件下载 URL",
+                            },
+                            "file_name": {
+                                "type": "string",
+                                "description": "文件名称（可选，如 report.pdf）",
+                            },
+                        },
+                        "required": ["target", "file_url"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "wechat.revoke_msg",
-                    "description": "撤回微信中两分钟内发出的消息",
+                    "description": "撤回自己两分钟内发出的微信消息。不传 msg_id 时撤回对该目标最近发送的一条；消息发送超过两分钟将失败",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -457,28 +523,131 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
                             },
                             "msg_id": {
                                 "type": "string",
-                                "description": "消息 ID",
+                                "description": "要撤回的消息 ID（可选，来自发送类工具的返回；不传则撤回最近一条）",
                             },
                         },
-                        "required": ["target", "msg_id"],
+                        "required": ["target"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "wechat.get_contact_list",
+                    "description": "获取微信通讯录联系人与已保存群聊列表",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
                     },
                 },
             },
         ]
 
     async def execute_platform_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        if tool_name == "wechat.send_image":
+        if tool_name == "wechat.send_text_message":
+            target = arguments.get("target", "")
+            content = str(arguments.get("content", ""))
+            resp = PlatformResponse(content=content)
+            success = await self.send_message(resp, target)
+            return {
+                "success": success,
+                "output": f"消息已发送至 {target}" if success else "文本消息发送失败",
+                "error": "" if success else "发送失败",
+            }
+
+        elif tool_name == "wechat.send_image":
             target = arguments.get("target", "")
             img_url = arguments.get("image_url", "")
             resp = PlatformResponse(content="", image_urls=[img_url])
             success = await self.send_message(resp, target)
             return {"success": success, "output": "图片已发送" if success else "图片发送失败", "error": ""}
 
+        elif tool_name == "wechat.send_file":
+            target = arguments.get("target", "")
+            file_url = arguments.get("file_url", "")
+            file_name = arguments.get("file_name", "")
+            resp = PlatformResponse(content=f"[文件] {file_name or file_url}\n{file_url}", extra={"file_url": file_url, "file_name": file_name})
+            success = await self.send_message(resp, target)
+            return {
+                "success": success,
+                "output": f"文件已发送至 {target}" if success else "文件发送失败",
+                "error": "" if success else "发送失败",
+            }
+
         elif tool_name == "wechat.revoke_msg":
             target = arguments.get("target", "")
-            msg_id = arguments.get("msg_id", "")
+            msg_id = str(arguments.get("msg_id", "") or "")
+
+            # 解析待撤回消息：优先精确匹配传入 id，否则取该目标最近一条已发送消息
+            entry: dict[str, Any] | None = None
+            records = self._recent_sent.get(target, [])
+            if msg_id:
+                for rec in reversed(records):
+                    if msg_id in (rec["msg_id"], rec["client_id"]):
+                        entry = rec
+                        break
+                if entry is None:
+                    # 传入的 id 不在本会话发送记录中，仍按用户提供的 id 尝试撤回
+                    entry = {"ts": 0.0, "msg_id": msg_id, "client_id": ""}
+            elif records:
+                entry = records[-1]
+            if entry is None or not entry.get("msg_id"):
+                return {
+                    "success": False,
+                    "output": "",
+                    "error": f"未找到可撤回的消息：目标 {target} 没有已发送记录，且未提供 msg_id",
+                }
+
+            age = time.time() - float(entry.get("ts") or 0)
+            if entry.get("ts") and age > 120:
+                return {
+                    "success": False,
+                    "output": "",
+                    "error": f"消息发送已超过 {int(age)} 秒，微信仅支持撤回两分钟内发出的消息",
+                }
+
+            if self._mock_mode or not self._token:
+                self._log("info", "tool_exec", f"[模拟微信] 撤回消息: target={target}, msg_id={entry['msg_id']}")
+                return {"success": True, "output": f"已撤回消息 {entry['msg_id']}（模拟模式）", "error": ""}
+
             # 真实 Gewechat 撤回接口: POST /message/revokeMsg
-            self._log("info", "tool_exec", f"执行微信消息撤回: msg_id={msg_id}")
-            return {"success": True, "output": f"已请求撤回消息 {msg_id}", "error": ""}
+            headers = {"X-GEWE-TOKEN": self._token, "Content-Type": "application/json"}
+            payload: dict[str, Any] = {"appId": self._app_id, "msgId": entry["msg_id"]}
+            if entry.get("client_id"):
+                payload["clientId"] = entry["client_id"]
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.post(f"{self._api_url}/message/revokeMsg", headers=headers, json=payload)
+                    data = res.json()
+                    if data.get("ret") == 200:
+                        if entry in records:
+                            records.remove(entry)
+                        self._log("success", "tool_exec", f"微信消息撤回成功: msg_id={entry['msg_id']}")
+                        return {"success": True, "output": f"已撤回消息 {entry['msg_id']}", "error": ""}
+                    err = data.get("msg", "撤回失败")
+                    self._log("error", "tool_exec", f"微信消息撤回失败: {err}")
+                    return {"success": False, "output": "", "error": f"撤回失败: {err}"}
+            except Exception as e:
+                self._log("error", "tool_exec", f"微信撤回接口调用异常: {e}")
+                return {"success": False, "output": "", "error": f"撤回接口调用异常: {e}"}
+
+        elif tool_name == "wechat.get_contact_list":
+            if self._mock_mode or not self._token:
+                mock_contacts = [
+                    {"wxid": "filehelper", "nickname": "文件传输助手", "type": "official"},
+                    {"wxid": "wxid_companion_user", "nickname": "主人", "type": "friend"},
+                    {"wxid": "12345678@chatroom", "nickname": "家庭温馨群", "type": "group"},
+                ]
+                return {"success": True, "output": json.dumps(mock_contacts, ensure_ascii=False), "error": ""}
+            headers = {"X-GEWE-TOKEN": self._token, "Content-Type": "application/json"}
+            payload = {"appId": self._app_id}
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    res = await client.post(f"{self._api_url}/contacts/fetchContactsList", headers=headers, json=payload)
+                    data = res.json()
+                    contacts = data.get("data", {}).get("friends", [])
+                    return {"success": True, "output": json.dumps(contacts[:50], ensure_ascii=False), "error": ""}
+            except Exception as e:
+                return {"success": False, "output": "", "error": f"获取通讯录失败: {e}"}
 
         return await super().execute_platform_tool(tool_name, arguments)

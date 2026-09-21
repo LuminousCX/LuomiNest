@@ -704,6 +704,158 @@ class DiscordAdapter(ReconnectMixin, BasePlatformAdapter):
             )
             return False
 
+    @property
+    def available_tools(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "discord.send_message",
+                    "description": "向指定的 Discord 频道发送消息",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "channel_id": {
+                                "type": "string",
+                                "description": "Discord 目标频道 ID",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "要发送的消息文本内容",
+                            },
+                        },
+                        "required": ["channel_id", "content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "discord.add_reaction",
+                    "description": "为 Discord 频道中的某条消息添加表情回应（Reaction）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "channel_id": {
+                                "type": "string",
+                                "description": "频道 ID",
+                            },
+                            "message_id": {
+                                "type": "string",
+                                "description": "目标消息 ID",
+                            },
+                            "emoji": {
+                                "type": "string",
+                                "description": "Emoji 字符（如 👍、❤️、🎉）",
+                            },
+                        },
+                        "required": ["channel_id", "message_id", "emoji"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "discord.delete_message",
+                    "description": "删除 Discord 频道中的某条消息（需具备 Manage Messages 权限）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "channel_id": {
+                                "type": "string",
+                                "description": "频道 ID",
+                            },
+                            "message_id": {
+                                "type": "string",
+                                "description": "要删除的消息 ID",
+                            },
+                        },
+                        "required": ["channel_id", "message_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "discord.timeout_member",
+                    "description": "将 Discord 服务器成员禁言/隔离一段时间（Timeout）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "guild_id": {
+                                "type": "string",
+                                "description": "服务器/公会 Guild ID",
+                            },
+                            "user_id": {
+                                "type": "string",
+                                "description": "成员 User ID",
+                            },
+                            "duration_seconds": {
+                                "type": "integer",
+                                "description": "禁言秒数（0 表示解除禁言，默认 60）",
+                            },
+                        },
+                        "required": ["guild_id", "user_id"],
+                    },
+                },
+            },
+        ]
+
+    async def execute_platform_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if not self._http_client:
+            return {"success": False, "output": "", "error": "Discord HTTP 客户端未初始化"}
+
+        try:
+            if tool_name == "discord.send_message":
+                channel_id = str(arguments.get("channel_id", ""))
+                content = str(arguments.get("content", ""))
+                resp = await self._http_client.post(
+                    f"/channels/{channel_id}/messages",
+                    json={"content": content},
+                )
+                resp.raise_for_status()
+                return {"success": True, "output": f"消息已发送至频道 {channel_id}", "error": ""}
+
+            elif tool_name == "discord.add_reaction":
+                channel_id = str(arguments.get("channel_id", ""))
+                message_id = str(arguments.get("message_id", ""))
+                emoji = str(arguments.get("emoji", ""))
+                import urllib.parse
+                encoded_emoji = urllib.parse.quote(emoji)
+                resp = await self._http_client.put(
+                    f"/channels/{channel_id}/messages/{message_id}/reactions/{encoded_emoji}/@me"
+                )
+                resp.raise_for_status()
+                return {"success": True, "output": f"已为消息 {message_id} 添加回应 {emoji}", "error": ""}
+
+            elif tool_name == "discord.delete_message":
+                channel_id = str(arguments.get("channel_id", ""))
+                message_id = str(arguments.get("message_id", ""))
+                resp = await self._http_client.delete(f"/channels/{channel_id}/messages/{message_id}")
+                resp.raise_for_status()
+                return {"success": True, "output": f"已删除消息 {message_id}", "error": ""}
+
+            elif tool_name == "discord.timeout_member":
+                guild_id = str(arguments.get("guild_id", ""))
+                user_id = str(arguments.get("user_id", ""))
+                duration = int(arguments.get("duration_seconds", 60))
+                import datetime
+                if duration > 0:
+                    until = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=duration)).isoformat()
+                else:
+                    until = None
+                resp = await self._http_client.patch(
+                    f"/guilds/{guild_id}/members/{user_id}",
+                    json={"communication_disabled_until": until},
+                )
+                resp.raise_for_status()
+                desc = f"禁言 {duration} 秒" if duration > 0 else "解除禁言"
+                return {"success": True, "output": f"已对成员 {user_id} 执行{desc}", "error": ""}
+        except Exception as e:
+            return {"success": False, "output": "", "error": f"Discord 工具执行失败: {e}"}
+
+        return await super().execute_platform_tool(tool_name, arguments)
+
 
 def _is_image_url(url: str) -> bool:
     """判断 URL 是否指向图片文件。"""

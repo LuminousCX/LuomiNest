@@ -167,7 +167,24 @@ class MQTTTerminalAdapter(BasePlatformAdapter):
         entry["last_seen"] = time.time()
         entry["online"] = True
 
-        new_state = status.get("state")
+        # 提取环境遥测与传感器数据（温度、湿度、电量、传感器读数等）
+        telemetry: dict[str, Any] = {}
+        if isinstance(status, dict):
+            if "telemetry" in status and isinstance(status["telemetry"], dict):
+                telemetry.update(status["telemetry"])
+            if "sensors" in status and isinstance(status["sensors"], dict):
+                telemetry.update(status["sensors"])
+            for key, val in status.items():
+                lower_key = key.lower()
+                if lower_key in (
+                    "temperature", "temp", "humidity", "hum", "battery",
+                    "power", "voltage", "lux", "illuminance", "co2", "pm25",
+                    "pressure", "cpu_temp", "sensor_data",
+                ) or "temp" in lower_key or "hum" in lower_key:
+                    telemetry[key] = val
+        entry["telemetry"] = telemetry
+
+        new_state = status.get("state") if isinstance(status, dict) else None
         # 状态变化才记平台日志（每秒一次的心跳不刷屏）
         if new_state != prev_state:
             self._log(
@@ -264,3 +281,95 @@ class MQTTTerminalAdapter(BasePlatformAdapter):
         )
         base["device_count"] = len(self._devices)
         return base
+
+    def get_telemetry(self, device_id: str | None = None) -> dict[str, Any]:
+        """获取指定设备或所有在线设备的传感器遥测数据。"""
+        now = time.time()
+        if device_id:
+            entry = self._devices.get(device_id, {})
+            last_seen = entry.get("last_seen", 0.0)
+            online = entry.get("online", False) and (now - last_seen) < _DEVICE_STALE_SECONDS
+            return {
+                "device_id": device_id,
+                "online": online,
+                "last_seen": last_seen,
+                "telemetry": entry.get("telemetry", {}),
+                "status": entry.get("status", {}),
+            }
+
+        all_telemetry: dict[str, Any] = {}
+        for dev_id, entry in self._devices.items():
+            last_seen = entry.get("last_seen", 0.0)
+            online = entry.get("online", False) and (now - last_seen) < _DEVICE_STALE_SECONDS
+            all_telemetry[dev_id] = {
+                "online": online,
+                "last_seen": last_seen,
+                "telemetry": entry.get("telemetry", {}),
+                "name": entry.get("status", {}).get("name", dev_id),
+            }
+        return all_telemetry
+
+    @property
+    def available_tools(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "mqtt.get_sensor_data",
+                    "description": "获取 IoT 设备的传感器数据（如室内温湿度、光照、电量等）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "device_id": {
+                                "type": "string",
+                                "description": "设备 ID（可选，若不传则返回所有在线设备的传感器遥测数据）",
+                            },
+                        },
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "mqtt.send_command",
+                    "description": "通过 MQTT 向指定 IoT 硬件设备下发控制指令",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "device_id": {
+                                "type": "string",
+                                "description": "目标设备 ID",
+                            },
+                            "command": {
+                                "type": "string",
+                                "description": "指令内容或 JSON 字符串",
+                            },
+                        },
+                        "required": ["device_id", "command"],
+                    },
+                },
+            },
+        ]
+
+    async def execute_platform_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        if tool_name == "mqtt.get_sensor_data":
+            device_id = arguments.get("device_id")
+            data = self.get_telemetry(device_id)
+            return {
+                "success": True,
+                "output": json.dumps(data, ensure_ascii=False),
+                "error": "",
+            }
+
+        elif tool_name == "mqtt.send_command":
+            device_id = str(arguments.get("device_id", ""))
+            command = str(arguments.get("command", ""))
+            resp = PlatformResponse(content=command, message_type="command")
+            sent = await self.send_message(resp, device_id)
+            return {
+                "success": sent,
+                "output": f"指令已下发至设备 {device_id}" if sent else "指令下发失败，设备可能离线或未连接",
+                "error": "" if sent else "MQTT 下发失败",
+            }
+
+        return await super().execute_platform_tool(tool_name, arguments)

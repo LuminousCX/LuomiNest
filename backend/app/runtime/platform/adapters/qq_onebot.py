@@ -772,6 +772,242 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
                     },
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.send_group_notice",
+                    "description": "在 QQ 群中发布群公告（需具备管理员或群主权限）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "group_id": {
+                                "type": "string",
+                                "description": "群号",
+                            },
+                            "content": {
+                                "type": "string",
+                                "description": "公告内容文本",
+                            },
+                        },
+                        "required": ["group_id", "content"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.delete_group_notice",
+                    "description": "删除 QQ 群中已发布的群公告",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "group_id": {
+                                "type": "string",
+                                "description": "群号",
+                            },
+                            "notice_id": {
+                                "type": "string",
+                                "description": "要删除的公告 ID",
+                            },
+                        },
+                        "required": ["group_id", "notice_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.set_group_card",
+                    "description": "设置群成员的名片/群昵称（管理员权限可改他人，普通成员可改自己）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "group_id": {
+                                "type": "string",
+                                "description": "群号",
+                            },
+                            "user_id": {
+                                "type": "string",
+                                "description": "目标成员 QQ 号",
+                            },
+                            "card": {
+                                "type": "string",
+                                "description": "新群名片（为空时表示清空群名片恢复原昵称）",
+                            },
+                        },
+                        "required": ["group_id", "user_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.set_group_special_title",
+                    "description": "设置群成员的专属头衔（仅群主权限有效）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "group_id": {
+                                "type": "string",
+                                "description": "群号",
+                            },
+                            "user_id": {
+                                "type": "string",
+                                "description": "目标成员 QQ 号",
+                            },
+                            "special_title": {
+                                "type": "string",
+                                "description": "头衔名称",
+                            },
+                        },
+                        "required": ["group_id", "user_id", "special_title"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.set_group_whole_ban",
+                    "description": "开启或关闭 QQ 群全员禁言（需群管理员/群主权限）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "group_id": {
+                                "type": "string",
+                                "description": "群号",
+                            },
+                            "enable": {
+                                "type": "boolean",
+                                "description": "true 为开启全员禁言，false 为关闭",
+                            },
+                        },
+                        "required": ["group_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.kick_group_member",
+                    "description": "将指定成员移出 QQ 群（需群管理员/群主权限）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "group_id": {
+                                "type": "string",
+                                "description": "群号",
+                            },
+                            "user_id": {
+                                "type": "string",
+                                "description": "要踢出的成员 QQ 号",
+                            },
+                            "reject_add_request": {
+                                "type": "boolean",
+                                "description": "是否拒绝该用户以后再次加群（默认 false）",
+                            },
+                        },
+                        "required": ["group_id", "user_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.set_essence_msg",
+                    "description": "将指定群消息设置为群精华消息",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "message_id": {
+                                "type": "string",
+                                "description": "群消息 ID",
+                            },
+                        },
+                        "required": ["message_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.delete_essence_msg",
+                    "description": "移除群精华消息",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "message_id": {
+                                "type": "string",
+                                "description": "群消息 ID",
+                            },
+                        },
+                        "required": ["message_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.get_group_info",
+                    "description": "获取 QQ 群信息（群名称、成员数、最大成员数等）",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "group_id": {
+                                "type": "string",
+                                "description": "群号",
+                            },
+                        },
+                        "required": ["group_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.get_group_member_info",
+                    "description": "获取指定群成员的详细名片和资料",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "group_id": {
+                                "type": "string",
+                                "description": "群号",
+                            },
+                            "user_id": {
+                                "type": "string",
+                                "description": "成员 QQ 号",
+                            },
+                        },
+                        "required": ["group_id", "user_id"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "qq.send_msg",
+                    "description": "主动向 QQ 群或好友发送消息",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "target_type": {
+                                "type": "string",
+                                "enum": ["group", "private"],
+                                "description": "发送类型：group 群聊，private 私聊",
+                            },
+                            "target_id": {
+                                "type": "string",
+                                "description": "目标群号或对方 QQ 号",
+                            },
+                            "message": {
+                                "type": "string",
+                                "description": "消息正文",
+                            },
+                        },
+                        "required": ["target_type", "target_id", "message"],
+                    },
+                },
+            },
         ]
 
     async def execute_platform_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -842,6 +1078,142 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
                 "success": success,
                 "output": json.dumps(summary, ensure_ascii=False),
                 "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.send_group_notice":
+            group_id = int(arguments.get("group_id", 0))
+            content = str(arguments.get("content", ""))
+            res = await self.call_action("_send_group_notice", {"group_id": group_id, "content": content})
+            if res.get("status") != "ok" and res.get("retcode") != 0:
+                res = await self.call_action("send_group_notice", {"group_id": group_id, "content": content})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": f"已发布群 {group_id} 公告" if success else "发布群公告失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.delete_group_notice":
+            group_id = int(arguments.get("group_id", 0))
+            notice_id = str(arguments.get("notice_id", ""))
+            res = await self.call_action("_del_group_notice", {"group_id": group_id, "notice_id": notice_id})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": f"已删除公告 {notice_id}" if success else "删除群公告失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.set_group_card":
+            group_id = int(arguments.get("group_id", 0))
+            user_id = int(arguments.get("user_id", 0))
+            card = str(arguments.get("card", ""))
+            res = await self.call_action("set_group_card", {"group_id": group_id, "user_id": user_id, "card": card})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": f"已更新群名片为: '{card}'" if success else "修改群名片失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.set_group_special_title":
+            group_id = int(arguments.get("group_id", 0))
+            user_id = int(arguments.get("user_id", 0))
+            title = str(arguments.get("special_title", ""))
+            res = await self.call_action("set_group_special_title", {"group_id": group_id, "user_id": user_id, "special_title": title})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": f"已授予专属头衔: '{title}'" if success else "授予专属头衔失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.set_group_whole_ban":
+            group_id = int(arguments.get("group_id", 0))
+            enable = bool(arguments.get("enable", True))
+            res = await self.call_action("set_group_whole_ban", {"group_id": group_id, "enable": enable})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            action_desc = "开启全员禁言" if enable else "解除全员禁言"
+            return {
+                "success": success,
+                "output": f"已在群 {group_id} {action_desc}" if success else f"{action_desc}失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.kick_group_member":
+            group_id = int(arguments.get("group_id", 0))
+            user_id = int(arguments.get("user_id", 0))
+            reject = bool(arguments.get("reject_add_request", False))
+            res = await self.call_action("set_group_kick", {"group_id": group_id, "user_id": user_id, "reject_add_request": reject})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": f"已将成员 {user_id} 移出群 {group_id}" if success else "踢出成员失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.set_essence_msg":
+            msg_id = int(arguments.get("message_id", 0))
+            res = await self.call_action("set_essence_msg", {"message_id": msg_id})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": f"已将消息 {msg_id} 设为精华消息" if success else "设为精华消息失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.delete_essence_msg":
+            msg_id = int(arguments.get("message_id", 0))
+            res = await self.call_action("delete_essence_msg", {"message_id": msg_id})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": f"已移除精华消息 {msg_id}" if success else "移除精华消息失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.get_group_info":
+            group_id = int(arguments.get("group_id", 0))
+            no_cache = bool(arguments.get("no_cache", False))
+            res = await self.call_action("get_group_info", {"group_id": group_id, "no_cache": no_cache})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": json.dumps(res.get("data", {}), ensure_ascii=False) if success else "获取群信息失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.get_group_member_info":
+            group_id = int(arguments.get("group_id", 0))
+            user_id = int(arguments.get("user_id", 0))
+            no_cache = bool(arguments.get("no_cache", False))
+            res = await self.call_action("get_group_member_info", {"group_id": group_id, "user_id": user_id, "no_cache": no_cache})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            return {
+                "success": success,
+                "output": json.dumps(res.get("data", {}), ensure_ascii=False) if success else "获取成员信息失败",
+                "error": str(res.get("msg", "") if not success else ""),
+            }
+
+        elif tool_name == "qq.send_msg":
+            target_type = arguments.get("target_type", "group")
+            target_id = int(arguments.get("target_id") or arguments.get("group_id") or arguments.get("user_id") or 0)
+            msg_text = str(arguments.get("message", ""))
+            if target_type == "group":
+                res = await self.call_action("send_group_msg", {"group_id": target_id, "message": msg_text})
+            else:
+                res = await self.call_action("send_private_msg", {"user_id": target_id, "message": msg_text})
+            success = res.get("status") == "ok" or res.get("retcode") == 0
+            # 回传 message_id：撤回/表情回应类操作需要它形成「发送→再操作」闭环
+            message_id = str((res.get("data") or {}).get("message_id", "") or "")
+            output = f"消息已发送至 {target_type} {target_id}"
+            if success and message_id:
+                output += f"，message_id={message_id}（可用 qq.delete_msg 撤回）"
+            return {
+                "success": success,
+                "output": output if success else "发送消息失败",
+                "error": str(res.get("msg", "") if not success else ""),
+                "metadata": {"message_id": message_id} if message_id else None,
             }
 
         return await super().execute_platform_tool(tool_name, arguments)

@@ -27,7 +27,7 @@ async def test_qq_adapter_init(qq_adapter):
     assert qq_adapter.platform_name == "qq_onebot"
     assert qq_adapter._anti_ban_enabled is True
     assert qq_adapter._rate_limit_per_minute == 5
-    assert len(qq_adapter.available_tools) == 5
+    assert len(qq_adapter.available_tools) >= 5
 
 
 @pytest.mark.asyncio

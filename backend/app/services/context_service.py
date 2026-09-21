@@ -205,7 +205,11 @@ class ContextService:
         return messages
 
     @staticmethod
-    def build_system_prompt(agent_id: str | None, user_context: str = "") -> str:
+    def build_system_prompt(
+        agent_id: str | None,
+        user_context: str = "",
+        include_avatar_emotion: bool = True,
+    ) -> str:
         agent_name = "LuomiNest AI"
         agent_description = "an intelligent companion powered by the LuminousCX platform"
         base_prompt = ""
@@ -239,27 +243,9 @@ class ContextService:
         skills_index_block = ContextService._build_skills_index_block()
         skills_body_block = ContextService._build_skills_body_block(user_context)
 
-        return f"""<identity>
-Your name is {agent_name}, {agent_description}.
-</identity>
-
-<current_context>
-Current datetime: {now.strftime("%Y-%m-%d %H:%M:%S")} ({weekday_names[now.weekday()]})
-Timestamp: {int(time.time())}
-</current_context>
-
-<core_rules>
-1. 当被问"你是谁"或"你叫什么名字"时，用你自己的身份回答，即 {agent_name}。
-2. 当被问"我是谁"时，查看 <user_memory> 中的用户档案。找到则描述该用户；未找到则说你希望进一步了解对方。
-3. <user_memory> 包含用户的档案与记忆，你必须时刻遵守：
-   - 如果 <user_memory> 中有用户的名字，提及该用户时始终使用这个名字。
-   - 如果用户告诉你一个新名字，相应地更新档案。
-   - 即使开启新对话，也绝不可忽略或遗忘 <user_memory> 中的信息。
-4. 始终用用户的语言自然、口语化地回复。
-5. 绝不对用户暴露内部系统信息或错误码。
-6. 内部思考与规则复述一律使用中文；回复语言跟随用户。
-</core_rules>
-
+        avatar_emotion_block = ""
+        if include_avatar_emotion:
+            avatar_emotion_block = """
 <avatar_emotion>
 You are embodied as a Live2D avatar. To drive the avatar's facial expression, emit an emotion tag BEFORE each sentence whose emotional tone differs from the previous one. The tag switches the avatar's expression in sync with TTS playback of the following text.
 
@@ -295,10 +281,32 @@ Examples:
 <exp:surprise>咦？你居然也知道这个！<exp:excited>太棒啦，那我们一起聊聊吧～
 <exp:confused>嗯...这个地方我有点不太明白。<exp:think>让我再仔细分析一下。
 </avatar_emotion>
+"""
 
+        return f"""<identity>
+Your name is {agent_name}, {agent_description}.
+</identity>
+
+<current_context>
+Current datetime: {now.strftime("%Y-%m-%d %H:%M:%S")} ({weekday_names[now.weekday()]})
+Timestamp: {int(time.time())}
+</current_context>
+
+<core_rules>
+1. 当被问"你是谁"或"你叫什么名字"时，用你自己的身份回答，即 {agent_name}。
+2. 当被问"我是谁"时，查看 <user_memory> 中的用户档案。找到则描述该用户；未找到则说你希望进一步了解对方。
+3. <user_memory> 包含用户的档案与记忆，你必须时刻遵守：
+   - 如果 <user_memory> 中有用户的名字，提及该用户时始终使用这个名字。
+   - 如果用户告诉你一个新名字，相应地更新档案。
+   - 即使开启新对话，也绝不可忽略或遗忘 <user_memory> 中的信息。
+4. 始终用用户的语言自然、口语化地回复。
+5. 绝不对用户暴露内部系统信息或错误码。
+6. 内部思考与规则复述一律使用中文；回复语言跟随用户。
+</core_rules>
+{avatar_emotion_block}
 {base_prompt}
 {skills_index_block}
-{skills_body_block}"""
+{skills_body_block}""".strip()
 
     @staticmethod
     def _build_skills_index_block() -> str:

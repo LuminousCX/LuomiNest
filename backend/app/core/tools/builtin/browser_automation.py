@@ -1,9 +1,14 @@
 """LuomiNest 浏览器观察工具集。
 
-仅保留 2 个**只读**工具（产品定位：内置浏览器精简为只读——
-Agent 只需"访问网页 + 看见"内嵌浏览器，不做任何页面交互）：
+只读观察工具集（产品定位：内置浏览器精简为只读——
+Agent 只需"访问网页 + 看见 + 管理标签页"，不做任何页面交互）：
 - browser_visit: 打开网址 → 等待加载 → 自动截图（复合动作，一次返回结果）
 - browser_screenshot: 对当前浏览器页面重新截图（base64 PNG）
+- browser_get_tabs / browser_switch_tab / browser_open_tab / browser_close_tab:
+  多标签页查看与切换（2026-09-21 恢复，覆盖多 tab 浏览场景）
+
+截图经 ToolResult.metadata 传递，由 AgentRunner 在模型具备视觉能力时
+注入为 image_url 消息（见 runner._append_vision_feedback）。
 
 通过 WebSocket 调用前端 Electron Main 的 LuomiAutomationExecutor 执行
 （Electron 原生 API，不依赖 Playwright/Puppeteer）。
@@ -13,7 +18,7 @@ Agent 只需"访问网页 + 看见"内嵌浏览器，不做任何页面交互）
 - LuomiBrowserAutomationTool 通用类按规格实例化
 - get_luominest_browser_automation_tools() 工厂返回全部工具实例
 
-历史说明：曾包含 29 个全量自动化工具（导航/交互/标签页/等待/execute_js 等），
+历史说明：曾包含 29 个全量自动化工具（导航/交互/等待/execute_js 等），
 已于 2026-09 工具链瘦身中移除；browser_get_html 已于 2026-09 只读化改造中
 从工具面移除（executor 内部能力保留，WS 协议兼容不动）。
 """
@@ -40,10 +45,9 @@ BROWSER_ACTION_SPECS: dict[str, dict[str, Any]] = {
         "action": "navigate_and_screenshot",
         "description": (
             "在内置浏览器中打开指定网址：导航 → 等待页面加载完成（load 事件 + 约 1.5 秒渲染稳定期）"
-            "→ 自动截图。返回 JSON：ok（是否加载成功）、final_url（最终 URL，含重定向）、"
-            "title（页面标题）、screenshot（data URL 格式的 base64 PNG 截图）。"
-            "加载超时或失败时仍会尽力返回当前截图与已获得的信息（ok=false）。"
-            "只读操作，不会与页面交互。"
+            "→ 自动截图。返回页面标题、最终 URL 及截图。"
+            "对于支持视觉处理的多模态大模型，画面截图将自动同步，供模型直观分析网页内容。"
+            "只读操作，不会对网页执行任何危险输入。"
         ),
         "parameters": {
             "type": "object",
@@ -64,12 +68,69 @@ BROWSER_ACTION_SPECS: dict[str, dict[str, Any]] = {
     },
     "browser_screenshot": {
         "action": "screenshot",
-        "description": "截取内置浏览器当前页面的最新截图。返回 data URL（base64 PNG）。",
+        "description": "截取内置浏览器当前活跃或指定标签页的最新画面截图。多模态大模型可直接查看该截图。",
         "parameters": {
             "type": "object",
             "properties": {"tab_id": _TAB_ID_PARAM},
         },
         "timeout": 60.0,
+    },
+    "browser_get_tabs": {
+        "action": "get_tabs",
+        "description": "获取内置浏览器当前已打开的所有标签页列表（含标签页 ID、标题、URL、是否当前激活）。",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+        "timeout": 10.0,
+    },
+    "browser_switch_tab": {
+        "action": "switch_tab",
+        "description": "切换内置浏览器当前激活的标签页。多标签页浏览时，可先调用 browser_get_tabs 查到 tab_id 后切换。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tab_id": {
+                    "type": "string",
+                    "description": "目标标签页 ID",
+                },
+            },
+            "required": ["tab_id"],
+        },
+        "timeout": 10.0,
+    },
+    "browser_open_tab": {
+        "action": "open_tab",
+        "description": "在内置浏览器中新建一个标签页，并可选择性打开指定网址。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "初始打开的网址（可选）",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "标签页预设标题（可选）",
+                },
+            },
+        },
+        "timeout": 15.0,
+    },
+    "browser_close_tab": {
+        "action": "close_tab",
+        "description": "关闭内置浏览器中指定的标签页。",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tab_id": {
+                    "type": "string",
+                    "description": "要关闭的标签页 ID",
+                },
+            },
+            "required": ["tab_id"],
+        },
+        "timeout": 10.0,
     },
 }
 
@@ -79,37 +140,52 @@ BROWSER_ACTION_SPECS: dict[str, dict[str, Any]] = {
 # ============================================================================
 
 def _format_output(tool_name: str, data: dict[str, Any]) -> str:
-    """将前端执行结果格式化为 LLM 友好的文本输出。
-
-    策略：
-    - 截图：不返回 base64（避免 token 爆炸），仅提示已生成
-    - browser_visit：报告访问结果（final_url/title/是否成功）
-    - 其他：JSON 序列化后截断
-    """
+    """将前端执行结果格式化为 LLM 友好的文本输出。"""
     if not data:
-        return f"{tool_name} 执行成功（无返回数据）"
+        return f"{tool_name} 执行完成（无数据返回）"
 
-    # browser_visit（navigate_and_screenshot）：包含 final_url/title/screenshot
+    # browser_get_tabs
+    if "tabs" in data:
+        tabs = data.get("tabs", [])
+        active_id = data.get("activeTabId")
+        lines = [f"【内置浏览器标签页列表（共 {len(tabs)} 个）】:"]
+        for idx, t in enumerate(tabs, 1):
+            is_cur = " (当前激活)" if t.get("id") == active_id or t.get("active") else ""
+            lines.append(f"{idx}. [{t.get('id')}] {t.get('title') or '无标题'} - {t.get('url') or '空白页'}{is_cur}")
+        return "\n".join(lines)
+
+    # browser_switch_tab
+    if "tabId" in data and "url" in data:
+        return f"已成功切换到标签页 [{data.get('tabId')}]：{data.get('title') or '无标题'} ({data.get('url')})"
+
+    # browser_open_tab
+    if "tab_id" in data:
+        return f"已成功新建标签页 [{data.get('tab_id')}]：{data.get('title') or '新标签页'} ({data.get('url') or 'about:blank'})"
+
+    # browser_close_tab
+    if "closed_tab_id" in data:
+        return f"已成功关闭标签页 [{data.get('closed_tab_id')}]"
+
+    # browser_visit（navigate_and_screenshot）
     if "final_url" in data:
         data_url = str(data.get("screenshot", ""))
         ok = bool(data.get("ok"))
         error = data.get("error")
         lines = [
-            f"访问{'成功' if ok else '未完全成功'}：{data.get('title') or '（无标题）'}",
-            f"最终 URL：{data['final_url']}",
+            f"网页访问{'成功' if ok else '未完全加载'}：{data.get('title') or '（无标题）'}",
+            f"目标 URL：{data['final_url']}",
         ]
         if data_url:
-            lines.append(f"截图已生成（data URL 长度 {len(data_url)} 字符，PNG 格式）")
+            lines.append("【视觉截图已就绪】页面画面截图已捕获并传递至视觉上下文。")
         else:
-            lines.append("截图未生成")
+            lines.append("【截图提示】页面加载未生成有效截图。")
         if error:
-            lines.append(f"加载信息：{error}")
+            lines.append(f"附加状态信息：{error}")
         return "\n".join(lines)
 
-    # 截图：返回简短提示，完整 data URL 在 metadata
+    # 截图：返回简短提示
     if "screenshot" in data:
-        data_url = str(data.get("screenshot", ""))
-        return f"截图已生成（data URL 长度 {len(data_url)} 字符，PNG 格式）"
+        return "【视觉截图已就绪】当前页面画面截图已捕获并同步至视觉上下文。"
 
     # 通用：JSON 序列化
     try:

@@ -28,6 +28,24 @@ CHAT_MODE_TOOL_CONFIGS: dict[ChatMode, dict[str, Any]] = {
     ChatMode.NORMAL: {
         "registry": "tool_registry",
         "whitelist": [
+            # 记忆管理核心工具（Mem0 范式）
+            "memory_search",
+            "memory_add",
+            "memory_forget",
+            "memory_update",
+            # 日常基础伴侣工具
+            "get_current_time",
+            "query_weather",
+            # 浏览器只读与多标签页
+            "browser_visit",
+            "browser_screenshot",
+            "browser_get_tabs",
+            "browser_switch_tab",
+            # 跨平台网桥与 IoT 传感器
+            "platform_invoke",
+            "iot_get_sensor_data",
+            "iot_send_command",
+            # 定时任务
             "create_scheduled_task",
             "list_scheduled_tasks",
             "get_scheduled_task",

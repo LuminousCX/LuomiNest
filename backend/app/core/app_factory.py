@@ -321,9 +321,22 @@ async def lifespan(app: FastAPI):
         from app.core.tools.builtin.collaboration_tool import LuomiNestStartCollaborationTool
         tool_registry.register(LuomiNestStartCollaborationTool())
 
-        # 记忆主动搜索工具：群聊 Agent 主动查主 Agent 记忆（contextvar 权限控制）
+        # 记忆管理核心工具（Mem0 范式：主动增删改查记忆）
+        from app.core.tools.builtin.memory_tools import (
+            MemoryAddTool,
+            MemoryForgetTool,
+            MemoryUpdateTool,
+        )
         from app.core.tools.builtin.memory_search_tool import LuomiNestMemorySearchTool
         tool_registry.register(LuomiNestMemorySearchTool())
+        tool_registry.register(MemoryAddTool())
+        tool_registry.register(MemoryForgetTool())
+        tool_registry.register(MemoryUpdateTool())
+
+        # 日常基础伴侣工具（时间、天气）
+        from app.core.tools.builtin.basic_tools import GetCurrentTimeTool, QuickWeatherTool
+        tool_registry.register(GetCurrentTimeTool())
+        tool_registry.register(QuickWeatherTool())
 
         # 探索式工具发现（一切皆工具/插件，原 5 个发现类工具合并为 2 个，tier=meta）
         from app.core.tools.builtin.explore_tools import SkillExploreTool, ToolExploreTool
@@ -341,6 +354,13 @@ async def lifespan(app: FastAPI):
         # 上下文压缩工具（tier=core，对齐 tool-opt §4.3 T4）
         from app.core.tools.builtin.context_tools import CompressContextTool
         tool_registry.register(CompressContextTool())
+
+        # 跨平台操作网桥与 IoT 智能硬件工具
+        from app.core.tools.builtin.platform_bridge_tool import PlatformInvokeTool
+        from app.core.tools.builtin.mqtt_iot_tool import IoTGetSensorDataTool, IoTSendCommandTool
+        tool_registry.register(PlatformInvokeTool())
+        tool_registry.register(IoTGetSensorDataTool())
+        tool_registry.register(IoTSendCommandTool())
 
         logger.info(f"[LuomiNest] Registered {len(tool_registry.list_names())} tools: {', '.join(tool_registry.list_names())}")
     except Exception as e:

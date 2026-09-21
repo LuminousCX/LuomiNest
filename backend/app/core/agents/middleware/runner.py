@@ -28,6 +28,9 @@ from app.core.exceptions import error_content_and_code
 from app.core.tools.orchestrator import tool_orchestrator
 from app.runtime.provider.llm.types import LLMResponse, StreamEvent
 
+# 视觉反馈消息的标识前缀（用于同一回合内替换旧截图，防止累积）
+_VISION_FEEDBACK_MARKER = "[网页/浏览器视觉反馈]"
+
 
 class AgentRunner:
     """统一的 Agent 工具调用循环编排器。"""
@@ -50,6 +53,55 @@ class AgentRunner:
         self._max_iterations = max_iterations
         self._execute_fn = execute_fn or tool_orchestrator.execute_tool_call
         self._hook_registry = hook_registry
+
+    def _supports_vision(self, ctx: AgentContext) -> bool:
+        """检查当前上下文配置的模型是否支持视觉识别多模态能力。
+
+        能力未知时默认 False：向纯文本模型注入 image_url 会直接触发上游 400。
+        调用方可通过 ctx.extra["supports_vision"] 显式覆盖。
+        """
+        if "supports_vision" in ctx.extra:
+            return bool(ctx.extra["supports_vision"])
+        try:
+            from app.runtime.provider.llm.adapter import llm_adapter
+            provider = ctx.state.get("provider")
+            model = ctx.state.get("model")
+            caps = llm_adapter.get_capabilities(provider, model)
+            return bool(caps.supports_vision)
+        except Exception:
+            return False
+
+    @staticmethod
+    def _append_vision_feedback(messages: list[dict[str, Any]], screenshot_data_url: str) -> None:
+        """把本轮最新截图作为视觉反馈注入消息列表。
+
+        同一回合内只保留最新一张：追加前先移除上一条视觉反馈消息，
+        避免多轮工具循环中截图消息持续累积撑爆上下文。
+        """
+        for i, msg in enumerate(messages):
+            content = msg.get("content") if isinstance(msg, dict) else None
+            if (
+                msg.get("role") == "user"
+                and isinstance(content, list)
+                and content
+                and isinstance(content[0], dict)
+                and str(content[0].get("text", "")).startswith(_VISION_FEEDBACK_MARKER)
+            ):
+                del messages[i]
+                break
+        messages.append({
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": f"{_VISION_FEEDBACK_MARKER} 这是操作后当前页面的实时屏幕截图，请结合视觉画面与页面信息进行理解分析：",
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {"url": screenshot_data_url},
+                },
+            ],
+        })
 
     async def run_stream(
         self,
@@ -157,6 +209,7 @@ class AgentRunner:
                 ctx.messages.append(assistant_msg)
 
                 # 依次执行工具调用
+                turn_screenshots: list[str] = []
                 for tc in tool_calls:
                     tool_name = tc.get("function", {}).get("name", "")
                     logger.info(
@@ -173,10 +226,10 @@ class AgentRunner:
                         drain_event.set()
 
                     ctx.sse_emitter = _draining_emitter
-                    tool_task = asyncio.create_task(
-                        self._pipeline.run_tool_call(ctx, tc, self._execute_fn)
-                    )
                     try:
+                        tool_task = asyncio.ensure_future(
+                            self._pipeline.run_tool_call(ctx, tc, self._execute_fn)
+                        )
                         while True:
                             if sse_buffer:
                                 for sse_str in list(sse_buffer):
@@ -209,7 +262,21 @@ class AgentRunner:
                     await self._pipeline.run_after_tool_call(ctx, tc, result)
                     while sse_buffer:
                         yield sse_buffer.pop(0)
-                    ctx.messages.append(result)
+
+                    sc = (result.get("metadata") or {}).get("screenshot")
+                    if sc:
+                        turn_screenshots.append(sc)
+
+                    clean_tool_msg = {
+                        "role": "tool",
+                        "tool_call_id": result.get("tool_call_id"),
+                        "name": result.get("name"),
+                        "content": result.get("content", ""),
+                    }
+                    ctx.messages.append(clean_tool_msg)
+
+                if turn_screenshots and self._supports_vision(ctx):
+                    self._append_vision_feedback(ctx.messages, turn_screenshots[-1])
 
                 ctx.iteration += 1
 
@@ -312,6 +379,7 @@ class AgentRunner:
                 ctx.messages.append(assistant_msg)
 
                 # 依次执行工具调用
+                turn_screenshots: list[str] = []
                 for tc in tool_calls:
                     tool_name = tc.get("function", {}).get("name", "")
                     logger.info(
@@ -320,7 +388,21 @@ class AgentRunner:
                     )
                     result = await self._pipeline.run_tool_call(ctx, tc, self._execute_fn)
                     await self._pipeline.run_after_tool_call(ctx, tc, result)
-                    ctx.messages.append(result)
+
+                    sc = (result.get("metadata") or {}).get("screenshot")
+                    if sc:
+                        turn_screenshots.append(sc)
+
+                    clean_tool_msg = {
+                        "role": "tool",
+                        "tool_call_id": result.get("tool_call_id"),
+                        "name": result.get("name"),
+                        "content": result.get("content", ""),
+                    }
+                    ctx.messages.append(clean_tool_msg)
+
+                if turn_screenshots and self._supports_vision(ctx):
+                    self._append_vision_feedback(ctx.messages, turn_screenshots[-1])
 
                 ctx.iteration += 1
 

@@ -53,13 +53,18 @@ class ToolExploreTool(ToolBase):
                 "query": {
                     "type": "string",
                     "description": (
-                        "需求描述或关键词（如 '搜索本地文件' / '创建定时提醒'）。"
-                        "留空返回工具索引概览。"
+                        "需求描述或关键词（如 '搜索本地文件' / '发布群公告' / '查看室内温度'）。"
+                        "留空返回工具分类索引概览。"
                     ),
+                },
+                "category": {
+                    "type": "string",
+                    "enum": ["all", "memory", "browser", "platform", "iot", "schedule", "file", "basic"],
+                    "description": "按分类筛选工具（如 'platform' 跨平台工具, 'memory' 记忆系统, 'browser' 浏览器）",
                 },
                 "tool_name": {
                     "type": "string",
-                    "description": "精确拉取指定工具的完整 schema（优先于 query）。",
+                    "description": "精确拉取指定工具的完整调用参数 Schema（优先于 query）。",
                 },
             },
         }
@@ -67,13 +72,14 @@ class ToolExploreTool(ToolBase):
     async def execute(self, arguments: dict[str, Any]) -> ToolResult:
         tool_name = (arguments.get("tool_name") or "").strip()
         query = (arguments.get("query") or "").strip()
+        category = (arguments.get("category") or "").strip().lower()
 
         # 精确读取：单工具完整 schema
         if tool_name:
             tool = tool_registry.get(tool_name)
             if tool is None:
                 return ToolResult.fail(
-                    f"工具 '{tool_name}' 不存在。可用: {', '.join(sorted(tool_registry.list_names()))}"
+                    f"工具 '{tool_name}' 不存在。可用工具名示例: {', '.join(sorted(tool_registry.list_names())[:15])}..."
                 )
             return ToolResult.ok(self._tool_detail(tool))
 
@@ -82,23 +88,73 @@ class ToolExploreTool(ToolBase):
             hits = tool_registry.search(query, top_k=5)
             if not hits:
                 return ToolResult.ok(
-                    f"没有与 '{query}' 相关的工具。可调用本工具（不带参数）查看全部工具索引。"
+                    f"没有与 '{query}' 直接相关的工具。可调用本工具（不带参数或指定 category）查看分类工具索引。"
                 )
             blocks = [self._tool_detail(t) for t in hits]
             header = f"检索 '{query}' 命中 {len(blocks)} 个工具（可直接按 schema 调用）："
             return ToolResult.ok(header + "\n\n" + "\n\n".join(blocks))
 
-        # 索引概览
-        lines: list[str] = []
+        # 分类归纳工具
+        categorized: dict[str, list[str]] = {
+            "memory": [],
+            "browser": [],
+            "platform": [],
+            "iot": [],
+            "schedule": [],
+            "file": [],
+            "basic": [],
+            "other": [],
+        }
+
         for tool in tool_registry.list_tools():
-            desc_first = (tool.description or "").split("\n", 1)[0][:80]
-            lines.append(f"- {tool.name} [{tool.tier or 'domain'}]: {desc_first}")
-        if not lines:
-            return ToolResult.ok("当前没有已注册工具。")
-        return ToolResult.ok(
-            f"共 {len(lines)} 个工具。按需调用本工具并带 query 检索、或带 tool_name 拉取完整 schema：\n"
-            + "\n".join(lines)
-        )
+            t_name = tool.name.lower()
+            desc_first = (tool.description or "").split("\n", 1)[0][:60]
+            entry = f"- `{tool.name}`: {desc_first}"
+
+            if "memory" in t_name:
+                categorized["memory"].append(entry)
+            elif "browser" in t_name:
+                categorized["browser"].append(entry)
+            elif any(p in t_name for p in ("platform", "qq", "wechat", "discord", "telegram", "mc.")):
+                categorized["platform"].append(entry)
+            elif "iot" in t_name or "mqtt" in t_name or "hardware" in t_name:
+                categorized["iot"].append(entry)
+            elif "schedule" in t_name or "task" in t_name:
+                categorized["schedule"].append(entry)
+            elif any(f in t_name for f in ("file", "search", "everything")):
+                categorized["file"].append(entry)
+            elif any(b in t_name for b in ("time", "weather", "cli")):
+                categorized["basic"].append(entry)
+            else:
+                categorized["other"].append(entry)
+
+        cat_names = {
+            "memory": "🧠 记忆系统工具 (Memory)",
+            "browser": "🌐 浏览器观察工具 (Browser)",
+            "platform": "💬 跨平台操作工具 (QQ/微信/Discord/Telegram/MC)",
+            "iot": "🏠 IoT 与智能硬件 (MQTT/传感器/终端)",
+            "schedule": "⏰ 定时任务与调度 (Schedule)",
+            "file": "📁 文件与路径检索 (File & Search)",
+            "basic": "⚡ 日常轻量工具 (Time / Weather / CLI)",
+            "other": "🔧 扩展与其它工具 (Other)",
+        }
+
+        if category and category in categorized:
+            target_list = categorized[category]
+            label = cat_names.get(category, category)
+            if not target_list:
+                return ToolResult.ok(f"分类 [{label}] 下暂无已注册工具。")
+            return ToolResult.ok(f"### {label}\n" + "\n".join(target_list) + "\n\n（提示：如需参数定义，调用 `tool_explore(tool_name='xxx')`）")
+
+        # 返回全部分类概览
+        lines = ["# LuomiNest 工具分类索引概览"]
+        for cat_key, items in categorized.items():
+            if items:
+                lines.append(f"\n### {cat_names.get(cat_key, cat_key)}")
+                lines.extend(items)
+
+        lines.append("\n> **使用方式**：如需具体工具参数 Schema，请传入 `tool_name`（如 `tool_explore(tool_name='memory_add')`）或 `query` 模糊搜索。")
+        return ToolResult.ok("\n".join(lines))
 
     @staticmethod
     def _tool_detail(tool: ToolBase) -> str:

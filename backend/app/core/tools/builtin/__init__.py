@@ -15,6 +15,7 @@
 所有工具继承 ToolBase，统一使用 `arguments: dict[str, Any]` 签名。
 在 app_factory lifespan 中注册到 tool_registry。
 """
+from app.core.tools.builtin.basic_tools import GetCurrentTimeTool, QuickWeatherTool
 from app.core.tools.builtin.cli_tool import CliTool
 from app.core.tools.builtin.collaboration_tool import LuomiNestStartCollaborationTool
 from app.core.tools.builtin.file_tools import (
@@ -25,6 +26,13 @@ from app.core.tools.builtin.file_tools import (
 )
 from app.core.tools.builtin.mcp_tools import ListMcpServersTool, McpTool
 from app.core.tools.builtin.memory_search_tool import LuomiNestMemorySearchTool
+from app.core.tools.builtin.memory_tools import (
+    MemoryAddTool,
+    MemoryForgetTool,
+    MemoryUpdateTool,
+)
+from app.core.tools.builtin.mqtt_iot_tool import IoTGetSensorDataTool, IoTSendCommandTool
+from app.core.tools.builtin.platform_bridge_tool import PlatformInvokeTool
 from app.core.tools.builtin.scheduler_tool import (
     CreateScheduledTaskTool,
     DeleteScheduledTaskTool,
@@ -36,6 +44,8 @@ from app.core.tools.builtin.search_everything_tool import SearchEverythingTool
 from app.core.tools.builtin.subagent_tool import DelegateToSubagentTool
 
 __all__ = [
+    "GetCurrentTimeTool",
+    "QuickWeatherTool",
     "CliTool",
     "ToolExploreTool",
     "SkillExploreTool",
@@ -48,11 +58,15 @@ __all__ = [
     "DelegateToSubagentTool",
     "LuomiNestStartCollaborationTool",
     "LuomiNestMemorySearchTool",
+    "MemoryAddTool",
+    "MemoryForgetTool",
+    "MemoryUpdateTool",
     "CreateScheduledTaskTool",
     "ListScheduledTasksTool",
     "GetScheduledTaskTool",
     "DeleteScheduledTaskTool",
-
-
     "SearchEverythingTool",
+    "PlatformInvokeTool",
+    "IoTGetSensorDataTool",
+    "IoTSendCommandTool",
 ]

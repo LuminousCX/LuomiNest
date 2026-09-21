@@ -298,12 +298,15 @@ class ToolOrchestrator:
             f"success={result.success}, content_len={len(content)}"
         )
 
-        return {
+        res: dict[str, Any] = {
             "role": "tool",
             "tool_call_id": tool_call_id,
             "name": tool_name,
             "content": content,
         }
+        if result.metadata:
+            res["metadata"] = result.metadata
+        return res
 
     @staticmethod
     def build_assistant_message_with_tool_calls(

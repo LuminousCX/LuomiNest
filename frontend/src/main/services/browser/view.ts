@@ -5,6 +5,9 @@ import { getStealthScript } from './session'
 export function createBrowserView(): WebContentsView {
   const view = new WebContentsView({
     webPreferences: {
+      // contextIsolation 必须保持开启：页面脚本与 Electron 注入面隔离，
+      // 关闭它换取 stealth 的做法会让 XSS 有机会操纵 preload 暴露面。
+      // 指纹伪装改走 CDP 在文档创建前注入主世界，见 installStealthViaCDP()。
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -22,8 +25,38 @@ export function createBrowserView(): WebContentsView {
   })
 
   view.webContents.setVisualZoomLevelLimits(1, 3)
+  installStealthViaCDP(view)
 
   return view
+}
+
+/**
+ * 通过 CDP 在文档创建前把 stealth 脚本注入主世界。
+ *
+ * 之前的两个方案都有缺陷：preload 需要关闭 contextIsolation（安全面失控）；
+ * did-start-navigation 后 executeJavaScript 注入时机偏晚（页面内联反爬脚本可能已执行）。
+ * Page.addScriptToEvaluateOnNewDocument 在任何页面脚本运行前生效，两者兼得。
+ */
+export function installStealthViaCDP(view: WebContentsView): boolean {
+  try {
+    const { webContents } = view
+    if (!webContents.debugger.isAttached()) {
+      webContents.debugger.attach('1.3')
+    }
+    webContents.debugger
+      .sendCommand('Page.enable')
+      .catch(() => {})
+    webContents.debugger
+      .sendCommand('Page.addScriptToEvaluateOnNewDocument', {
+        source: getStealthScript(),
+      })
+      .catch(() => {})
+    return true
+  } catch {
+    // debugger 附加失败（如被其他调试器占用）时返回 false，
+    // tab.ts 的 did-start-navigation 兜底注入仍然生效
+    return false
+  }
 }
 
 export function calculateBounds(

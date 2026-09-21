@@ -225,8 +225,15 @@ function getUserAgent(): string {
 function getSecChUa(): string {
   const chromeVersion = process.versions.chrome || '131.0.0.0'
   const majorVersion = chromeVersion.split('.')[0]
-  const notBrandVersion = Math.floor(Math.random() * 20) + 8
-  return `"Chromium";v="${majorVersion}", "Google Chrome";v="${majorVersion}", "Not?A_Brand";v="${notBrandVersion}"`
+  // 品牌列表必须与真实 Chrome 保持同版本且稳定：随机版本号是指纹异常的明显特征，
+  // 会触发 B 站等站点风控（412）。真实 Chrome 131+ 的 GREASE 品牌为 "Not_A Brand";v="24"。
+  return `"Chromium";v="${majorVersion}", "Google Chrome";v="${majorVersion}", "Not_A Brand";v="24"`
+}
+
+function getSecChUaFullVersionList(): string {
+  const chromeVersion = process.versions.chrome || '131.0.0.0'
+  const majorVersion = chromeVersion.split('.')[0]
+  return `"Chromium";v="${chromeVersion}", "Google Chrome";v="${chromeVersion}", "Not_A Brand";v="24.0.0.0"`
 }
 
 function getSecChUaPlatform(): string {
@@ -238,6 +245,7 @@ function getSecChUaPlatform(): string {
 
 const USER_AGENT = getUserAgent()
 const SEC_CH_UA = getSecChUa()
+const SEC_CH_UA_FULL_VERSION_LIST = getSecChUaFullVersionList()
 const SEC_CH_UA_PLATFORM = getSecChUaPlatform()
 
 let initialized = false
@@ -255,16 +263,27 @@ export function initBrowserSession(): void {
     callback(allowed.includes(permission))
   })
 
-  // 仅对主文档请求注入 sec-ch-ua 头（导航请求），不影响 XHR/fetch API 请求
+  // Client Hints 头对全部请求类型注入：真实 Chrome 在主文档/子资源/XHR/fetch 上
+  // 都会携带 sec-ch-ua 系列头，仅主文档注入反而构成指纹异常（页面 API 读取到的
+  // navigator.userAgentData 与请求头不一致），可能触发站点风控
   browserSession.webRequest.onBeforeSendHeaders((details, callback) => {
     const headers = { ...details.requestHeaders }
-    // 仅对主框架导航请求注入客户端提示头，子资源请求保持原样
-    if (details.resourceType === 'mainFrame') {
-      headers['sec-ch-ua'] = SEC_CH_UA
-      headers['sec-ch-ua-mobile'] = '?0'
-      headers['sec-ch-ua-platform'] = SEC_CH_UA_PLATFORM
-      headers['Accept-Language'] = 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
+    headers['sec-ch-ua'] = SEC_CH_UA
+    headers['sec-ch-ua-mobile'] = '?0'
+    headers['sec-ch-ua-platform'] = SEC_CH_UA_PLATFORM
+    headers['sec-ch-ua-full-version-list'] = SEC_CH_UA_FULL_VERSION_LIST
+    headers['Accept-Language'] = 'zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7'
+
+    // 针对 Bilibili 及防盗链站自动补充 Referer 头，防止图片、音视频及反爬 CDN 403 拦截
+    const url = details.url || ''
+    if (
+      (url.includes('bilibili.com') || url.includes('hdslb.com')) &&
+      !headers['Referer'] &&
+      !headers['referer']
+    ) {
+      headers['Referer'] = 'https://www.bilibili.com/'
     }
+
     callback({ requestHeaders: headers })
   })
 
@@ -284,17 +303,18 @@ export function initBrowserSession(): void {
     }
   })
 
-  // 替换 CSP 头为宽松策略（而非完全剥离），保留基本 XSS 防护
-  // 原始 CSP 的 frame-ancestors 等限制嵌入式渲染的指令被移除，
-  // 但 script-src / style-src / connect-src 保持宽松允许
+  // 宽松 CSP 策略：允许 WebAssembly、Web Worker、Blob、Media 及常见 CDN
+  // 避免 B站、YouTube、现代 Vue/React SPA 播放器与核心脚本崩溃
   const RELAXED_CSP = [
     "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;",
-    "script-src * 'unsafe-inline' 'unsafe-eval';",
+    "script-src * 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' data: blob:;",
+    "worker-src * 'unsafe-inline' 'unsafe-eval' data: blob:;",
+    "child-src * 'unsafe-inline' 'unsafe-eval' data: blob:;",
     "style-src * 'unsafe-inline';",
-    "img-src * data: blob:;",
-    "media-src * data: blob:;",
-    "font-src * data:;",
-    "connect-src * ws: wss:;",
+    "img-src * data: blob: https: http:;",
+    "media-src * data: blob: https: http:;",
+    "font-src * data: https: http:;",
+    "connect-src * ws: wss: http: https: data: blob:;",
     "object-src 'none';",
     "base-uri 'self';",
   ].join(' ')
@@ -320,7 +340,7 @@ export function initBrowserSession(): void {
     }
 
     if (modified) {
-      // 注入宽松 CSP 替代原始策略（保留 XSS 防护，移除 frame 限制）
+      // 注入兼容 WebAssembly 与 Worker 的宽松 CSP 替代原始限制策略
       headers['Content-Security-Policy'] = RELAXED_CSP
       callback({ responseHeaders: headers })
     } else {
