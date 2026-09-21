@@ -30,6 +30,10 @@ PROVIDER_CAPABILITIES: dict[str, ProviderCapabilities] = {
         supports_response_format=True,
         supports_prompt_caching=True,
         supports_stream_options=True,
+        # o 系 / gpt-5 等推理模型使用 reasoning_effort 参数；effort 只会在
+        # 用户显式配置了推理力度的推理模型路由上下发（chat_completions 适配器）
+        supports_thinking=True,
+        thinking_style="effort",
         default_context_window=128_000,
     ),
     "anthropic": ProviderCapabilities(
@@ -87,6 +91,9 @@ PROVIDER_CAPABILITIES: dict[str, ProviderCapabilities] = {
         supports_tool_calls=True,
         supports_streaming=True,
         supports_vision=True,
+        # grok 系推理模型接受 reasoning_effort（low/high）
+        supports_thinking=True,
+        thinking_style="effort",
         default_context_window=131_072,
     ),
     "siliconflow": ProviderCapabilities(

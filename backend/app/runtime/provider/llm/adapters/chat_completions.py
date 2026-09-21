@@ -16,7 +16,7 @@ import asyncio
 import copy
 import hashlib
 import json
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 import httpx
 from loguru import logger
@@ -51,11 +51,11 @@ PROVIDER_TEMPLATES: dict[str, dict] = {
     "anthropic": {
         "id": "anthropic",
         "name": "Anthropic",
-        "vendor": "openai_compatible",
+        "vendor": "anthropic",
         "base_url": "https://api.anthropic.com/v1",
         "api_key": "",
         "default_model": "claude-sonnet-4-20250514",
-        "description": "Claude Opus / Sonnet series",
+        "description": "Claude Opus / Sonnet series (Anthropic 原生 /v1/messages 协议)",
     },
     "deepseek": {
         "id": "deepseek",
@@ -307,7 +307,7 @@ PROVIDER_TEMPLATES: dict[str, dict] = {
         "base_url": "https://YOUR_RESOURCE.openai.azure.com/openai/deployments",
         "api_key": "",
         "default_model": "gpt-4o",
-        "description": "Azure OpenAI Service",
+        "description": "Azure OpenAI Service（需将 YOUR_RESOURCE 替换为资源名，且部署路径与 api-version 需自行核对）",
     },
     "custom": {
         "id": "custom",
@@ -715,6 +715,11 @@ class OpenAICompatibleProvider(ProviderClientMixin, LLMProvider):
             payload["max_tokens"] = request.max_tokens
         if request.top_p is not None:
             payload["top_p"] = request.top_p
+        # 推理力度（设置页 → adapter 路由 → request.extra）：按厂商思考风格翻译为
+        # 实际参数。此前该值在 extra 中被静默丢弃，设置页配置到不了 API。
+        reasoning_effort = request.extra.get("reasoning_effort")
+        if reasoning_effort:
+            payload.update(self._build_thinking_params(request.model, str(reasoning_effort)))
         if request.tools:
             sanitized_tools = []
             for t in request.tools:
@@ -726,3 +731,27 @@ class OpenAICompatibleProvider(ProviderClientMixin, LLMProvider):
             payload["tools"] = sanitized_tools
             payload["tool_choice"] = "auto"
         return payload
+
+    # effort 档位 → Qwen3 thinking_budget（token 数）
+    _EFFORT_TO_THINKING_BUDGET = {"low": 4096, "medium": 10240, "high": 20480}
+
+    def _build_thinking_params(self, model: str | None, reasoning_effort: str) -> dict[str, Any]:
+        """按厂商思考风格把推理力度翻译为 OpenAI 兼容端点的请求参数。
+
+        - effort 风格（OpenAI o 系/gpt-5、xAI grok）：直接下发 reasoning_effort
+        - dashscope 风格（Qwen3）：enable_thinking + thinking_budget
+        - deepseek / minimax 风格：思考内建于模型，无力度参数，不下发
+        - 未知厂商：不下发（宁缺毋滥，避免不支持的服务端 400）
+        """
+        caps = self.get_capabilities(model)
+        style = caps.thinking_style if caps.supports_thinking else None
+        effort = reasoning_effort.strip().lower()
+        if style == "effort":
+            return {"reasoning_effort": effort}
+        if style == "dashscope":
+            params: dict[str, Any] = {"enable_thinking": True}
+            budget = self._EFFORT_TO_THINKING_BUDGET.get(effort)
+            if budget:
+                params["thinking_budget"] = budget
+            return params
+        return {}

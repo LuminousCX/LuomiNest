@@ -104,7 +104,7 @@ class ProviderCapabilities:
     supports_thinking: bool = False  # extended thinking / reasoning
     supports_prompt_caching: bool = False  # Anthropic-style prompt caching
     supports_stream_options: bool = False  # stream_options for usage in streaming
-    thinking_style: str | None = None  # "deepseek" | "dashscope" | "minimax" | "anthropic" | None
+    thinking_style: str | None = None  # "effort" | "deepseek" | "dashscope" | "minimax" | "anthropic" | None
     default_context_window: int = 16384
     known_unsupported_models: list[str] = field(default_factory=list)
 

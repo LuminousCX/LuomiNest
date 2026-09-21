@@ -626,7 +626,68 @@ class LLMAdapter:
         except Exception as e:
             elapsed = time.time() - start_time
             logger.error(f"[LLM] Stream failed: provider={actual_provider_name}, elapsed={elapsed:.2f}s, error={e}")
-            raise
+            if chunk_count == 0:
+                # 首块未产出：调用方还没收到任何内容，可安全降级到 fallback 链
+                # （已产出部分内容后无法干净重试，只能原样抛出）
+                async for chunk in self._fallback_chat_stream(
+                    messages, tools, source_error=e, **kwargs,
+                ):
+                    yield chunk
+            else:
+                raise
+
+    async def _fallback_chat_stream(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+        source_error: Exception | None = None,
+        **kwargs
+    ) -> AsyncIterator:
+        """流式 fallback：按 provider 顺序尝试 chat_stream（对齐 _fallback_chat 语义）。"""
+        self.ensure_providers_loaded()
+        logger.warning("[LLM] Starting fallback stream...")
+        provider_names = list(self.providers.keys())
+        if self.default_provider in self.providers:
+            provider_names = [self.default_provider] + [
+                n for n in provider_names if n != self.default_provider
+            ]
+
+        last_error = None
+        for name in provider_names:
+            try:
+                provider = self.providers[name]
+                request = LLMRequest(
+                    messages=messages,
+                    tools=tools,
+                    model=kwargs.get("model") or provider.default_model,
+                    temperature=kwargs.get("temperature"),
+                    max_tokens=kwargs.get("max_tokens"),
+                    top_p=kwargs.get("top_p"),
+                    stream=True,
+                    extra={k: v for k, v in kwargs.items() if k not in ("model", "temperature", "max_tokens", "top_p")},
+                )
+                start_time = time.time()
+                chunk_total = 0
+                async for chunk in provider.chat_stream(request):
+                    chunk_total += 1
+                    yield chunk
+                elapsed = time.time() - start_time
+                logger.success(f"[LLM] Fallback stream success: provider={name}, chunks={chunk_total}, elapsed={elapsed:.2f}s")
+                return
+            except Exception as e:
+                last_error = e
+                logger.warning(f"[LLM] Fallback stream provider [{name}] failed: {e}")
+                continue
+
+        logger.error("[LLM] All providers failed in fallback stream")
+        # 与 _fallback_chat 一致：源头业务错误（携带 errCode）原样透传
+        if source_error is not None and getattr(source_error, "err_code", None):
+            raise source_error
+        raise ProviderError(
+            f"All LLM providers failed in stream fallback. Last error: {last_error}",
+            code="LLM_ALL_PROVIDERS_FAILED",
+            status_code=502,
+        )
 
     async def embed(self, text: str, provider_name: str | None = None) -> list[float]:
         provider = self.get_provider(provider_name)

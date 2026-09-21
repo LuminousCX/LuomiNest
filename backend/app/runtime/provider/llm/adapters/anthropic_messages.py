@@ -456,6 +456,9 @@ class AnthropicMessagesProvider(ProviderClientMixin, LLMProvider):
             headers["x-api-key"] = self.api_key
         return headers
 
+    # effort 档位 → extended thinking budget_tokens（Anthropic 要求 ≥1024）
+    _THINKING_BUDGETS = {"low": 4096, "medium": 8192, "high": 16384}
+
     def _build_payload(self, request: LLMRequest, stream: bool) -> dict[str, Any]:
         """构建 /v1/messages 请求体。"""
         system_text, anthropic_messages = convert_messages_to_anthropic(request.messages)
@@ -473,10 +476,36 @@ class AnthropicMessagesProvider(ProviderClientMixin, LLMProvider):
             payload["temperature"] = max(0.0, min(float(request.temperature), _MAX_TEMPERATURE))
         if request.top_p is not None:
             payload["top_p"] = request.top_p
+        # 推理力度 → extended thinking（此前 effort 在 extra 中被静默丢弃）。
+        # 仅在纯对话历史时启用：工具循环要求 assistant 消息原样回传 thinking 块，
+        # 当前消息管道不保留它们，贸然启用会被 API 400 拒绝。
+        enable_reasoning = request.extra.get("enable_reasoning", True)
+        reasoning_effort = str(request.extra.get("reasoning_effort") or "").strip().lower()
+        if enable_reasoning and reasoning_effort and not self._history_has_tool_turns(request.messages):
+            budget = self._THINKING_BUDGETS.get(reasoning_effort)
+            if budget is None and reasoning_effort.isdigit():
+                budget = max(1024, int(reasoning_effort))
+            if budget:
+                payload["thinking"] = {"type": "enabled", "budget_tokens": budget}
+                # Anthropic 强制约束：thinking 模式下 temperature 必须为 1、不允许 top_p
+                payload["temperature"] = 1.0
+                payload.pop("top_p", None)
+                # max_tokens 必须大于 budget_tokens
+                payload["max_tokens"] = max(int(payload["max_tokens"]), budget + 1024)
         tools = convert_tools_to_anthropic(request.tools)
         if tools:
             payload["tools"] = tools
         return payload
+
+    @staticmethod
+    def _history_has_tool_turns(messages: list[dict[str, Any]]) -> bool:
+        """历史中是否存在工具轮次（tool 结果或 assistant.tool_calls）。"""
+        for m in messages:
+            if not isinstance(m, dict):
+                continue
+            if m.get("role") == "tool" or m.get("tool_calls"):
+                return True
+        return False
 
     # ── 响应解析 ──
 
