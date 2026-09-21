@@ -1,6 +1,7 @@
 import hashlib
 import re
 import shutil
+import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime
@@ -212,6 +213,140 @@ def _derive_conversation_id(storage_path: Path) -> str:
     return ""
 
 
+# ──────────────────────────────────────────────────────────────
+# SQLite FTS5 BM25 腿（W5-4）：检索时按需同步的影子全文索引
+# ──────────────────────────────────────────────────────────────
+# 设计取舍（对修改书 W5-4 的落地报告，最终未用 external content + 触发器）：
+#
+# 1. 未采用「external content 虚表 + 触发器」首选方案，原因有二：
+#    a) 分词器受限：触发器只能搬 NEW.content 原文，FTS5 内置分词器里
+#       trigram 查询侧要求 ≥3 字（「生日」这类高频中文词无法命中），
+#       unicode61 又把连续 CJK 并成单 token（整句一词、无法子串检索）；
+#       中文可用的分词必须走 Python 侧预分词（复用 fact_manager 的
+#       双字词+单字切分），触发器做不到。
+#    b) 写法匹配差：memory_facts.id 是 TEXT 主键且 save_data 走「整轨
+#       delete + 重插」写法，external content 的 rowid 映射每次保存全部
+#       轮换；contentful 触发器影子表虽可行，但触发器挂在全局库共享表上，
+#       对既有写入路径有侵入。
+# 2. 最终方案：contentful 影子虚表（unicode61 分词，content 列存 Python
+#    预分词后的空格连接文本），**检索时按需同步**——每次 BM25 检索前对本
+#    作用域 (owner_key, conversation_id) 做事实集合 diff（新增/内容变更/
+#    已删除），只同步差异行。事实 ≤ MAX_FACTS(100) 每作用域，diff 为两次
+#    轻量 SELECT；检索语义上恒为最新（索引是纯派生物，不承担存储职责）。
+# 3. FTS5 不可用的运行时（能力探针失败）→ 不建虚表，BM25 腿自动关闭，
+#    检索退回向量/关键词路径，主体功能不受影响。
+# 4. 分词/查询词项均复用 fact_manager._TOKEN_RE 与 _extract_content_words
+#    （索引侧保停用词，查询侧经 _extract_content_words 去停用词）。
+
+_FTS_TABLE = "memory_facts_fts"
+
+_FTS_DDL = (
+    f"CREATE VIRTUAL TABLE IF NOT EXISTS {_FTS_TABLE} USING fts5("
+    "content, fact_id UNINDEXED, owner_key UNINDEXED, conversation_id UNINDEXED, "
+    "tokenize='unicode61')"
+)
+
+# FTS5 能力探针（进程级一次；SQLite 构建缺 FTS5 时置 False）
+_fts_capable: bool | None = None
+# 已完成 DDL 的数据库标识（local 模式按 DB 路径；global 模式单一键），防重复执行
+_fts_ddl_done: set[str] = set()
+_fts_ddl_lock = threading.Lock()
+
+
+def _probe_fts5() -> bool:
+    """探测运行时 SQLite 是否带 FTS5（内存库一次性试建）。"""
+    global _fts_capable
+    if _fts_capable is None:
+        conn = None
+        try:
+            conn = sqlite3.connect(":memory:")
+            conn.execute("CREATE VIRTUAL TABLE probe_fts5 USING fts5(x)")
+            _fts_capable = True
+        except Exception as e:
+            _fts_capable = False
+            logger.warning(f"[Memory] SQLite FTS5 unavailable, BM25 leg disabled: {e}")
+        finally:
+            if conn is not None:
+                conn.close()
+    return _fts_capable
+
+
+def ensure_fts_schema(engine) -> bool:
+    """在给定 SQLAlchemy engine 的库上创建 FTS5 影子虚表（幂等）。
+
+    供 _MemoryDB（local 模式）与全局库（首个 MemoryStore 初始化时）调用。
+    FTS5 不可用或 DDL 失败时返回 False（BM25 腿关闭，不影响主流程）。
+    """
+    if not _probe_fts5():
+        return False
+    key = str(getattr(engine, "url", None) or id(engine))
+    with _fts_ddl_lock:
+        if key in _fts_ddl_done:
+            return True
+        try:
+            from sqlalchemy import text
+
+            with engine.begin() as conn:
+                conn.execute(text(_FTS_DDL))
+            _fts_ddl_done.add(key)
+            return True
+        except Exception as e:
+            logger.warning(f"[Memory] FTS5 schema creation failed, BM25 leg disabled: {e}")
+            return False
+
+
+def ensure_global_fts_schema() -> bool:
+    """全局库（与对话同库）的 FTS DDL：首个 MemoryStore 初始化时执行一次。"""
+    from sqlalchemy import text
+
+    from app.infrastructure.database.session import sync_session_factory
+
+    if not _probe_fts5():
+        return False
+    key = "global"
+    with _fts_ddl_lock:
+        if key in _fts_ddl_done:
+            return True
+        try:
+            with sync_session_factory() as session:
+                session.execute(text(_FTS_DDL))
+                session.commit()
+            _fts_ddl_done.add(key)
+            return True
+        except Exception as e:
+            logger.warning(f"[Memory] FTS5 schema creation failed, BM25 leg disabled: {e}")
+            return False
+
+
+def _fts_index_text(text: str) -> str:
+    """索引侧预分词：fact_manager 的双字词/英文词/单汉字切分，空格连接。
+
+    延迟导入规避 store ↔ fact_manager 循环依赖（fact_manager 顶层 import
+    MemoryStore）；导入失败兜底为逐汉字切分，保证索引不至于全空。
+    """
+    try:
+        from .fact_manager import _TOKEN_RE
+
+        tokens = _TOKEN_RE.findall(text or "")
+    except Exception:
+        tokens = re.findall(r"[A-Za-z]+|[\u4e00-\u9fff]", text or "")
+    return " ".join(tokens)
+
+
+def build_fts_match_query(query: str) -> str:
+    """查询文本 → FTS5 MATCH 表达式（OR 连接词项，与索引侧同源分词）。
+
+    查询词项经 _extract_content_words 过滤停用词/无意义单字符；全部词项
+    被过滤（如纯标点）时返回空串（调用方跳过 BM25 腿）。双引号剥离防
+    MATCH 语法注入。
+    """
+    from .fact_manager import _extract_content_words
+
+    words = _extract_content_words((query or "").casefold())
+    terms = [w.replace('"', "") for w in words if w.replace('"', "")]
+    return " OR ".join(f'"{t}"' for t in sorted(terms))
+
+
 class _MemoryDB:
     """记忆/向量 SQLite 后端统一封装。
 
@@ -223,6 +358,7 @@ class _MemoryDB:
     def __init__(self, storage_path: Path):
         self._is_global = False
         self._local_engine: Engine | None = None
+        self.fts_enabled = False
         root = (Path(settings.DATA_DIR) / "memory").resolve()
         try:
             Path(storage_path).resolve().relative_to(root)
@@ -235,6 +371,8 @@ class _MemoryDB:
                 poolclass=NullPool,
             )
             Base.metadata.create_all(self._local_engine, tables=_MEMORY_TABLES)
+            # FTS5 BM25 腿（W5-4）：本地模式建表后立即补虚表与触发器
+            self.fts_enabled = ensure_fts_schema(self._local_engine)
 
     @contextmanager
     def session(self) -> Iterator[Session]:
@@ -272,6 +410,12 @@ class MemoryStore:
         self._owner_key = _derive_owner_key(self._path)
         self._conversation_id = _derive_conversation_id(self._path)
         self._db = _MemoryDB(self._path)
+        # FTS5 BM25 腿（W5-4）：local 模式在 _MemoryDB 内建；global 模式在此补一次
+        # DDL（幂等，进程级只执行一次）。不可用时 False → BM25 腿自动关闭。
+        if hasattr(self._db, "fts_enabled"):
+            self.fts_enabled = bool(self._db.fts_enabled)
+        else:
+            self.fts_enabled = ensure_global_fts_schema()
 
     @classmethod
     def for_track(cls, track: str, user_key: str = "", base_dir: Path | None = None) -> "MemoryStore":
@@ -672,6 +816,114 @@ class MemoryStore:
                 logger.error(f"[Memory] Failed to reset memory store: {e}")
                 raise
             self._cache = None
+
+    # --- FTS5 BM25 检索（W5-4 两路召回的 BM25 腿） ---
+
+    def _sync_fts_scope(self, session) -> int:
+        """检索前按需同步：本作用域 (owner_key, conversation_id) 事实集合
+        与影子 FTS 行做 diff（新增 / 内容变更 / 已删除），只同步差异行。
+
+        Returns:
+            同步的行数（0 = 影子索引已最新）。
+        """
+        from sqlalchemy import func, select, text
+
+        live_rows = session.execute(
+            select(MemoryFact.id, MemoryFact.content).where(
+                MemoryFact.owner_key == self._owner_key,
+                MemoryFact.conversation_id == self._conversation_id,
+            )
+        ).all()
+        live: dict[str, str] = {fid: content or "" for fid, content in live_rows}
+
+        indexed_rows = session.execute(
+            text(
+                f"SELECT fact_id, content FROM {_FTS_TABLE} "
+                "WHERE owner_key = :o AND conversation_id = :c"
+            ),
+            {"o": self._owner_key, "c": self._conversation_id},
+        ).all()
+        indexed: dict[str, str] = {fid: content or "" for fid, content in indexed_rows}
+
+        stale_ids = [fid for fid in indexed if fid not in live or indexed[fid] != _fts_index_text(live[fid])]
+        new_rows = [
+            (fid, content) for fid, content in live.items()
+            if fid not in indexed or indexed[fid] != _fts_index_text(content)
+        ]
+        if not stale_ids and not new_rows:
+            return 0
+
+        for fid in stale_ids:
+            session.execute(
+                text(f"DELETE FROM {_FTS_TABLE} WHERE fact_id = :f"), {"f": fid}
+            )
+        for fid, content in new_rows:
+            session.execute(
+                text(
+                    f"INSERT INTO {_FTS_TABLE}(content, fact_id, owner_key, conversation_id) "
+                    "VALUES (:content, :fid, :o, :c)"
+                ),
+                {
+                    "content": _fts_index_text(content),
+                    "fid": fid,
+                    "o": self._owner_key,
+                    "c": self._conversation_id,
+                },
+            )
+        session.commit()
+        return len(stale_ids) + len(new_rows)
+
+    def _ensure_fts_enabled(self) -> bool:
+        """fts_enabled 为 False 时惰性重试一次 DDL 并自愈。
+
+        场景：全局库首个 MemoryStore 初始化早于建表（如测试未先跑 init_db、
+        或生产侧装配顺序异常）时，ensure_global_fts_schema 曾失败但引擎实例
+        已缓存；表就绪后的首次 BM25 检索经此处重试恢复 BM25 腿。
+        """
+        if getattr(self, "fts_enabled", False):
+            return True
+        if self._db._local_engine is not None:
+            self.fts_enabled = ensure_fts_schema(self._db._local_engine)
+        else:
+            self.fts_enabled = ensure_global_fts_schema()
+        return bool(self.fts_enabled)
+
+    def search_facts_bm25(self, query: str, k: int = 10) -> list[tuple[str, float]]:
+        """BM25 全文召回本 store 作用域的事实，返回 [(fact_id, bm25_rank)]。
+
+        bm25() 值越小越相关（FTS5 约定），调用方按顺序使用即可（RRF 只看排名）。
+        FTS5 不可用 / 查询无可匹配词项 / 查询异常时返回 []（由上层融合逻辑
+        自动落到向量腿或关键词兜底，不抛异常）。
+        """
+        if not self._ensure_fts_enabled():
+            return []
+        match_expr = build_fts_match_query(query)
+        if not match_expr:
+            return []
+        with self._lock:
+            try:
+                from sqlalchemy import text
+
+                with self._db.session() as session:
+                    self._sync_fts_scope(session)
+                    rows = session.execute(
+                        text(
+                            f"SELECT fact_id, bm25({_FTS_TABLE}) AS rank FROM {_FTS_TABLE} "
+                            f"WHERE {_FTS_TABLE} MATCH :match "
+                            "AND owner_key = :o AND conversation_id = :c "
+                            "ORDER BY rank LIMIT :k"
+                        ),
+                        {
+                            "match": match_expr,
+                            "o": self._owner_key,
+                            "c": self._conversation_id,
+                            "k": int(k),
+                        },
+                    ).all()
+                    return [(str(fid), float(rank)) for fid, rank in rows]
+            except Exception as e:
+                logger.warning(f"[Memory] FTS5 BM25 search failed (degrade): {e}")
+                return []
 
     def close(self) -> None:
         self._db.close()

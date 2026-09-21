@@ -168,21 +168,30 @@ class MemoryForgetTool(ToolBase):
                     return ToolResult.ok(f"已成功删除记忆（ID: {fact_id}）")
                 return ToolResult.fail(f"未找到事实 ID 为 {fact_id} 的记忆")
 
-            # 按 query 模糊遗忘
+            # 按 query 模糊遗忘（W5-6：归档失效的同时摘除向量，
+            # 防「事实已失效、向量索引仍召回」的幽灵记忆）
+            forgotten_ids: list[str] = []
+
             def _apply_forget(data) -> int:
                 count = 0
                 for f in list(data.facts):
                     if query in f.content.lower() and f.is_latest:
                         f.is_latest = False
                         f.confidence = 0.05
+                        forgotten_ids.append(f.id)
                         count += 1
                 return count
 
             async with engine.write_lock:
                 removed_count = await asyncio.to_thread(engine.forget_facts, _apply_forget)
+                for _fid in forgotten_ids:
+                    await engine.forget_fact_vector(_fid)
 
             if removed_count > 0:
-                logger.info(f"[MemoryForgetTool] Forgot {removed_count} facts matching '{query}'")
+                logger.info(
+                    f"[MemoryForgetTool] Forgot {removed_count} facts matching '{query}' "
+                    f"(vectors removed: {len(forgotten_ids)})"
+                )
                 return ToolResult.ok(f"已遗忘关于「{query}」的记忆（共 {removed_count} 条相关事实已归档失效）")
             return ToolResult.ok(f"未找到与「{query}」相关的活跃记忆，无需遗忘。")
 

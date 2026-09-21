@@ -250,6 +250,127 @@ class FactPinRequest(BaseModel):
     pinned: bool
 
 
+class MemorySearchRequest(BaseModel):
+    """记忆语义检索请求（W5-3，按路线图 GraphRAG 形态先落壳，前端记忆页可复用）。
+
+    检索内核与对话回路 memory_search 工具同源（向量 + FTS5 BM25 两路召回
+    RRF 融合，embedding 异常自动纯 BM25）。mode 字段为 GraphRAG 形态预留，
+    当前仅实现 "hybrid"（忽略其他取值）。
+    """
+
+    query: str = Field(..., min_length=1, max_length=500)
+    track: str = Field(default="owner", pattern="^(owner|users|groups)$")
+    user_key: str = Field(default="", max_length=128)
+    group_key: str = Field(default="", max_length=128)
+    category: str | None = Field(default=None, max_length=32)
+    scope: str | None = Field(default=None, description="作用域过滤：global/private/group")
+    top_k: int = Field(default=8, ge=1, le=50)
+    mode: str = Field(default="hybrid", max_length=16)
+    # 非 owner 轨默认排除 private 私密事实（防泄露底线）；主人管理页可显式放开
+    include_private: bool = Field(default=False)
+
+
+@router.post("/search")
+async def search_memory(request: MemorySearchRequest):
+    """跨轨记忆语义检索：query + 轨道/分类/作用域过滤，两路召回 RRF 融合。"""
+    import asyncio as _asyncio
+
+    from app.core.domain_policy import TRACK_GROUPS, TRACK_USERS
+    from app.engines.memory.hybrid_search import hybrid_search
+    from app.engines.memory.models import SCOPE_PRIVATE
+
+    scope_filter = (request.scope or "").strip().lower()
+    if scope_filter and scope_filter not in ("global", "private", "group"):
+        raise BadRequestError(
+            "scope must be one of: global/private/group", code="MEMORY_SCOPE_INVALID"
+        )
+
+    # 作用域白名单：owner 不限；users/groups 默认屏蔽 private（同工具 W5-1 底线）
+    allowed_scopes: set[str] | None = None
+    if request.track != "owner":
+        allowed_scopes = {"global", "group"}
+        if request.include_private:
+            allowed_scopes = allowed_scopes | {SCOPE_PRIVATE}
+    if scope_filter:
+        allowed_scopes = (
+            {scope_filter} if allowed_scopes is None
+            else allowed_scopes & {scope_filter}
+        )
+        if not allowed_scopes:
+            raise BadRequestError(
+                f"scope={scope_filter} 与 {request.track} 轨防泄露策略冲突",
+                code="MEMORY_SCOPE_CONFLICT",
+            )
+
+    # 目标引擎（groups 轨可传 user_key 合并说话人用户轨，结果标注来源轨）
+    engine = _resolve_engine(None, request.track, request.user_key, request.group_key)
+    engines = [(request.track, engine)]
+    if request.track == TRACK_GROUPS and request.user_key.strip():
+        from app.engines.memory.memory_engine import get_track_engine
+
+        engines.append((TRACK_USERS, get_track_engine(TRACK_USERS, request.user_key.strip())))
+
+    results = []
+    meta_mode, vector_ok, bm25_ok = "hybrid", True, True
+    fact_maps: dict[str, tuple] = {}
+    for track_label, eng in engines:
+        scored, meta = await hybrid_search(
+            eng, request.query, k=request.top_k,
+            category=request.category, allowed_scopes=allowed_scopes,
+        )
+        meta_mode, vector_ok, bm25_ok = meta.mode, meta.vector_ok, meta.bm25_ok
+        data = await _asyncio.to_thread(eng.load_data)
+        valid = {
+            f.id: f for f in data.facts
+            if f.is_latest
+            and (not request.category or f.category.lower() == request.category.strip().lower())
+            and (allowed_scopes is None or getattr(f, "scope", "global") in allowed_scopes)
+        }
+        fact_maps[track_label] = (scored, valid)
+
+    # 多轨合并（groups+users 时）：每轨作为一个 RRF 腿
+    from app.engines.memory.hybrid_search import RRF_K
+
+    scores: dict[str, float] = {}
+    for _label, (scored, _valid) in fact_maps.items():
+        for rank, s in enumerate(scored, start=1):
+            scores[s.fact_id] = scores.get(s.fact_id, 0.0) + 1.0 / (RRF_K + rank)
+    merged_ids = [
+        fid for fid, _sc in sorted(scores.items(), key=lambda x: x[1], reverse=True)[: request.top_k]
+    ]
+
+    for fid in merged_ids:
+        for track_label, (_scored, valid) in fact_maps.items():
+            fact = valid.get(fid)
+            if fact is None:
+                continue
+            results.append({
+                "fact_id": fact.id,
+                "content": fact.content,
+                "category": fact.category,
+                "confidence": fact.confidence,
+                "score": round(scores.get(fid, 0.0), 6),
+                "pinned": bool(getattr(fact, "pinned", False)),
+                "scope": getattr(fact, "scope", "global"),
+                "created_at": fact.created_at,
+                "track": track_label,
+                "user_key": request.user_key if track_label == TRACK_USERS else "",
+                "group_key": request.group_key if track_label == TRACK_GROUPS else "",
+            })
+            break
+
+    return ok({
+        "query": request.query,
+        "mode": meta_mode,
+        "track": request.track,
+        "user_key": request.user_key,
+        "group_key": request.group_key,
+        "vector_ok": vector_ok,
+        "bm25_ok": bm25_ok,
+        "results": results,
+    })
+
+
 @router.post("/facts/{fact_id}/pin")
 async def set_fact_pin(
     fact_id: str,

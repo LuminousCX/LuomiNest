@@ -333,6 +333,12 @@ async def lifespan(app: FastAPI):
         tool_registry.register(MemoryForgetTool())
         tool_registry.register(MemoryUpdateTool())
 
+        # 记忆时间线与置顶工具（W5-2：情景记忆时间线查询 + 关键事实 pin/unpin）
+        from app.core.tools.builtin.memory_daily_tool import MemoryGetDailyTool
+        from app.core.tools.builtin.memory_pin_tool import MemoryPinTool
+        tool_registry.register(MemoryGetDailyTool())
+        tool_registry.register(MemoryPinTool())
+
         # 日常基础伴侣工具（时间、天气）
         from app.core.tools.builtin.basic_tools import GetCurrentTimeTool, QuickWeatherTool
         tool_registry.register(GetCurrentTimeTool())

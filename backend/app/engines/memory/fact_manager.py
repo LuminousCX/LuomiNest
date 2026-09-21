@@ -311,12 +311,16 @@ class FactManager:
         return False
 
     def _trim_facts(self, data: MemoryData) -> None:
-        """事实数超上限时归档：按置信度保留前 MAX_FACTS，被挤出的最新事实
-        以 [记忆整理] 行追加到 daily（不再静默丢弃）。
+        """事实数超上限时归档：优先保留 pinned 与高置信度（W5-6），挤出
+        「未 pin 且置信度最低」的事实；被挤出的最新事实以 [记忆整理] 行
+        追加到 daily（不再静默丢弃）。
+
+        排序键 (pinned, confidence, is_latest) 降序：置顶恒保留 → 置信度
+        高者优先 → 同置信度时保留最新版本（归档历史可被挤出）。
         """
         if len(data.facts) <= self.MAX_FACTS:
             return
-        data.facts.sort(key=lambda f: f.confidence, reverse=True)
+        data.facts.sort(key=lambda f: (f.pinned, f.confidence, f.is_latest), reverse=True)
         evicted = data.facts[self.MAX_FACTS:]
         data.facts = data.facts[: self.MAX_FACTS]
         for fact in evicted:
