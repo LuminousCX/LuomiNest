@@ -38,6 +38,11 @@ class ToolFilterMiddleware(AgentMiddleware):
     - chat_service.stream_chat 的 disable_tools 过滤
     - subagent_executor._get_tools_for_subagent 的 forbidden_names
     - group_chat 的 GROUP_CHAT_TOOL_WHITELIST 白名单
+
+    W2「探索即可调用」：tool_explore/skill_explore 命中的工具 schema 由
+    ToolExecutionMiddleware 收获进 ctx.state["dynamic_tool_schemas"]，本中间件
+    在每轮 before_model 把它们追加进 ctx.tools 并并入白名单放行集——
+    模型经探索拿到完整定义的工具，下一轮即可真正发起 function call。
     """
 
     async def before_agent(self, ctx: AgentContext) -> None:
@@ -63,6 +68,133 @@ class ToolFilterMiddleware(AgentMiddleware):
         if ctx.tools is not None and not ctx.tools:
             ctx.tools = None
             logger.debug("[ToolFilter] 工具过滤后为空，本次以纯对话模式运行")
+
+    async def before_model(self, ctx: AgentContext) -> None:
+        # 1) 探索收获：把 tool_explore/skill_explore 返回的工具 schema 追加进可调用集
+        dynamic = [
+            t for t in (ctx.state.get("dynamic_tool_schemas") or [])
+            if isinstance(t, dict) and t.get("function", {}).get("name")
+        ]
+        if dynamic:
+            existing = {t.get("function", {}).get("name") for t in (ctx.tools or [])}
+            added = [t for t in dynamic if t["function"]["name"] not in existing]
+            if added:
+                ctx.tools = (ctx.tools or []) + added
+                logger.info(
+                    f"[ToolFilter] 探索发现的工具已加入可调用集: "
+                    f"{[t['function']['name'] for t in added]}"
+                )
+
+        # 2) 白名单放行集 = 静态白名单 ∪ 探索发现的工具名（每轮重过滤，NORMAL 模式生效）
+        whitelist = ctx.extra.get("tool_whitelist")
+        if whitelist and ctx.tools:
+            dynamic_names = {t["function"]["name"] for t in dynamic}
+            allowed = set(whitelist) | dynamic_names
+            ctx.tools = [
+                t for t in ctx.tools
+                if t.get("function", {}).get("name") in allowed
+            ]
+
+
+# ──────────────────────────────────────────────────────────────
+# 1.5 ContextTrimMiddleware（W2-4 工具循环内逐轮兜底裁剪）
+# ──────────────────────────────────────────────────────────────
+
+
+class ContextTrimMiddleware(AgentMiddleware):
+    """工具循环内每轮 LLM 调用前检查 token 占用，超阈值时按「user 消息边界」
+    从最旧处丢弃整轮历史（assistant 与其 tool 结果成对保留，避免上游校验失败）。
+
+    进入 runner 前 ContextManager 的压缩只在回合开始执行一次；长工具循环中
+    assistant/tool 消息持续增长没有兜底（W2-4 缺口），本中间件填补该缺口。
+    裁剪只重赋 ctx.messages，不触碰调用方的原始列表。
+    """
+
+    async def before_model(self, ctx: AgentContext) -> None:
+        try:
+            from app.core.config import settings
+            if not settings.LLM_CONTEXT_TRIM_ENABLED:
+                return
+            window = self._resolve_window()
+            if window <= 0:
+                return
+            used = self._estimate_tokens(ctx.messages)
+            trigger = window * settings.LLM_CONTEXT_TRIM_THRESHOLD
+            if used <= trigger:
+                return
+            trimmed = self._trim_at_user_boundaries(
+                ctx.messages, int(window * settings.LLM_COMPRESSION_THRESHOLD),
+            )
+            if len(trimmed) < len(ctx.messages):
+                dropped = len(ctx.messages) - len(trimmed)
+                logger.warning(
+                    f"[ContextTrim] 工具循环内裁剪: ~{used} tokens 超过阈值 {trigger:.0f}，"
+                    f"按 user 边界丢弃最旧 {dropped} 条消息"
+                )
+                ctx.messages = trimmed
+        except Exception:
+            logger.debug("[ContextTrim] 裁剪检查失败（不阻断工具循环）", exc_info=True)
+
+    @staticmethod
+    def _resolve_window() -> int:
+        from app.core.config import settings
+        if settings.LLM_CONTEXT_WINDOW_SIZE > 0:
+            return settings.LLM_CONTEXT_WINDOW_SIZE
+        try:
+            from app.runtime.provider.llm.adapter import llm_adapter
+            caps = llm_adapter.get_capabilities(None, None)
+            if caps and caps.default_context_window > 0:
+                return caps.default_context_window
+        except Exception:
+            pass
+        from app.core.context.constants import FALLBACK_CONTEXT_WINDOW
+        return FALLBACK_CONTEXT_WINDOW
+
+    @staticmethod
+    def _estimate_tokens(messages: list[dict[str, Any]]) -> int:
+        from app.core.context.constants import (
+            IMAGE_TOKEN_ESTIMATE,
+            TOKEN_WEIGHT_CHINESE,
+            TOKEN_WEIGHT_OTHER,
+        )
+        total = 0
+        for msg in messages:
+            if not isinstance(msg, dict):
+                continue
+            content = msg.get("content")
+            if isinstance(content, list):  # 多模态 content parts
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "image_url":
+                        total += IMAGE_TOKEN_ESTIMATE
+                    elif isinstance(part, dict):
+                        total += int(len(str(part.get("text", ""))) * TOKEN_WEIGHT_OTHER)
+                continue
+            text = str(content or "")
+            chinese = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+            total += int(chinese * TOKEN_WEIGHT_CHINESE + (len(text) - chinese) * TOKEN_WEIGHT_OTHER)
+        return total
+
+    @classmethod
+    def _trim_at_user_boundaries(cls, messages: list[dict[str, Any]], target_tokens: int) -> list[dict[str, Any]]:
+        if not messages:
+            return messages
+        sys_count = 0
+        while sys_count < len(messages) and messages[sys_count].get("role") == "system":
+            sys_count += 1
+        body = list(messages[sys_count:])
+        # 保底：至少保留最近 6 条不裁
+        while len(body) > 6:
+            if cls._estimate_tokens(messages[:sys_count] + body) <= target_tokens:
+                break
+            cut = 0
+            for i in range(1, len(body)):
+                if body[i].get("role") == "user":
+                    cut = i
+                    break
+            if cut <= 0:
+                break
+            body = body[cut:]
+        return messages[:sys_count] + body
 
 
 # ──────────────────────────────────────────────────────────────
@@ -112,6 +244,18 @@ class ToolExecutionMiddleware(AgentMiddleware):
                 "name": tool_name,
                 "content": f"[工具执行失败] {e}",
             }
+
+        # ── W2 探索收获：探索类工具命中的 schema 进入动态可调用集 ──
+        if isinstance(result, dict) and tool_name in ("tool_explore", "skill_explore"):
+            try:
+                discovered = (result.get("metadata") or {}).get("discovered_tools")
+                if discovered:
+                    stash = ctx.state.setdefault("dynamic_tool_schemas", [])
+                    for schema in discovered:
+                        if isinstance(schema, dict) and schema not in stash:
+                            stash.append(schema)
+            except Exception:
+                logger.debug("[ToolExec] 探索收获失败（不影响工具结果）", exc_info=True)
 
         # ── T5 统一输出治理：超阈值落盘 + 占位符替换 ──────────
         # 复用 services/tool_call_recorder 的 LUMINOUS_PERSIST_THRESHOLD 机制，

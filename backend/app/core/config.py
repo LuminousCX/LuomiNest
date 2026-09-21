@@ -76,6 +76,17 @@ class Settings(BaseSettings):
     LLM_CONTEXT_WINDOW_SIZE: int = 0  # 0 表示自动从 provider 获取
     LLM_CONTEXT_STRATEGY: str = "truncate"  # "truncate"（截断）或 "summarize"（LLM 摘要）
 
+    # W2 按需注入：主对话工具三级注入（常驻 core/meta + 按消息召回 + 长尾仅名称摘要）
+    # "full" 为旧版全量注入回退开关（保留一个版本供排障）
+    LLM_TOOL_INJECTION_MODE: str = "auto"  # "auto" | "full"
+    # W7 工具面裁剪：cli/写文件/启动应用/A2A/协作委派等高权限工具默认移出注入面
+    LLM_POWER_TOOLS_ENABLED: bool = False
+    # W2-4 工具循环内逐轮上下文兜底裁剪（防长工具链超窗）
+    LLM_CONTEXT_TRIM_ENABLED: bool = True
+    LLM_CONTEXT_TRIM_THRESHOLD: float = 0.85  # 超过窗口该比例触发裁剪
+    # <avatar_emotion> 表情块注入开关（平台文字渠道恒关；桌面由前端 Live2D 配置决定）
+    LLM_AVATAR_EMOTION_ENABLED: bool = True
+
     # 上下文压缩预算配置
     LLM_CONTEXT_BUDGET_RATIO: float = 0.35  # 历史消息预算占上下文窗口的比例
     LLM_SUMMARY_TARGET_RATIO: float = 0.40  # 摘要占历史预算的比例（与 compression_ratio 同步）

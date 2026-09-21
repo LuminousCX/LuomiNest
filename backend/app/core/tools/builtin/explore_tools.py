@@ -81,7 +81,12 @@ class ToolExploreTool(ToolBase):
                 return ToolResult.fail(
                     f"工具 '{tool_name}' 不存在。可用工具名示例: {', '.join(sorted(tool_registry.list_names())[:15])}..."
                 )
-            return ToolResult.ok(self._tool_detail(tool))
+            # metadata.discovered_tools：ToolExecutionMiddleware 收获后把该工具
+            # 动态加入可调用集（W2「探索即可调用」，不进入 LLM 文本上下文）
+            return ToolResult.ok(
+                self._tool_detail(tool),
+                metadata={"discovered_tools": [tool.to_openai_function()]},
+            )
 
         # 检索召回：命中即带完整 schema（省一次 read 往返）
         if query:
@@ -92,7 +97,10 @@ class ToolExploreTool(ToolBase):
                 )
             blocks = [self._tool_detail(t) for t in hits]
             header = f"检索 '{query}' 命中 {len(blocks)} 个工具（可直接按 schema 调用）："
-            return ToolResult.ok(header + "\n\n" + "\n\n".join(blocks))
+            return ToolResult.ok(
+                header + "\n\n" + "\n\n".join(blocks),
+                metadata={"discovered_tools": [t.to_openai_function() for t in hits]},
+            )
 
         # 分类归纳工具
         categorized: dict[str, list[str]] = {

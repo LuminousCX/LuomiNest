@@ -59,6 +59,57 @@ def _build_normal_tool_whitelist(user_query: str) -> list[str]:
     return whitelist
 
 
+def _select_tools_for_turn(
+    provider: str | None,
+    model: str | None,
+    user_query: str,
+    chat_mode_str: str,
+    messages: list[dict],
+) -> "tuple[list[dict] | None, list[str] | None]":
+    """W2 按需注入：为本轮对话选择工具，返回 (available_tools, tool_whitelist)。
+
+    - LLM_TOOL_INJECTION_MODE=full：旧版全量注入（回退开关，保留一个版本供排障）
+    - auto（默认）：三级注入——常驻层（tier=core/meta，NORMAL 额外并入固定白名单）
+      与按消息召回层给完整 schema；长尾工具以「名称+一句话」摘要追加进 system
+      的 <tool_index> 块，模型经 tool_explore 按需取定义（探索到的工具由
+      ToolFilterMiddleware 动态加入可调用集，见 builtin.py）
+    """
+    if not tool_registry.list_names():
+        return None, None
+
+    mode = (settings.LLM_TOOL_INJECTION_MODE or "auto").strip().lower()
+    if mode == "full":
+        return tool_orchestrator.get_tools_for_llm(provider, model), None
+
+    recall_top_k = 8
+    extra_resident: list[str] | None = None
+    if chat_mode_str == "normal":
+        # NORMAL：固定白名单并入常驻层（等价原白名单 ∪ 召回，但不再全量注入后裁剪）
+        extra_resident = list(get_tool_config(ChatMode.NORMAL).get("whitelist") or [])
+        recall_top_k = 6
+
+    schemas, digest = tool_orchestrator.get_tools_for_llm_tiered(
+        provider, model, query=user_query, recall_top_k=recall_top_k,
+        extra_resident=extra_resident,
+    )
+
+    if digest and messages:
+        for m in messages:
+            if m.get("role") == "system":
+                m["content"] = (
+                    m.get("content", "")
+                    + "\n\n<tool_index>\n以下工具未注入完整参数定义（节省 token）。"
+                    "使用其中某个工具前，先调用 tool_explore(tool_name='工具名') 获取完整定义，"
+                    "探索到的工具即可直接调用：\n"
+                    + digest
+                    + "\n</tool_index>"
+                )
+                break
+
+    # 三级注入下不再需要后置白名单裁剪（注入面即预期面，disable_tools 仍生效）
+    return (schemas or None), None
+
+
 async def _on_chat_turn_complete_usage(
     ctx: "AgentContext", result: dict[str, Any],
 ) -> None:
@@ -278,16 +329,20 @@ class ChatService:
         if is_sub_agent:
             depth_token = set_luominest_agent_call_depth(getattr(request, "agent_depth", 0))
 
-        # 工具支持：获取工具列表（disable_tools/tool_whitelist 过滤由 ToolFilterMiddleware 处理）
-        available_tools = tool_orchestrator.get_tools_for_llm(provider, model) if tool_registry.list_names() else None
+        # 工具支持：W2 三级注入（disable_tools 过滤仍由 ToolFilterMiddleware 处理）
+        chat_mode_str_early = getattr(request, "chat_mode", "normal")
+        available_tools, tool_whitelist_early = _select_tools_for_turn(
+            provider, model, self._context.get_user_query(messages),
+            chat_mode_str_early, messages,
+        )
         use_tools = bool(available_tools) and llm_adapter.supports_tool_calls(provider, model)
         if available_tools and not use_tools:
             logger.info(f"[STREAM] stream_chat: Provider {provider}/{model} 不支持工具调用，纯对话模式")
 
-        # 按对话模式设置工具白名单（NORMAL 模式：固定白名单 + S1b 按消息召回）
-        chat_mode_str = getattr(request, "chat_mode", "normal")
-        tool_whitelist = None
-        if chat_mode_str == "normal":
+        # 兼容保留：full 模式下 NORMAL 仍走「固定白名单 + 召回」后置裁剪
+        tool_whitelist = tool_whitelist_early
+        if tool_whitelist is None and chat_mode_str_early == "normal" and \
+                (settings.LLM_TOOL_INJECTION_MODE or "auto").strip().lower() == "full":
             tool_whitelist = _build_normal_tool_whitelist(
                 self._context.get_user_query(messages),
             )
@@ -407,8 +462,12 @@ class ChatService:
         """
         chat_id = str(uuid.uuid4())
 
-        # 工具支持
-        available_tools = tool_orchestrator.get_tools_for_llm(provider, model) if tool_registry.list_names() else None
+        # 工具支持：W2 三级注入（长尾工具以摘要进 system 的 <tool_index>）
+        chat_mode_str = getattr(request, "chat_mode", "normal")
+        available_tools, tool_whitelist = _select_tools_for_turn(
+            provider, model, self._context.get_user_query(conv["messages"]),
+            chat_mode_str, all_messages,
+        )
         use_tools = bool(available_tools) and llm_adapter.supports_tool_calls(provider, model)
         if available_tools and not use_tools:
             logger.info(f"[STREAM] Provider {provider}/{model} 不支持工具调用，本次以纯对话模式运行")
@@ -428,10 +487,9 @@ class ChatService:
         else:
             memory_access = MEMORY_ACCESS_NONE
 
-        # 按对话模式设置工具白名单（NORMAL 模式：固定白名单 + S1b 按消息召回）
-        chat_mode_str = getattr(request, "chat_mode", "normal")
-        tool_whitelist = None
-        if chat_mode_str == "normal":
+        # full 回退模式下 NORMAL 仍走「固定白名单 + 召回」后置裁剪
+        if tool_whitelist is None and chat_mode_str == "normal" and \
+                (settings.LLM_TOOL_INJECTION_MODE or "auto").strip().lower() == "full":
             tool_whitelist = _build_normal_tool_whitelist(
                 self._context.get_user_query(conv["messages"]),
             )

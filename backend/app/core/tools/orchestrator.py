@@ -27,6 +27,34 @@ from app.core.tools.registry import tool_registry
 _tools_compatibility_cache: dict[str, bool] = {}
 
 
+# ──────────────────────────────────────────────────────────────
+# W2 三级注入 / W7 工具面裁剪常量
+# ──────────────────────────────────────────────────────────────
+
+# 常驻层 tier：这些工具无条件注入完整 schema（对齐工作流引擎 _CORE_INTERNAL_TOOLS 思路）
+_TIER_RESIDENT = ("core", "meta")
+
+# W7 高权限工具（默认移出注入面，settings.LLM_POWER_TOOLS_ENABLED=true 时恢复）
+_W7_POWER_TOOL_EXACT = frozenset({
+    "cli", "write_file", "launch_application", "agent_tool_call", "start_collaboration",
+})
+_W7_POWER_TOOL_PREFIXES = ("a2a_tool_call_",)
+
+
+def _is_power_tool(name: str) -> bool:
+    return name in _W7_POWER_TOOL_EXACT or name.startswith(_W7_POWER_TOOL_PREFIXES)
+
+
+def _tool_digest_line(tool_schema: dict[str, Any]) -> str:
+    """长尾工具的「名称+一句话」摘要行。"""
+    func = tool_schema.get("function", {})
+    name = func.get("name", "")
+    desc = (func.get("description") or "").split("\n", 1)[0].strip()
+    if len(desc) > 80:
+        desc = desc[:77] + "..."
+    return f"- {name}: {desc}"
+
+
 def _detect_current_platform() -> str:
     """探测当前运行平台（win/mac/linux）。
 
@@ -208,6 +236,74 @@ class ToolOrchestrator:
             logger.debug(f"[ToolOrchestrator] MCP 工具合并跳过: {e}")
         return tools
 
+    def get_tools_for_llm_tiered(
+        self,
+        provider_name: str | None = None,
+        model: str | None = None,
+        *,
+        scope: str | None = None,
+        platform: str | None = None,
+        query: str = "",
+        recall_top_k: int = 8,
+        extra_resident: list[str] | None = None,
+    ) -> tuple[list[dict[str, Any]], str]:
+        """三级工具注入（W2，主对话版 S1b：对齐工作流引擎与 Anthropic Tool Search）。
+
+        - 常驻层：tier ∈ {core, meta} + extra_resident 指定的工具 + MCP 工具 → 完整 schema
+        - 召回层：tool_registry.search(query) top_k 命中 → 完整 schema
+        - 长尾层：其余工具 → 仅「名称+一句话」摘要，由调用方拼进 system 提示，
+          模型经 tool_explore(tool_name=...) 按需取定义（探索到的工具会被
+          ToolFilterMiddleware 动态加入可调用集，见 builtin.py）
+
+        W7 裁剪：cli/写文件/启动应用/A2A/协作委派等高权限工具默认整体移出
+        注入面（schema 与摘要都不出现），settings.LLM_POWER_TOOLS_ENABLED=true 恢复。
+
+        Returns:
+            (注入的完整 schema 列表, 长尾工具摘要文本；无长尾时为空串)
+        """
+        from app.core.config import settings
+
+        all_tools = self.get_tools_for_llm(provider_name, model, scope=scope, platform=platform)
+
+        # W7：高权限工具默认不进入任何注入层
+        if not settings.LLM_POWER_TOOLS_ENABLED:
+            all_tools = [
+                t for t in all_tools
+                if not _is_power_tool(t.get("function", {}).get("name", ""))
+            ]
+        if not all_tools:
+            return [], ""
+
+        resident_names: set[str] = set(extra_resident or [])
+        for t in all_tools:
+            name = t.get("function", {}).get("name", "")
+            tool = tool_registry.get(name)
+            # registry 查不到 = MCP 网关工具：数量少，视为常驻
+            if tool is None or (tool.tier in _TIER_RESIDENT):
+                resident_names.add(name)
+
+        recalled_names: set[str] = set()
+        if query:
+            try:
+                recalled_names = {t.name for t in tool_registry.search(query, top_k=recall_top_k)}
+            except Exception:
+                logger.debug("[ToolOrchestrator] 工具召回失败，仅常驻层注入", exc_info=True)
+
+        schemas: list[dict[str, Any]] = []
+        digest_lines: list[str] = []
+        for t in all_tools:
+            name = t.get("function", {}).get("name", "")
+            if name in resident_names or name in recalled_names:
+                schemas.append(t)
+            else:
+                digest_lines.append(_tool_digest_line(t))
+
+        logger.info(
+            f"[ToolOrchestrator] 三级注入: 常驻={len(resident_names & {t.get('function', {}).get('name', '') for t in schemas})}, "
+            f"召回={len(recalled_names)}, 长尾摘要={len(digest_lines)}, 总schema={len(schemas)}"
+        )
+        return schemas, "\n".join(digest_lines)
+
     async def execute_tool_call(self, tool_call: dict[str, Any]) -> dict[str, Any]:
         """执行单个工具调用
 
@@ -354,6 +450,7 @@ class ToolOrchestrator:
             MiddlewarePipeline 实例
         """
         from app.core.agents.middleware.builtin import (
+            ContextTrimMiddleware,
             LoopGuardMiddleware,
             MemoryAccessMiddleware,
             SpecialToolMiddleware,
@@ -373,6 +470,8 @@ class ToolOrchestrator:
         middlewares: list[Any] = [
             MemoryAccessMiddleware(),
             ToolFilterMiddleware(),
+            # W2-4：每轮 LLM 调用前兜底裁剪（在 ToolFilter 之后、LoopGuard 之前）
+            ContextTrimMiddleware(),
         ]
 
         if scene == "subagent":

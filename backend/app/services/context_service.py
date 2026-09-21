@@ -208,11 +208,17 @@ class ContextService:
     def build_system_prompt(
         agent_id: str | None,
         user_context: str = "",
-        include_avatar_emotion: bool = True,
+        include_avatar_emotion: bool | None = None,
     ) -> str:
         agent_name = "LuomiNest AI"
         agent_description = "an intelligent companion powered by the LuminousCX platform"
         base_prompt = ""
+
+        # avatar_emotion 块注入开关（W2-3 提示词瘦身）：未显式指定时读全局配置，
+        # 平台文字渠道调用方显式传 False（无皮套，表情标签只会污染文本）
+        if include_avatar_emotion is None:
+            from app.core.config import settings
+            include_avatar_emotion = settings.LLM_AVATAR_EMOTION_ENABLED
 
         if agent_id:
             # 主 Agent 走 main_agent_config，不查 agents_store
@@ -235,9 +241,6 @@ class ContextService:
                     agent_description = agent.get("description", agent_description)
                     if agent.get("system_prompt"):
                         base_prompt = agent["system_prompt"]
-
-        now = datetime.now(ZoneInfo("Asia/Shanghai"))
-        weekday_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
         # 注入 Skills：始终注入轻量 <skill_index>；若 user_context 匹配到技能，再注入完整 <available_skills>
         skills_index_block = ContextService._build_skills_index_block()
@@ -286,11 +289,6 @@ Examples:
         return f"""<identity>
 Your name is {agent_name}, {agent_description}.
 </identity>
-
-<current_context>
-Current datetime: {now.strftime("%Y-%m-%d %H:%M:%S")} ({weekday_names[now.weekday()]})
-Timestamp: {int(time.time())}
-</current_context>
 
 <core_rules>
 1. 当被问"你是谁"或"你叫什么名字"时，用你自己的身份回答，即 {agent_name}。
@@ -506,7 +504,15 @@ Timestamp: {int(time.time())}
                 logger.info(f"[Memory] No memory context to inject, thread={thread_id}")
                 return messages
 
-            memory_block = f"<user_memory>\n" + "\n\n".join(blocks) + "\n</user_memory>"
+            # W2-3 预算兜底：整块超预算时先丢尾部低优先级块，再硬截断
+            from app.core.config import settings as _settings
+            budget = _settings.MEMORY_INJECTION_BUDGET
+            while len(blocks) > 1 and sum(len(b) for b in blocks) > budget:
+                blocks.pop()
+            memory_body = "\n\n".join(blocks)
+            if len(memory_body) > budget:
+                memory_body = memory_body[:budget] + "\n[...记忆注入超预算已截断]"
+            memory_block = f"<user_memory>\n{memory_body}\n</user_memory>"
 
             new_messages = list(messages)
             if new_messages and new_messages[0].get("role") == "system":
