@@ -1,6 +1,6 @@
-import { BrowserWindow, WebContentsView, WebContents } from 'electron'
+import { BrowserWindow, WebContentsView, WebContents, NativeImage } from 'electron'
 import { Tab, TabError, BoundsConfig, getErrorInfo, DEFAULT_BROWSER_CONFIG, NavigationState } from './types'
-import { initBrowserSession } from './session'
+import { initBrowserSession, setDownloadBlockedCallback } from './session'
 import {
   createBrowserView,
   calculateBounds,
@@ -30,6 +30,39 @@ function isCaptchaUrl(url: string): boolean {
   return CAPTCHA_PATTERNS.some(pattern => pattern.test(url))
 }
 
+/**
+ * OAuth 登录常见域名（W4-6）。
+ *
+ * 核实结论：setWindowOpenHandler 对所有 window.open 一律 deny，并通过
+ * 'new-tab-request' 事件 → main/index.ts 回调 → `tab:new-tab-request` push →
+ * BrowserView.vue handleNewTabRequest 新建标签页打开，链路已完整覆盖——
+ * 以下域名的弹窗同样会以新标签承载、不会被完全丢弃。
+ * 因此无需（也不应）对 OAuth 域名改 allow 打开独立弹窗视图：那会脱离标签页
+ * 管理，且 AI 独立会话分区未落地（修改书 W4-4 备选不做）。此名单保留为
+ * 日志标记与后续策略扩展的挂载点。
+ */
+const OAUTH_WINDOW_OPEN_DOMAINS = [
+  'accounts.google.com',
+  'login.microsoftonline.com',
+  'login.live.com',
+  'github.com/login',
+  'open.weixin.qq.com',
+  'graph.qq.com',
+  'open.dingtalk.com',
+  'api.weibo.com',
+  'auth.alipay.com',
+  'access.line.me'
+]
+
+function isOAuthWindowOpenUrl(url: string): boolean {
+  return OAUTH_WINDOW_OPEN_DOMAINS.some((fragment) => url.includes(fragment))
+}
+
+/** W4-5：唤醒休眠标签的等待上限（loadURL 挂起时不无限阻塞截图请求） */
+const WAKE_TIMEOUT_MS = 20000
+/** W4-5：降级激活截屏后等待合成器产出首帧的延迟 */
+const CAPTURE_FALLBACK_DELAY_MS = 150
+
 class TabManager {
   private window: BrowserWindow | null = null
   private tabs: Map<string, Tab> = new Map()
@@ -46,6 +79,9 @@ class TabManager {
   setWindow(window: BrowserWindow): void {
     this.window = window
     initBrowserSession()
+    // W4-6：下载拦截通知经 tab 事件通道转发（main/index.ts 统一 push 为
+    // `tab:download-blocked`，后缀与 IpcChannels.tab.push.downloadBlocked 一致）
+    setDownloadBlockedCallback((info) => this.onTabEvent?.('download-blocked', info))
     this.startSleepChecker()
   }
 
@@ -104,14 +140,16 @@ class TabManager {
         url,
         loading: false,
         error: undefined,
-        captchaDetected
+        captchaDetected,
+        // 成功导航即脱离风控拦截态（W4-8），避免残留标记污染后续黄条文案
+        riskBlocked: false
       })
       this.emitNavigationState(tabId)
     })
 
     webContents.on('did-navigate-in-page', (_e, url) => {
       const captchaDetected = isCaptchaUrl(url)
-      this.notifyUpdate(tabId, { url, captchaDetected })
+      this.notifyUpdate(tabId, { url, captchaDetected, riskBlocked: false })
       this.emitNavigationState(tabId)
     })
 
@@ -122,6 +160,11 @@ class TabManager {
     })
 
     webContents.setWindowOpenHandler((details) => {
+      // W4-6：window.open 一律 deny → 'new-tab-request' 由渲染层新开标签承载；
+      // OAuth 弹窗域名（OAUTH_WINDOW_OPEN_DOMAINS）同样走该链路，见其注释核实结论
+      if (isOAuthWindowOpenUrl(details.url)) {
+        logger.info(`OAuth window.open 转发新标签打开: ${details.url}`)
+      }
       this.onTabEvent?.('new-tab-request', { url: details.url })
       return { action: 'deny' }
     })
@@ -134,14 +177,32 @@ class TabManager {
     webContents.on('did-fail-load', (_event, errorCode, _errorDescription, validatedURL) => {
       if (this.isAbortError(errorCode)) return
 
+      // W4-8：412/403 视为站点风控拦截，与 captchaDetected 共用黄条展示「该网站风控拦截」
+      const riskBlocked = errorCode === 412 || errorCode === 403
+
       const tab = this.tabs.get(tabId)
       if (!tab?.active) {
-        this.notifyUpdate(tabId, { loading: false })
+        // 后台标签不更新错误页，但风控标记仍需登记，切到该标签时黄条可提示
+        if (riskBlocked) {
+          this.notifyUpdate(tabId, { loading: false, riskBlocked: true, captchaDetected: true })
+        } else {
+          this.notifyUpdate(tabId, { loading: false })
+        }
         return
       }
 
       const error = getErrorInfo(errorCode)
-      this.notifyUpdate(tabId, { loading: false, error, title: error.title })
+      if (riskBlocked) {
+        this.notifyUpdate(tabId, {
+          loading: false,
+          error,
+          title: error.title,
+          riskBlocked: true,
+          captchaDetected: true
+        })
+      } else {
+        this.notifyUpdate(tabId, { loading: false, error, title: error.title })
+      }
     })
 
     webContents.on('did-start-loading', () => {
@@ -394,6 +455,18 @@ class TabManager {
     }
   }
 
+  /** 停止指定/当前标签页加载。W4-7 只读白名单后，渲染层 NavBar 停止按钮改走
+   * tab:stop 专用通道调用此处，替代原先经 execute_js 执行 window.stop() 的方式 */
+  stopNavigation(tabId?: string): void {
+    const targetId = tabId || this.activeTabId
+    if (!targetId) return
+
+    const view = this.views.get(targetId)
+    if (view && !isViewDestroyed(view)) {
+      view.webContents.stop()
+    }
+  }
+
   /** 在当前标签页导航到新 URL（不创建新标签） */
   navigateTo(url: string, tabId?: string): void {
     const targetId = tabId || this.activeTabId
@@ -539,6 +612,118 @@ class TabManager {
     // 无活跃标签页，创建一个
     const tab = this.createTab(DEFAULT_BROWSER_CONFIG.defaultUrl)
     return tab
+  }
+
+  /**
+   * 确保目标标签页可用于截图/自动化并返回其 WebContents（W4-5）。
+   *
+   * - 休眠标签（webContents 已被 300s 闲置回收）先重建加载原 URL，
+   *   解决 AI 经 WS 截后台/休眠 tab 拿黑帧或报「无可用标签页」的问题；
+   * - 带超时保护：loadURL 挂起时不无限阻塞截图请求；
+   * - 不主动改变标签页激活状态，restore() 仅在截图流程曾临时激活其他
+   *   标签（captureTabPage 降级路径）时把激活状态切回去。
+   */
+  async acquireCaptureTarget(
+    tabId?: string
+  ): Promise<{ tabId: string; wc: WebContents; restore: () => Promise<void> } | null> {
+    if (!this.window) return null
+
+    const prevActiveId = this.activeTabId
+
+    let targetTab: Tab | undefined
+    let targetId: string
+    if (tabId) {
+      // 显式指定 tab 时不静默换页：不存在/不可用直接失败
+      targetTab = this.tabs.get(tabId)
+      if (!targetTab) return null
+      targetId = tabId
+    } else {
+      targetTab = this.getActiveTab()
+      if (!targetTab) {
+        // 无任何可用标签页（或全部关闭）时按原语义兜底创建一个
+        const ensured = this.ensureActiveTab()
+        targetTab = ensured ? this.tabs.get(ensured.id) : undefined
+        if (!targetTab) return null
+      }
+      targetId = targetTab.id
+    }
+
+    if (targetTab.sleeping) {
+      // 唤醒时刷新活跃时间，避免刚重建就被休眠检查器立刻回收
+      targetTab.lastActiveAt = Date.now()
+      await Promise.race([
+        this.wakeTab(targetId).catch(() => {}),
+        new Promise<void>((resolve) => setTimeout(resolve, WAKE_TIMEOUT_MS))
+      ])
+    }
+
+    const view = this.views.get(targetId)
+    if (!view || isViewDestroyed(view)) return null
+
+    const restore = async (): Promise<void> => {
+      if (prevActiveId && prevActiveId !== this.activeTabId && this.tabs.has(prevActiveId)) {
+        try {
+          await this.activateTab(prevActiveId)
+        } catch {
+          // 恢复失败不影响截图结果
+        }
+      }
+    }
+
+    return { tabId: targetId, wc: view.webContents, restore }
+  }
+
+  /**
+   * 截取标签页画面（W4-5 后台/休眠标签截图修复）：
+   *
+   * 1. 后台直截（首选）：capturePage({ stayHidden: true, stayAwake: true }) 允许
+   *    隐藏页被捕获且不唤醒系统合成前台帧；截图期间临时关闭背景节流，避免
+   *    隐藏页停止渲染产出过期/黑帧。全程不改变用户当前浏览的标签。
+   * 2. 激活降级（兜底）：直截得到空帧/异常时，临时激活目标标签（attach 到窗口）
+   *    截取可见帧，完成后经 restore() 恢复原本的激活状态。
+   *
+   * @returns 画面数据；标签页不可用或画面为空时返回 null
+   */
+  async captureTabPage(tabId?: string): Promise<NativeImage | null> {
+    const target = await this.acquireCaptureTarget(tabId)
+    if (!target) return null
+    const { tabId: targetId, restore } = target
+
+    const view = this.views.get(targetId)
+    if (!view || isViewDestroyed(view)) return null
+    const wc = view.webContents
+
+    // 1) 后台直截
+    try {
+      try {
+        wc.setBackgroundThrottling(false)
+      } catch {}
+      const image = await wc.capturePage(undefined, { stayHidden: true, stayAwake: true })
+      if (!image.isEmpty()) {
+        return image
+      }
+    } catch {
+      // 空帧/异常 → 走激活降级
+    } finally {
+      try {
+        wc.setBackgroundThrottling(targetId === this.activeTabId)
+      } catch {}
+    }
+
+    // 2) 激活降级：临时激活截可见帧，finally 中恢复原激活状态
+    try {
+      await this.activateTab(targetId)
+      const activatedView = this.views.get(targetId)
+      if (!activatedView || isViewDestroyed(activatedView)) return null
+      // 等待合成器在 attach 后产出首帧，避免截到过渡帧
+      await new Promise((r) => setTimeout(r, CAPTURE_FALLBACK_DELAY_MS))
+      const image = await activatedView.webContents.capturePage()
+      return image.isEmpty() ? null : image
+    } catch {
+      return null
+    } finally {
+      await restore()
+    }
   }
 
   getAllTabs(): Tab[] {

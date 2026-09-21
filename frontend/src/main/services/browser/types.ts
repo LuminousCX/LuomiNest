@@ -10,6 +10,8 @@ export interface Tab {
   lastActiveAt: number
   captchaDetected?: boolean
   sleeping?: boolean
+  /** W4-8：站点风控拦截（HTTP 412/403 中断导航），与 captchaDetected 共用黄条展示 */
+  riskBlocked?: boolean
 }
 
 export interface TabError {
@@ -101,7 +103,11 @@ export const ERROR_CODES: Record<number, { title: string; message: string }> = {
   [-324]: { title: '连接被重置', message: '服务器重置了连接' },
   [-502]: { title: '网关错误', message: '服务器作为网关时收到无效响应' },
   [-503]: { title: '服务不可用', message: '服务器暂时无法处理请求' },
-  [-504]: { title: '网关超时', message: '网关服务器响应超时' }
+  [-504]: { title: '网关超时', message: '网关服务器响应超时' },
+  // W4-8：HTTP 风控类错误码。部分站点反爬前置（如 B 站 412）会以非标准错误码中断导航，
+  // 与 captchaDetected 黄条机制打通为「该网站风控拦截」提示
+  [412]: { title: '该网站风控拦截', message: '站点风控拦截了本次访问（HTTP 412），可稍后重试或改用系统浏览器打开' },
+  [403]: { title: '该网站风控拦截', message: '站点拒绝了本次访问（HTTP 403），可能触发反爬风控，可稍后重试' }
 }
 
 export function getErrorInfo(code: number): TabError {

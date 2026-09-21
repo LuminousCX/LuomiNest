@@ -194,6 +194,8 @@ export interface TabInfo {
   error?: TabErrorInfo
   captchaDetected?: boolean
   sleeping?: boolean
+  /** W4-8：站点风控拦截（HTTP 412/403），渲染层黄条切换为「该网站风控拦截」文案 */
+  riskBlocked?: boolean
 }
 
 export interface CookieInfo {
@@ -217,33 +219,20 @@ export interface BrowserSearchResultItem {
   url: string
 }
 
-/** 浏览器自动化动作字面量联合（从 automation-executor.ts handlers.keys 提取） */
+/**
+ * 浏览器自动化动作字面量联合。
+ *
+ * W4-7 收敛为只读白名单：与 main 侧 automation-executor 的
+ * READ_ONLY_AUTOMATION_ACTIONS 保持一致，click/type/execute_js 等交互动作
+ * 不再对渲染层类型暴露（主进程运行时同样拒绝）。
+ */
 export type BrowserAutomationAction =
-  | 'navigate'
-  | 'go_back'
-  | 'go_forward'
-  | 'reload'
-  | 'get_url'
-  | 'click'
-  | 'type'
-  | 'press_key'
-  | 'scroll'
-  | 'hover'
-  | 'get_dom_tree'
-  | 'get_text'
+  | 'navigate_and_screenshot'
   | 'screenshot'
-  | 'get_page_title'
-  | 'execute_js'
-  | 'wait_for_load'
-  | 'double_click'
-  | 'right_click'
-  | 'clear_input'
-  | 'select_option'
-  | 'get_attribute'
-  | 'get_html'
-  | 'wait_for_element'
-  | 'wait_for_url'
-  | 'get_history'
+  | 'get_tabs'
+  | 'switch_tab'
+  | 'open_tab'
+  | 'close_tab'
 
 /** 浏览器自动化统一返回结构 */
 export interface BrowserAutomationResult {
@@ -573,6 +562,9 @@ export const IpcChannels = {
       getAll: 'tab:getAll',
       getActive: 'tab:getActive',
       reload: 'tab:reload',
+      // 停止加载（W4-7）：渲染层停止按钮专用通道，主进程调 webContents.stop()，
+      // 替代原先经 browserAutomation.execute('execute_js') 执行 window.stop() 的方式
+      stop: 'tab:stop',
       navigate: 'tab:navigate',
       goBack: 'tab:goBack',
       goForward: 'tab:goForward',
@@ -590,6 +582,8 @@ export const IpcChannels = {
       updated: 'tab:updated',
       newTabRequest: 'tab:new-tab-request',
       navigationState: 'tab:navigation-state',
+      // W4-6：下载被 will-download 拦截取消时通知渲染层 toast（tab.ts 'download-blocked'）
+      downloadBlocked: 'tab:download-blocked',
     },
   },
   browser: {
@@ -804,6 +798,8 @@ export const DesktopPetIpcChannels = {
     IpcChannels.tab.push.updated,
     IpcChannels.tab.push.newTabRequest,
     IpcChannels.tab.push.navigationState,
+    // W4-6：下载拦截提示（主应用窗口渲染层 toast）
+    IpcChannels.tab.push.downloadBlocked,
   ] as const,
 } as const
 
@@ -905,6 +901,7 @@ export interface ElectronApi {
     getAll: () => Promise<TabInfo[]>
     getActive: () => Promise<TabInfo | undefined>
     reload: (tabId?: string) => Promise<void>
+    stop: (tabId?: string) => Promise<void>
     navigate: (url: string, tabId?: string) => Promise<void>
     goBack: (tabId?: string) => Promise<void>
     goForward: (tabId?: string) => Promise<void>

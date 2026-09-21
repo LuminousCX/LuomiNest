@@ -12,7 +12,7 @@
  * - useBrowserTabs：标签页 CRUD、IPC 事件、taskStream 监听
  * - useBrowserActions：截图（手动/自动）、截图历史、预览/复制/另存、toast
  */
-import { watch, onMounted, onUnmounted } from 'vue'
+import { watch, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import TabBar from '../components/browser/TabBar.vue'
 import NavBar from '../components/browser/NavBar.vue'
@@ -86,13 +86,26 @@ const bookmarks = [
   { name: 'Stack Overflow', url: 'https://stackoverflow.com' }
 ]
 
-// ===== 停止加载：复用既有 execute_js 通道调用 window.stop()（不新增 IPC）=====
+// ===== 停止加载：W4-7 只读白名单后 execute_js 对渲染层不可达，改走 tab:stop
+// 专用通道（主进程 webContents.stop()，见 tab.ts stopNavigation）=====
 const stopLoading = async (): Promise<void> => {
   try {
-    await window.api?.browserAutomation?.execute('execute_js', { script: 'window.stop()' })
+    await window.api?.tab.stop()
   } catch {
     // 静默失败：停止加载本身无需打扰用户
   }
+}
+
+// ===== W4-8 风控提示：主进程 did-fail-load(412/403) 下发的 riskBlocked 标记，
+// 复用验证码黄条 UI 切换为「该网站风控拦截」文案 =====
+// （useBrowserTabs 的 Tab 模型未登记该字段且不在本次改动范围，此处局部窄化读取）
+const activeTabRiskBlocked = computed(
+  () => (activeTab.value as { riskBlocked?: boolean } | undefined)?.riskBlocked === true
+)
+
+// ===== W4-6 下载拦截提示：主进程 will-download 取消下载后经 tab:download-blocked 转发 =====
+const handleDownloadBlocked = (): void => {
+  displayToast(t('browser.downloadBlocked', '内置浏览器不支持下载，已取消'))
 }
 
 // ===== 访问成功后自动截图 =====
@@ -151,6 +164,7 @@ onMounted(async () => {
   window.electron?.ipcRenderer?.on('tab:updated', handleTabUpdated)
   window.electron?.ipcRenderer?.on('tab:new-tab-request', handleNewTabRequest)
   window.electron?.ipcRenderer?.on('tab:navigation-state', handleNavigationState)
+  window.electron?.ipcRenderer?.on('tab:download-blocked', handleDownloadBlocked)
 
   setupSidebarObserver()
   syncShotStripBounds()
@@ -160,6 +174,7 @@ onUnmounted(() => {
   window.electron?.ipcRenderer?.removeListener('tab:updated', handleTabUpdated)
   window.electron?.ipcRenderer?.removeListener('tab:new-tab-request', handleNewTabRequest)
   window.electron?.ipcRenderer?.removeListener('tab:navigation-state', handleNavigationState)
+  window.electron?.ipcRenderer?.removeListener('tab:download-blocked', handleDownloadBlocked)
 
   if (autoShotTimer) {
     clearTimeout(autoShotTimer)
@@ -204,7 +219,11 @@ onUnmounted(() => {
     <div v-if="showCaptchaBanner" class="captcha-banner">
       <div class="captcha-banner-content">
         <span class="captcha-icon">&#9888;</span>
-        <span>{{ t('browser.captchaBanner') }}</span>
+        <!-- W4-8：风控拦截（412/403）与人机验证共用黄条，按 riskBlocked 切换文案 -->
+        <span v-if="activeTabRiskBlocked">
+          {{ t('browser.riskBlockedBanner', '该网站风控拦截，本次访问被站点反爬策略阻止，可稍后重试') }}
+        </span>
+        <span v-else>{{ t('browser.captchaBanner') }}</span>
       </div>
     </div>
 

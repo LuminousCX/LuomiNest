@@ -5,7 +5,7 @@ export { createBrowserView, calculateBounds, setViewBounds, setupNetworkConfig }
 export { browserSearch, fetchUrl } from './search'
 export type { SearchResult } from './search'
 export { luomiBrowserWSClient } from './ws-client'
-export { luomiAutomationExecutor } from './automation-executor'
+export { luomiAutomationExecutor, READ_ONLY_AUTOMATION_ACTIONS } from './automation-executor'
 export type { AutomationResult, AutomationHandler } from './ws-client'
 export type { HumanInputLayer } from './automation-executor'
 export { createLuminousHumanLayer } from './luminous-human-layer'

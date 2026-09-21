@@ -3,7 +3,7 @@ import { PATHS } from './paths'
 import { toBackgroundUrl } from './bg-protocol'
 import { configStore } from './config-store'
 import { cacheManager } from './cache-manager'
-import { tabManager, luomiAutomationExecutor } from './browser'
+import { tabManager, luomiAutomationExecutor, READ_ONLY_AUTOMATION_ACTIONS } from './browser'
 import { getLumiAuthToken } from './backend/auth-token'
 import { subscribeBackendStage } from './backend'
 import { cloudAuth, renewCloudTokensNow } from './cloud'
@@ -227,6 +227,12 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (!assertTrustedSender(event)) return
     return tabManager.reloadTab(tabId)
   })
+  // 停止加载（W4-7）：原渲染层经 browserAutomation.execute('execute_js') 调
+  // window.stop()，只读白名单后 execute_js 不可达，改走本专用通道 → webContents.stop()
+  handleIpc(IpcChannels.tab.invoke.stop, async (event: IpcMainInvokeEvent, tabId?: string) => {
+    if (!assertTrustedSender(event)) return
+    return tabManager.stopNavigation(tabId)
+  })
   handleIpc(IpcChannels.tab.invoke.navigate, async (event: IpcMainInvokeEvent, url: string, tabId?: string) => {
     if (!assertTrustedSender(event)) return
     return tabManager.navigateTo(url, tabId)
@@ -290,6 +296,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     }
     if (typeof action !== 'string' || !action) {
       return { success: false, error: '缺少 action 参数' }
+    }
+    // W4-7：IPC 侧只读白名单——仅放行截图/标签页管理类动作，与 executor 内部
+    // 白名单一致（双保险）；click/type/execute_js 等交互动作对渲染层不可达
+    if (!READ_ONLY_AUTOMATION_ACTIONS.has(action)) {
+      return { success: false, error: `动作 ${action} 不在 IPC 只读白名单内` }
     }
     return await luomiAutomationExecutor.execute(action, args || {})
   })

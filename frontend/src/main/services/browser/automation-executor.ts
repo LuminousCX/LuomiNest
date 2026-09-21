@@ -16,6 +16,12 @@
  * 只读化说明（2026-09）：AI 工具面只暴露 navigate_and_screenshot（browser_visit）
  * 与 screenshot；click/type/get_html 等动作保留在 executor 内部以兼容 WS 协议，
  * 不再对 AI 暴露。
+ *
+ * W4-7 只读白名单：execute() 入口统一收敛 IPC（browserAutomation.execute）与
+ * WS（AI 侧）两个调用方，仅放行 READ_ONLY_AUTOMATION_ACTIONS 中的 6 个只读/
+ * 标签页管理动作——click/type/execute_js 等 27 个交互动作自此对 IPC 与 AI
+ * 双侧均不可达（渲染层 UI 所需的停止加载改走 tab:stop 专用通道，见 tab.ts
+ * stopNavigation）。
  */
 import { WebContents } from 'electron'
 
@@ -25,6 +31,20 @@ import { LUOMI_DOM_TREE_SCRIPT, getDomTreeCallScript } from './luomi-dom-tree'
 import { createLuomiNestLogger } from '../luomi-logger'
 
 const logger = createLuomiNestLogger('Browser')
+
+/**
+ * W4-7 只读白名单：允许从 IPC 与 WS（AI）入口执行的动作全集。
+ * 命中 navigate_and_screenshot / screenshot 时 execute() 会先确保目标标签页
+ * 可用（休眠自动唤醒，见 TabManager.acquireCaptureTarget）。
+ */
+export const READ_ONLY_AUTOMATION_ACTIONS: ReadonlySet<string> = new Set([
+  'navigate_and_screenshot',
+  'screenshot',
+  'get_tabs',
+  'switch_tab',
+  'open_tab',
+  'close_tab'
+])
 
 // 人类化输入接口（Phase 3 实现，此处仅定义类型）
 export interface HumanInputLayer {
@@ -56,6 +76,12 @@ class LuomiAutomationExecutor {
 
   /** 主入口：执行自动化动作 */
   async execute(action: string, args: Record<string, any>): Promise<AutomationResult> {
+    // W4-7：只读白名单收敛——IPC 与 AI（WS）双侧统一在此拦截，白名单外一律拒绝
+    if (!READ_ONLY_AUTOMATION_ACTIONS.has(action)) {
+      logger.warn(`已拒绝白名单外的自动化动作: ${action}`)
+      return { success: false, error: `动作 ${action} 不在只读白名单内，已拒绝执行` }
+    }
+
     // 标签页管理类动作（不需要 webContents，直接操作 tabManager）
     const tabHandler = this.tabHandlers.get(action)
     if (tabHandler) {
@@ -73,18 +99,39 @@ class LuomiAutomationExecutor {
       return { success: false, error: `未知自动化动作: ${action}` }
     }
 
+    // W4-5：截图类动作先确保目标标签页可用——休眠（webContents 已销毁）自动
+    // 唤醒重建；其余动作维持原语义（休眠即报错）。截图完成后恢复原激活状态。
     const tabId = args.tab_id as string | undefined
-    const wc = tabManager.getWebContents(tabId)
-    if (!wc) {
-      return { success: false, error: '无可用标签页或标签页正在休眠，请先创建标签页' }
-    }
-
+    let wc: WebContents
+    let restore: (() => Promise<void>) | null = null
     try {
+      if (action === 'screenshot' || action === 'navigate_and_screenshot') {
+        const target = await tabManager.acquireCaptureTarget(tabId)
+        if (!target) {
+          return {
+            success: false,
+            error: tabId ? `标签页不存在或不可用: ${tabId}` : '无可用标签页，且自动创建失败'
+          }
+        }
+        wc = target.wc
+        restore = target.restore
+      } else {
+        const existing = tabManager.getWebContents(tabId)
+        if (!existing) {
+          return { success: false, error: '无可用标签页或标签页正在休眠，请先创建标签页' }
+        }
+        wc = existing
+      }
+
       return await handler(args, wc)
     } catch (e: unknown) {
       logger.error(`动作 ${action} 执行异常:`, e)
       const errMsg = e instanceof Error ? e.message : String(e)
       return { success: false, error: errMsg }
+    } finally {
+      if (restore) {
+        await restore()
+      }
     }
   }
 
@@ -196,10 +243,14 @@ class LuomiAutomationExecutor {
       }
 
       // 尽力截图：失败不阻断信息返回
+      // W4-5：经 TabManager.captureTabPage 截图——stayAwake 后台截帧，
+      // 空帧降级为临时激活截屏并恢复原激活状态，休眠标签已被 execute() 唤醒
       let screenshot: string | undefined
       try {
-        const image = await wc.capturePage()
-        screenshot = image.toDataURL()
+        const image = await tabManager.captureTabPage(args.tab_id as string | undefined)
+        if (image) {
+          screenshot = image.toDataURL()
+        }
       } catch (e) {
         logger.warn('navigate_and_screenshot 截图失败:', e)
       }
@@ -381,8 +432,13 @@ class LuomiAutomationExecutor {
       return { success: true, data: { text: String(result.text).slice(0, 5000), tag: result.tag } }
     })
 
-    this.handlers.set('screenshot', async (_args, wc) => {
-      const image = await wc.capturePage()
+    this.handlers.set('screenshot', async (args, _wc) => {
+      // W4-5：经 TabManager.captureTabPage 截图——休眠标签先唤醒，
+      // capturePage 加 stayAwake 后台截帧，空帧降级激活截屏并还原激活状态
+      const image = await tabManager.captureTabPage(args.tab_id as string | undefined)
+      if (!image) {
+        return { success: false, error: '截图失败：标签页不可用或画面为空' }
+      }
       const dataUrl = image.toDataURL()
       return { success: true, data: { screenshot: dataUrl } }
     })

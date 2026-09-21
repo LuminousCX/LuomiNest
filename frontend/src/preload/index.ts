@@ -101,6 +101,7 @@ const api: ElectronApi = {
     getAll: () => invoke(IpcChannels.tab.invoke.getAll),
     getActive: () => invoke(IpcChannels.tab.invoke.getActive),
     reload: (tabId?: string) => invoke(IpcChannels.tab.invoke.reload, tabId),
+    stop: (tabId?: string) => invoke(IpcChannels.tab.invoke.stop, tabId),
     navigate: (url: string, tabId?: string) => invoke(IpcChannels.tab.invoke.navigate, url, tabId),
     goBack: (tabId?: string) => invoke(IpcChannels.tab.invoke.goBack, tabId),
     goForward: (tabId?: string) => invoke(IpcChannels.tab.invoke.goForward, tabId),

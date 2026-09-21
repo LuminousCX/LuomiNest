@@ -250,6 +250,26 @@ const SEC_CH_UA_PLATFORM = getSecChUaPlatform()
 
 let initialized = false
 
+/** 下载被拦截时携带的信息 */
+export interface DownloadBlockedInfo {
+  filename: string
+  url: string
+}
+
+type DownloadBlockedCallback = (info: DownloadBlockedInfo) => void
+
+let downloadBlockedCallback: DownloadBlockedCallback | null = null
+
+/**
+ * 注册下载拦截通知回调（tab.ts 在 setWindow 时注册）。
+ *
+ * session.ts 不反向 import tab.ts（会成环），故以回调注入方式把
+ * 「下载已取消」事件转交给 TabManager 的 tab 事件通道。
+ */
+export function setDownloadBlockedCallback(cb: DownloadBlockedCallback | null): void {
+  downloadBlockedCallback = cb
+}
+
 export function initBrowserSession(): void {
   if (initialized) return
 
@@ -346,6 +366,19 @@ export function initBrowserSession(): void {
     } else {
       callback({})
     }
+  })
+
+  // W4-6：内置浏览器不提供下载落盘与下载管理 UI，统一取消下载并经 tab 事件
+  // 通道通知渲染层 toast 提示「内置浏览器不支持下载，已取消」
+  browserSession.on('will-download', (_event, item) => {
+    const info: DownloadBlockedInfo = { filename: item.getFilename(), url: item.getURL() }
+    try {
+      item.cancel()
+    } catch (e) {
+      logger.warn('取消下载失败:', e)
+    }
+    logger.info(`已拦截下载: ${info.filename} (${info.url})`)
+    downloadBlockedCallback?.(info)
   })
 
   initialized = true
