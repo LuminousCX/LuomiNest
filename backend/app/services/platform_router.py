@@ -7,7 +7,15 @@ from loguru import logger
 
 from app.core.utils import AsyncKeyLocks, extract_llm_text, utc_now
 from app.core.domain_policy import group_member_user_key
-from app.runtime.platform.base import PlatformMessage, PlatformResponse, get_standard_tools_for_platform
+from app.runtime.platform.base import (
+    HIGH_RISK_PLATFORM_TOOLS,
+    HIGH_RISK_TOOL_BLOCKED_MESSAGE,
+    PLATFORM_TOOLS_RISK_ENABLED_KEY,
+    PlatformMessage,
+    PlatformResponse,
+    filter_tools_by_risk,
+    get_standard_tools_for_platform,
+)
 from app.runtime.platform.session import (
     MAIN_AGENT_ID,
     create_new_conversation,
@@ -56,6 +64,28 @@ class LuomiNestPlatformRouter:
 
     async def _get_session_lock(self, session_key: str) -> asyncio.Lock:
         return await self._processing_locks.get(session_key)
+
+    @staticmethod
+    def _get_instance_config(inst) -> dict:
+        """稳妥读取实例配置 dict（兼容 PlatformInstance 对象与 dict 两种形态）。"""
+        if inst is None:
+            return {}
+        if isinstance(inst, dict):
+            cfg = inst.get("config")
+        else:
+            cfg = getattr(inst, "config", None)
+        return cfg if isinstance(cfg, dict) else {}
+
+    def _is_platform_risk_enabled(self, instance_id: str) -> bool:
+        """读取实例级高风险平台工具开关（W3-3：platform_tools_risk_enabled，默认关）。
+
+        开关存放在 inst.config（单一配置源），注入面与执行面共用同一读取逻辑，
+        防止两处判定不一致。
+        """
+        if not instance_id:
+            return False
+        inst = get_instance(instance_id)
+        return bool(self._get_instance_config(inst).get(PLATFORM_TOOLS_RISK_ENABLED_KEY, False))
 
     def _resolve_instance_model(self, instance_id: str) -> tuple[str, str, str, float, int]:
         """解析平台实例生效的模型配置。
@@ -316,9 +346,12 @@ class LuomiNestPlatformRouter:
         standard_tools = get_standard_tools_for_platform(provider, model)
         platform_tools.extend(standard_tools)
         # 第二层：适配器声明的平台专用工具
+        # 风险闸门（W3-3，默认关闭）：inst.config["platform_tools_risk_enabled"]
+        # 默认 False → 高风险工具（踢人/全员禁言/撤回/timeout）不注入
+        risk_enabled = self._is_platform_risk_enabled(instance_id)
         if platform_adapter and hasattr(platform_adapter, 'available_tools'):
             adapter_tools = platform_adapter.available_tools
-            platform_tools.extend(adapter_tools)
+            platform_tools.extend(filter_tools_by_risk(adapter_tools, risk_enabled))
 
         use_tools = bool(platform_tools) and llm_adapter.supports_tool_calls(provider, model)
 
@@ -407,9 +440,10 @@ class LuomiNestPlatformRouter:
                     except json.JSONDecodeError:
                         tool_args = {}
 
-                # 执行工具
+                # 执行工具（执行侧兜底校验高风险闸门，instance_id 用于读取实例开关）
                 tool_result = await self._execute_platform_tool(
                     tool_name, tool_args, platform_adapter,
+                    instance_id=instance_id,
                 )
 
                 sc = (tool_result.get("metadata") or {}).get("screenshot")
@@ -687,11 +721,12 @@ class LuomiNestPlatformRouter:
                     return msg.get("tool_calls") or []
         return []
 
-    @staticmethod
     async def _execute_platform_tool(
+        self,
         tool_name: str,
         arguments: dict,
         adapter,
+        instance_id: str = "",
     ) -> dict:
         """执行平台工具调用（standard 子集或平台专用）。
 
@@ -699,13 +734,31 @@ class LuomiNestPlatformRouter:
         1. 平台专用工具（adapter.execute_platform_tool，名称含 "." 前缀）
         2. tool_registry 中的内置工具（function calling 工具）
         3. internal_tool_registry 中的工作流内部工具
+
+        高风险闸门（W3-3 执行侧兜底）：工具名命中 HIGH_RISK_PLATFORM_TOOLS
+        且实例未开启 platform_tools_risk_enabled 时，直接拒绝执行。
+        注入面（filter_tools_by_risk）与执行面在此双闸，防两处不同步
+        （如工具注入后实例开关被关闭、或模型幻觉拼出未注入的工具名）。
         """
+        # 兼容处理被 LLM 转义的工具名（如 mc__navigate -> mc.navigate）
+        normalized_name = tool_name.replace("__", ".") if ("__" in tool_name and "." not in tool_name) else tool_name
+
+        # 高风险平台操作执行侧兜底（W3-3，默认拒绝）
+        if (
+            normalized_name in HIGH_RISK_PLATFORM_TOOLS
+            and not self._is_platform_risk_enabled(instance_id)
+        ):
+            platform_logger.log(
+                instance_id or "unknown", "warning", "high_risk_tool_blocked",
+                f"已拦截高风险平台工具调用: {normalized_name}（实例未开启风险开关）",
+                details={"tool_name": normalized_name},
+            )
+            return {"success": False, "output": "", "error": HIGH_RISK_TOOL_BLOCKED_MESSAGE}
+
         from app.core.tools.registry import tool_registry
         from app.core.workflow.internal_registry import internal_tool_registry
 
         # 先尝试平台专用工具（adapter 实现）
-        # 兼容处理被 LLM 转义的工具名（如 mc__navigate -> mc.navigate）
-        normalized_name = tool_name.replace("__", ".") if ("__" in tool_name and "." not in tool_name) else tool_name
         if "." in normalized_name and adapter and hasattr(adapter, "execute_platform_tool"):
             try:
                 result = await adapter.execute_platform_tool(normalized_name, arguments)

@@ -77,3 +77,16 @@ integrations/
 - 🐧 **[QQ (NapCatQQ) 接入与防封实践指南](qq_napcat.md)**：覆盖反向 WS 配置、WebUI 扫码、拟人输入延迟与防风控高压线。
 - 💬 **[个人微信 (GeweChat) 接入与安全守则](wechat.md)**：覆盖 iPad 协议部署、二维码会话生命周期、防封养号策略。
 - 🤖 **[Discord 接入指南](discord.md)**：覆盖 Bot Token、Privileged Gateway Intents 开启及速率保护。
+
+---
+
+## 5. 高风险平台操作风险闸门（W3-3，默认关闭）
+
+AI 通过平台专属工具（如 `qq.kick_group_member`、`qq.set_group_whole_ban`、`qq.delete_msg`、`discord.delete_message`、`discord.timeout_member`、`wechat.revoke_msg`）可执行不可逆的高风险群管理操作。为防 AI 误操作，这些工具默认**不注入、不执行**：
+
+- **单一配置源**：每个平台实例的 `config.platform_tools_risk_enabled`（布尔值，默认 `false`）；
+- **注入面**：平台对话的双层工具注入会从适配器 `available_tools` 中过滤掉高风险清单（`backend/app/runtime/platform/base.py` 的 `HIGH_RISK_PLATFORM_TOOLS` / `filter_tools_by_risk`），模型根本看不到这些工具的 schema；
+- **执行面兜底**：即使模型幻觉拼出高风险工具名，`platform_router._execute_platform_tool` 也会在调用适配器前拦截并返回「该操作为高风险操作，请在设置页开启后再试」；
+- **开启入口**：平台实例「配置」对话框 → 「安全与风险」→「允许 AI 执行高风险平台操作（踢人 / 全员禁言 / 撤回消息 / timeout）」开关，保存后经 `PATCH /platforms/instances/{id}` 持久化到实例 config。
+
+> 高压线：未来若暴露 `qq.set_group_leave`（退群/解散群聊），必须归入最高档——默认永不注入，即便实例开启了风险开关也不得自动注入。

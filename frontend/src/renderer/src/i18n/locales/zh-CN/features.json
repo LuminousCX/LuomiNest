@@ -759,6 +759,9 @@
     "wechatPersonalTip": "微信个人号 (GeweChat) 对接与防封提示：通过 GeweChat (iPad 协议网关) 接入。保存后可在管理菜单点击获取登录二维码，手机扫码即可登录。已启用自然输入模拟与滑动窗口频率保护以防风控。",
     "discordTip": "Discord Bot 对接提示：在 Discord 开发者后台创建 Bot，获取 Token 并务必在 Bot 设置中开启 'Message Content Intent' 权限，机器人回复自动继承主 Agent 人设。",
     "errorLabel": "错误信息",
+    "highRiskSectionTitle": "安全与风险",
+    "highRiskToggleLabel": "允许 AI 执行高风险平台操作（踢人 / 全员禁言 / 撤回消息 / timeout）",
+    "highRiskToggleDesc": "默认关闭。开启后 AI 才可在该实例上调用高风险操作（踢出群成员、全员禁言、撤回/删除消息、Discord timeout），请谨慎开启。",
     "saveConfig": "保存配置",
     "log": {
       "instanceCreated": "实例创建",

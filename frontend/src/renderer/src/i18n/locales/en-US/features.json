@@ -759,6 +759,9 @@
     "wechatPersonalTip": "WeChat Personal (GeweChat) Tips: Connected via GeweChat gateway. Scan QR code in management menu to log in. Anti-ban delays and rate protection enabled.",
     "discordTip": "Discord Bot Tips: Create a Bot in Discord Developer Portal, enable 'Message Content Intent', and paste the Bot Token.",
     "errorLabel": "Error",
+    "highRiskSectionTitle": "Security & Risk",
+    "highRiskToggleLabel": "Allow AI to perform high-risk platform actions (kick / mute-all / revoke / timeout)",
+    "highRiskToggleDesc": "Off by default. When enabled, the AI may invoke high-risk operations on this instance (kicking members, muting all, deleting/revoking messages, Discord timeout). Enable with caution.",
     "saveConfig": "Save Config",
     "log": {
       "instanceCreated": "Instance created",

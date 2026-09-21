@@ -234,6 +234,58 @@ class BasePlatformAdapter(ABC):
         }
 
 
+# ─── 高风险平台工具风险闸门（修改书 W3-3，决策已定：默认关闭）───
+
+HIGH_RISK_PLATFORM_TOOLS: frozenset[str] = frozenset({
+    "qq.kick_group_member",     # 踢出群成员
+    "qq.set_group_whole_ban",   # 全员禁言
+    "qq.delete_msg",            # 撤回消息（QQ）
+    "discord.delete_message",   # 删除消息（Discord）
+    "discord.timeout_member",   # 禁言成员 / timeout（Discord）
+    "wechat.revoke_msg",        # 撤回消息（微信）
+})
+# 注意：未来若暴露 qq.set_group_leave（退群/解散群聊），必须归入最高档——
+# 默认永不注入，即便实例开启了 platform_tools_risk_enabled 也不得自动注入，
+# 仅允许在设置页手动显式开启后使用（防 AI 误操作导致失联/群损）。
+
+# 高风险工具开关的实例配置键（inst.config["platform_tools_risk_enabled"]，默认 False）
+PLATFORM_TOOLS_RISK_ENABLED_KEY = "platform_tools_risk_enabled"
+
+# 执行侧拦截时的统一提示文案（注入面与执行面共用同一拒绝语）
+HIGH_RISK_TOOL_BLOCKED_MESSAGE = "该操作为高风险操作，请在设置页开启后再试"
+
+
+def filter_tools_by_risk(
+    tools: list[dict[str, Any]],
+    risk_enabled: bool,
+) -> list[dict[str, Any]]:
+    """按实例风险开关过滤工具清单中的高风险平台工具（W3-3 注入面闸门）。
+
+    Args:
+        tools: 适配器 available_tools 返回的 OpenAI function schema 列表，
+            每项形如 {"type": "function", "function": {"name": ..., ...}}。
+        risk_enabled: 实例配置 platform_tools_risk_enabled。
+            False（默认）→ 剔除 HIGH_RISK_PLATFORM_TOOLS 中的工具；
+            True → 原样返回（不过滤）。
+
+    Returns:
+        过滤后的工具 schema 列表（保持原有顺序）。
+    """
+    if risk_enabled:
+        return tools
+    filtered: list[dict[str, Any]] = []
+    for tool in tools:
+        name = ""
+        if isinstance(tool, dict):
+            fn = tool.get("function")
+            if isinstance(fn, dict):
+                name = str(fn.get("name") or "")
+        if name in HIGH_RISK_PLATFORM_TOOLS:
+            continue
+        filtered.append(tool)
+    return filtered
+
+
 def get_standard_tools_for_platform(provider_name: str | None = None, model: str | None = None) -> list[dict[str, Any]]:
     """获取平台域对话的标准工具子集（双层注入第一层）。
 

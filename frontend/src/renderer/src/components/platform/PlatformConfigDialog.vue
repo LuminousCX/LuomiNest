@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import {
   Cpu, Image as ImageIcon, RefreshCw, RotateCcw,
   AlertCircle, CheckCircle2, XCircle, Clock,
-  Sparkles, ShieldCheck, HelpCircle,
+  Sparkles, ShieldCheck, ShieldAlert, HelpCircle,
 } from 'lucide-vue-next'
 import { usePlatformStore } from '../../stores/platform'
 import type { PlatformInstance, PlatformModelConfig } from '../../types'
@@ -32,6 +32,8 @@ const editConfig = ref<Record<string, any>>({})
 const modelConfigLoading = ref(false)
 const modelConfigSaving = ref(false)
 const modelEditConfig = ref<PlatformModelConfig>({})
+// 高风险平台操作开关（W3-3 风险闸门）：绑定实例 config.platform_tools_risk_enabled，默认关闭
+const platformRiskEnabled = ref(false)
 
 const isGameCategory = computed(() => {
   const inst = props.instance
@@ -133,7 +135,11 @@ const handleSaveConfig = async () => {
   try {
     await store.updateInstance(props.instance.id, {
       name: props.instance.name,
-      config: editConfig.value,
+      // 风险开关与连接字段合并为同一 config 提交（config 为自由 dict，后端透传合并持久化）
+      config: {
+        ...editConfig.value,
+        platform_tools_risk_enabled: platformRiskEnabled.value,
+      },
     })
     if (Object.keys(modelEditConfig.value).length > 0) {
       await store.updateInstanceModelConfig(props.instance.id, modelEditConfig.value)
@@ -165,12 +171,16 @@ const handleResetModelConfig = async () => {
 const resetConfigState = () => {
   editConfig.value = {}
   modelEditConfig.value = {}
+  platformRiskEnabled.value = false
 }
 
 const loadInstanceConfig = async (instance: PlatformInstance) => {
   editConfig.value = { ...instance.config }
   delete editConfig.value.model_config
   delete editConfig.value.enable
+  // 风险开关由独立 ref 管理，从通用连接字段中剔除（避免被渲染成文本输入框）
+  delete editConfig.value.platform_tools_risk_enabled
+  platformRiskEnabled.value = Boolean(instance.config?.platform_tools_risk_enabled)
   modelEditConfig.value = {}
   modelConfigLoading.value = true
   try {
@@ -310,6 +320,29 @@ watch(() => props.instance, async (instance) => {
             </div>
             <LumiInput v-model="editConfig[key]" type="text" :placeholder="getFieldPlaceholder(String(key))" />
           </div>
+        </div>
+      </div>
+
+      <!-- 高风险平台操作开关（W3-3 风险闸门，默认关闭） -->
+      <div class="form-group">
+        <label class="form-label">
+          <ShieldAlert :size="12" />
+          {{ t('platform.highRiskSectionTitle') }}
+        </label>
+        <div class="risk-toggle-row" :class="{ enabled: platformRiskEnabled }">
+          <div class="risk-toggle-text">
+            <span class="risk-toggle-title">{{ t('platform.highRiskToggleLabel') }}</span>
+            <span class="risk-toggle-desc">{{ t('platform.highRiskToggleDesc') }}</span>
+          </div>
+          <button
+            type="button"
+            class="risk-switch"
+            role="switch"
+            :aria-checked="platformRiskEnabled"
+            @click="platformRiskEnabled = !platformRiskEnabled"
+          >
+            <span class="risk-switch-knob" />
+          </button>
         </div>
       </div>
       <div v-if="instance?.errorMessage" class="form-group">
@@ -600,5 +633,78 @@ watch(() => props.instance, async (instance) => {
 
 .field-tip-icon:hover {
   color: var(--lumi-brand);
+}
+
+.risk-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast);
+}
+
+.risk-toggle-row.enabled {
+  border-color: var(--lumi-danger);
+  background: var(--lumi-danger-light);
+}
+
+.risk-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.risk-toggle-title {
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--text-primary);
+}
+
+.risk-toggle-desc {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.risk-toggle-row.enabled .risk-toggle-desc {
+  color: var(--lumi-danger);
+}
+
+.risk-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--workspace-border);
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition-normal);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.risk-switch[aria-checked="true"] {
+  background: var(--lumi-danger);
+}
+
+.risk-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: white;
+  transition: transform var(--transition-normal);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.risk-switch[aria-checked="true"] .risk-switch-knob {
+  transform: translateX(20px);
 }
 </style>

@@ -734,6 +734,9 @@
     "wechatPersonalTip": "WeChat 個人号 (GeweChat) ヒント: GeweChat ゲートウェイ経由で接続。管理メニューでQRコードを表示しログイン。BAN防止遅延と頻度制御が有効。",
     "discordTip": "Discord Bot ヒント: Discord Developer Portal で Bot を作成し、'Message Content Intent' を有効にして Token を入力してください。",
     "errorLabel": "エラー情報",
+    "highRiskSectionTitle": "セキュリティとリスク",
+    "highRiskToggleLabel": "AI による高リスク操作を許可（キック / 全員ミュート / 送信取り消し / タイムアウト）",
+    "highRiskToggleDesc": "デフォルトはオフ。有効にすると、このインスタンスで高リスク操作（メンバーのキック、全員ミュート、メッセージの削除/取り消し、Discord タイムアウトなど）を実行できるようになります。慎重に有効化してください。",
     "saveConfig": "設定を保存",
     "log": {
       "instanceCreated": "インスタンス作成",
