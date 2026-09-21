@@ -449,6 +449,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] MCP manager init skipped: {e}", exc_info=True)
 
+    # W6-1：对外 MCP 服务器（把陪伴安全工具白名单经 Streamable HTTP 暴露在 /mcp）
+    if settings.MCP_SERVER_ENABLED:
+        try:
+            from app.core.mcp_server import attach_luominest_mcp_server
+            await attach_luominest_mcp_server(app)
+        except Exception as e:
+            logger.warning(f"[LuomiNest] MCP server attach skipped: {e}", exc_info=True)
+
     # 启动平台消息路由器（QQ/微信/Minecraft/游戏等）
     try:
         from app.services.platform_router import attach_router_to_instances
@@ -550,6 +558,13 @@ async def lifespan(app: FastAPI):
         logger.info("[LuomiNest] MCP connections closed")
     except Exception as e:
         logger.warning(f"[LuomiNest] MCP shutdown skipped: {e}", exc_info=True)
+
+    # W6-1：关闭对外 MCP 服务器的 session manager
+    try:
+        from app.core.mcp_server import shutdown_luominest_mcp_server
+        await shutdown_luominest_mcp_server(app)
+    except Exception as e:
+        logger.warning(f"[LuomiNest] MCP server shutdown skipped: {e}", exc_info=True)
 
     # 关闭定时任务调度器
     try:

@@ -86,6 +86,8 @@ class Settings(BaseSettings):
     LLM_CONTEXT_TRIM_THRESHOLD: float = 0.85  # 超过窗口该比例触发裁剪
     # <avatar_emotion> 表情块注入开关（平台文字渠道恒关；桌面由前端 Live2D 配置决定）
     LLM_AVATAR_EMOTION_ENABLED: bool = True
+    # W6-1 对外 MCP 服务器：把陪伴安全工具白名单经 Streamable HTTP 暴露在 /mcp
+    MCP_SERVER_ENABLED: bool = True
 
     # 上下文压缩预算配置
     LLM_CONTEXT_BUDGET_RATIO: float = 0.35  # 历史消息预算占上下文窗口的比例
