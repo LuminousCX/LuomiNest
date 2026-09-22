@@ -19,8 +19,10 @@ dependencies = [
     "aiosqlite>=0.22.1",
     "httpx>=0.28.1",
     "aiohttp>=3.14.3",
-    "websockets>=16.1.1",
+    # W6-3 内嵌 MQTT broker；amqtt 0.12 钉死 websockets==15.0.1，故 websockets 下限从 16.1.1 放宽
+    "websockets>=15.0.1",
     "paho-mqtt>=2.1.0",
+    "amqtt>=0.12.1",
     "sqlalchemy[asyncio]>=2.0.52",
     "numpy>=2.5.2",
     "psutil>=7.2.2",
@@ -94,4 +96,8 @@ strict = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+# langsmith（langchain-core 传递依赖）的 pytest11 插件 import 链会加载 xxhash 原生 DLL，
+# 在启用 Windows 应用控制策略的机器上被拦截导致整个 pytest 收集失败；
+# 本项目不用 LangSmith 测试追踪，故禁用其插件自动加载（其余机器不受影响）。
+addopts = "-p no:langsmith_plugin"
 testpaths = ["tests"]

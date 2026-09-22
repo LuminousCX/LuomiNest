@@ -449,6 +449,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] MCP manager init skipped: {e}", exc_info=True)
 
+    # W6-3：内嵌 MQTT broker（开箱即用；端口被占用=外部 broker 模式，start 内部自动降级不抛出）
+    if settings.MQTT_BROKER_EMBEDDED:
+        try:
+            from app.infrastructure.mqtt.broker import EmbeddedMqttBroker
+            embedded_mqtt_broker = EmbeddedMqttBroker()
+            await embedded_mqtt_broker.start()
+            app.state.embedded_mqtt_broker = embedded_mqtt_broker
+        except Exception as e:
+            logger.warning(f"[LuomiNest] Embedded MQTT broker init skipped: {e}", exc_info=True)
+
     # W6-1：对外 MCP 服务器（把陪伴安全工具白名单经 Streamable HTTP 暴露在 /mcp）
     if settings.MCP_SERVER_ENABLED:
         try:
@@ -558,6 +568,15 @@ async def lifespan(app: FastAPI):
         logger.info("[LuomiNest] MCP connections closed")
     except Exception as e:
         logger.warning(f"[LuomiNest] MCP shutdown skipped: {e}", exc_info=True)
+
+    # W6-3：停止内嵌 MQTT broker
+    try:
+        embedded_broker = getattr(app.state, "embedded_mqtt_broker", None)
+        if embedded_broker is not None:
+            await embedded_broker.stop()
+            app.state.embedded_mqtt_broker = None
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Embedded MQTT broker shutdown skipped: {e}", exc_info=True)
 
     # W6-1：关闭对外 MCP 服务器的 session manager
     try:

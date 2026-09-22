@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     # 空字符串表示运行时根据 DATA_DIR 自动计算（见 get_settings）
     DATABASE_URL: str = ""
     REDIS_URL: str = "redis://localhost:6379/0"
-    MQTT_BROKER_HOST: str = "localhost"
+    MQTT_BROKER_EMBEDDED: bool = True  # W6-3：内嵌 MQTT broker（开箱即用；端口被占用时自动降级）
+    MQTT_BROKER_HOST: str = "127.0.0.1"  # 内嵌 broker 监听地址与客户端默认连接地址
     MQTT_BROKER_PORT: int = 1883
     MQTT_USERNAME: str = ""
     MQTT_PASSWORD: str = ""
