@@ -235,18 +235,54 @@ class BasePlatformAdapter(ABC):
 
 
 # ─── 高风险平台工具风险闸门（修改书 W3-3，决策已定：默认关闭）───
+# 按平台分组：每个平台的风险面不同（辰辰 2026-09-21 反馈）——QQ/微信是群管理
+# 与撤回，Minecraft 是游戏内破坏与管理命令，互不混用，防 AI 上下文紊乱。
 
-HIGH_RISK_PLATFORM_TOOLS: frozenset[str] = frozenset({
-    "qq.kick_group_member",     # 踢出群成员
-    "qq.set_group_whole_ban",   # 全员禁言
-    "qq.delete_msg",            # 撤回消息（QQ）
-    "discord.delete_message",   # 删除消息（Discord）
-    "discord.timeout_member",   # 禁言成员 / timeout（Discord）
-    "wechat.revoke_msg",        # 撤回消息（微信）
-})
-# 注意：未来若暴露 qq.set_group_leave（退群/解散群聊），必须归入最高档——
+PLATFORM_HIGH_RISK_TOOLS: dict[str, frozenset[str]] = {
+    "qq_onebot": frozenset({
+        "qq.delete_msg",             # 撤回消息（不可逆）
+        "qq.kick_group_member",      # 踢出群成员
+        "qq.set_group_ban",          # 单人禁言
+        "qq.set_group_whole_ban",    # 全员禁言
+        "qq.set_group_card",         # 修改群名片（影响他人身份展示）
+        "qq.set_group_special_title",  # 设置专属头衔
+        "qq.set_essence_msg",        # 设为精华消息
+        "qq.delete_essence_msg",     # 移除精华消息
+    }),
+    "wechat_personal": frozenset({
+        "wechat.revoke_msg",         # 撤回消息（微信风控最高，从严）
+    }),
+    "telegram": frozenset({
+        "telegram.delete_message",   # 删除消息（不可逆，且仅 48h 内可删）
+    }),
+    "discord": frozenset({
+        "discord.delete_message",    # 删除消息
+        "discord.timeout_member",    # 禁言成员 / timeout
+    }),
+    "minecraft": frozenset({
+        "mc.execute_command",        # 任意服务器命令（kick/ban/op/stop 全部可达）——最高危
+        "mc.attack",                 # 攻击实体（可骚扰其他玩家）
+        "mc.mine_block",             # 破坏方块（改动世界/他人建筑）
+    }),
+    # mqtt_terminal / websocket / rest_api / game_websocket / home_assistant /
+    # xiaomi_iot / qq_official / wechat_mp / wechat_work：暂无高风险平台工具
+    # （IoT 设备命令为可逆的日常控制，默认开放）
+}
+
+# 未来若暴露 qq.set_group_leave（退群/解散群聊），必须归入最高档——
 # 默认永不注入，即便实例开启了 platform_tools_risk_enabled 也不得自动注入，
 # 仅允许在设置页手动显式开启后使用（防 AI 误操作导致失联/群损）。
+
+# 全平台合并清单（执行面兜底判定用；工具名自带平台前缀全局唯一，合并判定等价。
+# 注入面请用 get_high_risk_tools_for_platform 取对应平台子集）
+HIGH_RISK_PLATFORM_TOOLS: frozenset[str] = frozenset().union(*PLATFORM_HIGH_RISK_TOOLS.values())
+
+
+def get_high_risk_tools_for_platform(platform_name: str | None) -> frozenset[str]:
+    """取指定平台的高风险工具清单（未知平台返回空集）。"""
+    if not platform_name:
+        return frozenset()
+    return PLATFORM_HIGH_RISK_TOOLS.get(platform_name, frozenset())
 
 # 高风险工具开关的实例配置键（inst.config["platform_tools_risk_enabled"]，默认 False）
 PLATFORM_TOOLS_RISK_ENABLED_KEY = "platform_tools_risk_enabled"
@@ -265,7 +301,8 @@ def filter_tools_by_risk(
         tools: 适配器 available_tools 返回的 OpenAI function schema 列表，
             每项形如 {"type": "function", "function": {"name": ..., ...}}。
         risk_enabled: 实例配置 platform_tools_risk_enabled。
-            False（默认）→ 剔除 HIGH_RISK_PLATFORM_TOOLS 中的工具；
+            False（默认）→ 剔除高风险工具（合并清单判定；适配器工具自带
+            平台前缀，效果等价于按该平台子集过滤）；
             True → 原样返回（不过滤）。
 
     Returns:

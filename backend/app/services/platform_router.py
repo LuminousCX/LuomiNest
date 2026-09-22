@@ -16,6 +16,7 @@ from app.runtime.platform.base import (
     filter_tools_by_risk,
     get_standard_tools_for_platform,
 )
+from app.runtime.platform.briefings import get_platform_briefing
 from app.runtime.platform.session import (
     MAIN_AGENT_ID,
     create_new_conversation,
@@ -284,7 +285,22 @@ class LuomiNestPlatformRouter:
             user_context=user_text,
             include_avatar_emotion=False,
         )
-        platform_context = self._build_platform_context(message)
+        # W3-3/平台 briefing：风险开关提前计算（工具注入面与本 briefing 共用同一判定）
+        risk_enabled = self._is_platform_risk_enabled(instance_id)
+        _adapter_for_briefing = get_adapter(instance_id)
+        _adapter_tool_names = [
+            t.get("function", {}).get("name", "")
+            for t in filter_tools_by_risk(
+                getattr(_adapter_for_briefing, "available_tools", []) or [],
+                risk_enabled,
+            )
+            if isinstance(t, dict)
+        ]
+        platform_context = self._build_platform_context(
+            message,
+            risk_enabled=risk_enabled,
+            tool_names=[n for n in _adapter_tool_names if n],
+        )
         full_system = f"{base_system}\n\n{platform_context}"
 
         history_messages = self._load_history_messages(conv)
@@ -346,9 +362,8 @@ class LuomiNestPlatformRouter:
         standard_tools = get_standard_tools_for_platform(provider, model)
         platform_tools.extend(standard_tools)
         # 第二层：适配器声明的平台专用工具
-        # 风险闸门（W3-3，默认关闭）：inst.config["platform_tools_risk_enabled"]
-        # 默认 False → 高风险工具（踢人/全员禁言/撤回/timeout）不注入
-        risk_enabled = self._is_platform_risk_enabled(instance_id)
+        # 风险闸门（W3-3，默认关闭）：risk_enabled 已在上方构建平台 briefing 时计算，
+        # 两处共用同一判定（inst.config["platform_tools_risk_enabled"]）
         if platform_adapter and hasattr(platform_adapter, 'available_tools'):
             adapter_tools = platform_adapter.available_tools
             platform_tools.extend(filter_tools_by_risk(adapter_tools, risk_enabled))
@@ -593,7 +608,11 @@ class LuomiNestPlatformRouter:
         return members
 
     @staticmethod
-    def _build_platform_context(message: PlatformMessage) -> str:
+    def _build_platform_context(
+        message: PlatformMessage,
+        risk_enabled: bool = False,
+        tool_names: list[str] | None = None,
+    ) -> str:
         scene = "群聊" if message.is_group else "私聊"
         parts = [
             f"<platform_context>",
@@ -606,6 +625,15 @@ class LuomiNestPlatformRouter:
             parts.append(f"群组标识: {message.group_id}")
         parts.append("注意：回复内容需符合该平台的交互习惯，保持简洁自然。")
         parts.append("</platform_context>")
+        # 平台 briefing（2026-09-21）：只注入当前平台的能力边界、不具备的能力
+        # （反幻觉）与风险约束——system 上下文按平台隔离，防跨平台紊乱
+        briefing = get_platform_briefing(
+            message.platform,
+            risk_enabled=risk_enabled,
+            tool_names=tool_names,
+        )
+        if briefing:
+            parts.append(briefing)
         return "\n".join(parts)
 
     @staticmethod

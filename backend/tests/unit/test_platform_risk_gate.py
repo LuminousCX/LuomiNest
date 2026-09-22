@@ -17,7 +17,9 @@ from app.runtime.platform.base import (
     HIGH_RISK_PLATFORM_TOOLS,
     HIGH_RISK_TOOL_BLOCKED_MESSAGE,
     filter_tools_by_risk,
+    get_high_risk_tools_for_platform,
 )
+from app.runtime.platform.briefings import get_platform_briefing
 from app.services.platform_router import LuomiNestPlatformRouter
 import app.services.platform_router as platform_router_module
 
@@ -49,13 +51,76 @@ ALL_QQ_TOOLS = [
 def test_high_risk_set_contents():
     assert isinstance(HIGH_RISK_PLATFORM_TOOLS, frozenset)
     assert HIGH_RISK_PLATFORM_TOOLS == frozenset({
+        # qq_onebot（群管理类从全员禁言到精华全覆盖）
         "qq.kick_group_member",
         "qq.set_group_whole_ban",
+        "qq.set_group_ban",
         "qq.delete_msg",
+        "qq.set_group_card",
+        "qq.set_group_special_title",
+        "qq.set_essence_msg",
+        "qq.delete_essence_msg",
+        # discord
         "discord.delete_message",
         "discord.timeout_member",
+        # wechat_personal
         "wechat.revoke_msg",
+        # telegram
+        "telegram.delete_message",
+        # minecraft（execute_command 可达 kick/ban/op/stop，最高危）
+        "mc.execute_command",
+        "mc.attack",
+        "mc.mine_block",
     })
+
+
+# ─── 按平台分组（每个平台风险面不同）───
+
+
+def test_per_platform_risk_lists_are_isolated():
+    # Minecraft 的高风险与 QQ 互不混用，防上下文紊乱
+    mc = get_high_risk_tools_for_platform("minecraft")
+    assert "mc.execute_command" in mc and "mc.attack" in mc and "mc.mine_block" in mc
+    assert not any(n.startswith("qq.") for n in mc)
+    qq = get_high_risk_tools_for_platform("qq_onebot")
+    assert "qq.set_group_ban" in qq and "qq.kick_group_member" in qq
+    assert not any(n.startswith("mc.") for n in qq)
+    # 无风险面的平台返回空集；未知平台同样空集
+    assert get_high_risk_tools_for_platform("mqtt_terminal") == frozenset()
+    assert get_high_risk_tools_for_platform("nonexistent") == frozenset()
+    assert get_high_risk_tools_for_platform(None) == frozenset()
+
+
+# ─── 平台 briefing：上下文按平台隔离 ───
+
+
+def test_briefing_per_platform_isolation():
+    qq_brief = get_platform_briefing("qq_onebot", risk_enabled=False, tool_names=["qq.poke", "qq.send_msg"])
+    assert "<platform_briefing>" in qq_brief
+    assert "qq.poke" in qq_brief and "NapCat" in qq_brief
+    # 风险关闭时：状态行说明被关闭，且不出现其他平台的工具
+    assert "已被主人关闭" in qq_brief
+    assert "mc." not in qq_brief and "discord." not in qq_brief
+
+    mc_brief = get_platform_briefing("minecraft", risk_enabled=False, tool_names=["mc.say"])
+    assert "Minecraft" in mc_brief and "mc.execute_command" in mc_brief
+    assert "拍一拍" not in mc_brief  # MC 的 briefing 不该混入 QQ 概念
+
+
+def test_briefing_risk_enabled_line():
+    brief = get_platform_briefing("discord", risk_enabled=True, tool_names=["discord.send_message"])
+    assert "已由主人在设置页开启" in brief
+
+    # wechat 反幻觉声明：明确写出没有拍一拍/群管理
+    wx = get_platform_briefing("wechat_personal", risk_enabled=False, tool_names=["wechat.send_text_message"])
+    assert "没有" in wx and "拍一拍" in wx
+
+
+def test_briefing_unknown_platform_fallback():
+    brief = get_platform_briefing("some_new_platform", risk_enabled=False, tool_names=[])
+    assert "some_new_platform" in brief
+    assert "（无平台专属工具）" in brief
+    assert get_platform_briefing(None) == ""
 
 
 # ─── 注入面：filter_tools_by_risk ───
