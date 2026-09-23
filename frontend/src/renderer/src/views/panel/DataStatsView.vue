@@ -19,6 +19,7 @@ import {
   Calendar,
   User,
   MessageSquare,
+  Activity,
 } from 'lucide-vue-next'
 import LumiCard from '../../components/common/LumiCard.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
@@ -126,10 +127,51 @@ const chartData = computed(() => {
   return aggregateByDay(statsStore.byDay, 7)
 })
 
+const chartWrapRef = ref<HTMLElement | null>(null)
+const chartWidth = ref(600)
+const chartHeight = ref(260)
+let resizeObserver: ResizeObserver | null = null
+
 const requestChartPaths = computed(() => {
   const values = chartData.value.map(d => d.value)
-  return generateAreaChartPaths(values, { width: 400, height: 160 })
+  return generateAreaChartPaths(values, {
+    width: chartWidth.value,
+    height: chartHeight.value,
+    padding: { top: 28, bottom: 32, left: 40, right: 24 },
+    zeroBaseline: true,
+  })
 })
+
+const topStatCards = computed(() => [
+  {
+    key: 'api',
+    label: t('stats.card.api.label'),
+    sub: t('stats.card.api.sub'),
+    value: periodData.value.requests.toLocaleString(),
+    color: 'var(--lumi-brand)',
+  },
+  {
+    key: 'token',
+    label: t('stats.card.token.label'),
+    sub: t('stats.card.token.sub'),
+    value: periodData.value.tokens,
+    color: 'var(--lumi-success)',
+  },
+  {
+    key: 'memory',
+    label: t('stats.card.memory.label'),
+    sub: t('stats.card.memory.sub'),
+    value: memoryLineCount.value.toLocaleString(),
+    color: 'var(--lumi-warning)',
+  },
+  {
+    key: 'context',
+    label: t('stats.card.context.label'),
+    sub: t('stats.card.context.sub'),
+    value: periodData.value.conversations.toLocaleString(),
+    color: 'var(--lumi-info)',
+  },
+])
 
 const requestTrend = computed(() => {
   const current = statsStore.usageComparison?.current?.total_requests ?? 0
@@ -225,18 +267,40 @@ const selectedAgentId = ref<string | null>(null)
 
 const hoveredPoint = ref<{ x: number; y: number; value: number; label: string; index: number } | null>(null)
 
+const tooltipStyle = computed(() => {
+  if (!hoveredPoint.value) return {}
+  const { x, y } = hoveredPoint.value
+  const isNearTop = y < 75
+  const isNearLeft = x < 75
+  const isNearRight = x > chartWidth.value - 75
+
+  let transformX = '-50%'
+  if (isNearLeft) transformX = '0%'
+  else if (isNearRight) transformX = '-100%'
+
+  let transformY = 'calc(-100% - 14px)'
+  if (isNearTop) {
+    transformY = '14px'
+  }
+
+  return {
+    left: `${x}px`,
+    top: `${y}px`,
+    transform: `translate(${transformX}, ${transformY})`,
+  }
+})
+
 function onChartMove(event: MouseEvent) {
-  const wrap = event.currentTarget as HTMLElement
-  const rect = wrap.getBoundingClientRect()
-  const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
-  const x = ratio * 400
+  if (!chartWrapRef.value) return
+  const rect = chartWrapRef.value.getBoundingClientRect()
+  const mouseX = Math.max(0, Math.min(chartWidth.value, event.clientX - rect.left))
   const points = requestChartPaths.value.points
   if (!points.length) return
 
   let nearest = 0
   let minDistance = Infinity
   points.forEach((p, i) => {
-    const distance = Math.abs(p.x - x)
+    const distance = Math.abs(p.x - mouseX)
     if (distance < minDistance) {
       minDistance = distance
       nearest = i
@@ -276,13 +340,44 @@ async function loadData() {
   await memoryStore.switchAgent(selectedAgentId.value)
 }
 
+const updateChartDimensions = () => {
+  if (!chartWrapRef.value) return
+  const rect = chartWrapRef.value.getBoundingClientRect()
+  if (rect.width > 0) {
+    chartWidth.value = Math.round(rect.width)
+  }
+  if (rect.height > 0) {
+    chartHeight.value = Math.round(rect.height)
+  }
+}
+
 onMounted(() => {
   loadData()
   timeInterval = setInterval(() => { currentTime.value = new Date() }, 1000)
+
+  if (chartWrapRef.value) {
+    updateChartDimensions()
+    resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
+        if (width > 0) {
+          chartWidth.value = Math.round(width)
+        }
+        if (height > 0) {
+          chartHeight.value = Math.round(height)
+        }
+      }
+    })
+    resizeObserver.observe(chartWrapRef.value)
+  }
 })
 
 onUnmounted(() => {
   if (timeInterval) clearInterval(timeInterval)
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
 })
 
 watch(period, () => { loadData() })
@@ -308,27 +403,29 @@ watch(period, () => { loadData() })
     </div>
 
     <div class="top-stats-row">
-        <LumiCard
-          v-for="(stat, idx) in [
-            { key: 'api', label: t('stats.card.api.label'), sub: t('stats.card.api.sub'), value: periodData.requests.toLocaleString(), color: 'var(--lumi-brand)' },
-            { key: 'token', label: t('stats.card.token.label'), sub: t('stats.card.token.sub'), value: periodData.tokens, color: 'var(--lumi-success)' },
-            { key: 'memory', label: t('stats.card.memory.label'), sub: t('stats.card.memory.sub'), value: memoryLineCount, color: 'var(--lumi-warning)' },
-            { key: 'context', label: t('stats.card.context.label'), sub: t('stats.card.context.sub'), value: periodData.conversations, color: 'var(--lumi-info)' },
-          ]"
+      <LumiCard
+        v-for="(stat, idx) in topStatCards"
         :key="stat.key"
-        class="stat-card"
-        :style="{ animationDelay: `${(idx + 1) * 0.05}s` }"
+        class="top-stat-card"
+        :style="{
+          animationDelay: `${(idx + 1) * 0.05}s`,
+          '--card-accent': stat.color,
+        }"
         padding="md"
         hoverable
       >
-        <div class="stat-card-content">
-          <div class="stat-body">
-            <span class="stat-label">{{ stat.label }}</span>
-            <span class="stat-value">{{ stat.value }}</span>
-            <span class="stat-sub">{{ stat.sub }}</span>
+        <div class="top-stat-card__inner">
+          <div class="top-stat-card__left">
+            <span class="top-stat-title">{{ stat.label }}</span>
+            <span class="top-stat-sub">
+              <span class="top-stat-sub-dot"></span>
+              {{ stat.sub }}
+            </span>
+          </div>
+          <div class="top-stat-card__right">
+            <span class="top-stat-value">{{ stat.value }}</span>
           </div>
         </div>
-        <div class="stat-card-accent" :style="{ background: stat.color }"></div>
       </LumiCard>
     </div>
 
@@ -336,31 +433,80 @@ watch(period, () => { loadData() })
       <div class="left-col">
         <LumiCard class="section-card chart-card" :style="{ animationDelay: '0.10s' }" padding="none">
           <template #title>
-            <BarChart3 :size="16" />
-            <span>{{ t('stats.chartTitle') }}</span>
+            <div class="chart-header-left">
+              <div class="chart-title-icon-badge">
+                <BarChart3 :size="16" />
+              </div>
+              <div class="chart-title-text">
+                <span class="chart-title-main">{{ t('stats.chartTitle') }}</span>
+                <span class="chart-title-sub">周期调用趋势与流量监控</span>
+              </div>
+            </div>
+          </template>
+          <template #header>
+            <div class="chart-header-kpis">
+              <div class="chart-kpi-chip primary">
+                <span class="kpi-chip-label">{{ t('stats.card.api.label') }}</span>
+                <span class="kpi-chip-val">{{ periodData.requests.toLocaleString() }}</span>
+                <span :class="['kpi-chip-trend', requestTrend >= 0 ? 'up' : 'down']">
+                  <component :is="requestTrend >= 0 ? ArrowUpRight : ArrowDownRight" :size="12" />
+                  {{ Math.abs(requestTrend) }}%
+                </span>
+              </div>
+              <div class="chart-kpi-chip success">
+                <span class="kpi-chip-label">{{ t('stats.card.token.label') }}</span>
+                <span class="kpi-chip-val">{{ periodData.tokens }}</span>
+                <span :class="['kpi-chip-trend', tokenTrend >= 0 ? 'up' : 'down']">
+                  <component :is="tokenTrend >= 0 ? ArrowUpRight : ArrowDownRight" :size="12" />
+                  {{ Math.abs(tokenTrend) }}%
+                </span>
+              </div>
+            </div>
           </template>
 
           <div class="chart-area" @mousemove="onChartMove" @mouseleave="onChartLeave">
-            <div class="big-chart-svg-wrap">
-              <svg viewBox="0 0 400 160" class="area-chart" preserveAspectRatio="none">
+            <div ref="chartWrapRef" class="big-chart-svg-wrap">
+              <svg
+                :viewBox="`0 0 ${chartWidth} ${chartHeight}`"
+                class="area-chart"
+              >
                 <defs>
                   <linearGradient id="chartGrad1" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="var(--lumi-brand)" stop-opacity="0.35" />
+                    <stop offset="0%" stop-color="var(--lumi-brand)" stop-opacity="0.30" />
                     <stop offset="60%" stop-color="var(--lumi-brand)" stop-opacity="0.08" />
-                    <stop offset="100%" stop-color="var(--lumi-brand)" stop-opacity="0.01" />
+                    <stop offset="100%" stop-color="var(--lumi-brand)" stop-opacity="0" />
                   </linearGradient>
                   <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
                     <stop offset="0%" stop-color="var(--lumi-brand-soft)" />
                     <stop offset="100%" stop-color="var(--lumi-brand)" />
                   </linearGradient>
+                  <filter id="chartLineGlow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="var(--lumi-brand)" flood-opacity="0.35" />
+                  </filter>
                 </defs>
 
+                <!-- Y 轴水平网格参考线及刻度 -->
                 <g class="chart-grid">
-                  <line x1="0" y1="40" x2="400" y2="40" />
-                  <line x1="0" y1="80" x2="400" y2="80" />
-                  <line x1="0" y1="120" x2="400" y2="120" />
+                  <g v-for="tick in requestChartPaths.ticks" :key="'tick-' + tick.value">
+                    <line
+                      :x1="40"
+                      :y1="tick.y"
+                      :x2="chartWidth - 20"
+                      :y2="tick.y"
+                      class="grid-line"
+                    />
+                    <text
+                      :x="32"
+                      :y="tick.y + 4"
+                      text-anchor="end"
+                      class="grid-tick-text"
+                    >
+                      {{ tick.label }}
+                    </text>
+                  </g>
                 </g>
 
+                <!-- 面积填充与曲线描边 -->
                 <path
                   :d="requestChartPaths.areaPath"
                   fill="url(#chartGrad1)"
@@ -370,81 +516,82 @@ watch(period, () => { loadData() })
                   :d="requestChartPaths.linePath"
                   fill="none"
                   stroke="url(#lineGrad)"
-                  stroke-width="2.5"
+                  stroke-width="3"
                   stroke-linecap="round"
                   stroke-linejoin="round"
+                  filter="url(#chartLineGlow)"
                   class="chart-line"
                 />
 
+                <!-- 悬浮垂直指示参考线 -->
                 <line
                   v-if="hoveredPoint"
                   class="chart-hover-line"
                   :x1="hoveredPoint.x"
-                  y1="0"
+                  y1="16"
                   :x2="hoveredPoint.x"
-                  y2="160"
+                  :y2="chartHeight - 30"
                 />
 
+                <!-- 静态数据点 -->
                 <circle
                   v-for="(p, idx) in requestChartPaths.points"
                   :key="'d' + idx"
                   :cx="p.x"
                   :cy="p.y"
-                  r="2.5"
-                  fill="var(--lumi-brand)"
+                  r="3.5"
                   class="chart-point"
                   :class="{ active: hoveredPoint?.index === idx }"
                 />
 
-                <circle
-                  v-if="hoveredPoint"
-                  :key="hoveredPoint.index"
-                  :cx="requestChartPaths.points[hoveredPoint.index].x"
-                  :cy="requestChartPaths.points[hoveredPoint.index].y"
-                  r="4.5"
-                  fill="none"
-                  stroke="var(--lumi-brand)"
-                  stroke-width="1.2"
-                  class="chart-point-ring"
-                />
+                <!-- 悬浮激活点光环与中心实心圆点 -->
+                <g v-if="hoveredPoint">
+                  <circle
+                    :cx="hoveredPoint.x"
+                    :cy="hoveredPoint.y"
+                    r="8"
+                    class="chart-point-ring"
+                  />
+                  <circle
+                    :cx="hoveredPoint.x"
+                    :cy="hoveredPoint.y"
+                    r="4"
+                    class="chart-point-active-center"
+                  />
+                </g>
+
+                <!-- X 轴日期刻度标签（与数据点 X 坐标绝对对齐） -->
+                <g class="chart-x-axis-svg">
+                  <text
+                    v-for="(item, idx) in chartData"
+                    :key="'x-lbl-' + idx"
+                    :x="requestChartPaths.points[idx]?.x ?? 0"
+                    :y="chartHeight - 10"
+                    text-anchor="middle"
+                    class="chart-axis-label"
+                    :class="{ 'axis-label--active': hoveredPoint?.index === idx }"
+                  >
+                    {{ item.label }}
+                  </text>
+                </g>
               </svg>
 
+              <!-- 悬浮提示框 (Tooltip) -->
               <div
                 v-if="hoveredPoint"
                 class="chart-tooltip"
-                :style="{
-                  left: `${(hoveredPoint.x / 400) * 100}%`,
-                  top: `${(hoveredPoint.y / 160) * 100}%`,
-                }"
+                :class="{ 'chart-tooltip--bottom': hoveredPoint.y < 75 }"
+                :style="tooltipStyle"
               >
-                <span class="ct-label">{{ hoveredPoint.label }}</span>
-                <span class="ct-value">{{ t('stats.countTimes', { n: hoveredPoint.value.toLocaleString() }) }}</span>
-              </div>
-
-              <div class="chart-overlay-stats">
-                <div class="overlay-stat primary">
-                  <span class="os-label">{{ t('stats.card.api.label') }}</span>
-                  <div class="os-row">
-                    <span class="os-value">{{ periodData.requests.toLocaleString() }}</span>
-                    <span :class="['os-trend', requestTrend >= 0 ? 'up' : 'down']">
-                      {{ requestTrend >= 0 ? '+' : '' }}{{ requestTrend }}%
-                    </span>
-                  </div>
+                <div class="ct-header">
+                  <span class="ct-dot"></span>
+                  <span class="ct-label">{{ hoveredPoint.label }}</span>
                 </div>
-                <div class="overlay-stat success">
-                  <span class="os-label">{{ t('stats.card.token.label') }}</span>
-                  <div class="os-row">
-                    <span class="os-value">{{ periodData.tokens }}</span>
-                    <span :class="['os-trend', tokenTrend >= 0 ? 'up' : 'down']">
-                      {{ tokenTrend >= 0 ? '+' : '' }}{{ tokenTrend }}%
-                    </span>
-                  </div>
+                <div class="ct-value-row">
+                  <span class="ct-num">{{ hoveredPoint.value.toLocaleString() }}</span>
+                  <span class="ct-unit">{{ t('stats.unitTimes') }}</span>
                 </div>
               </div>
-            </div>
-
-            <div class="chart-x-axis">
-              <span v-for="(item, idx) in chartData" :key="idx">{{ item.label }}</span>
             </div>
           </div>
 
@@ -457,18 +604,24 @@ watch(period, () => { loadData() })
             >
               <div class="umi-top">
                 <span class="umi-label">{{ m.label }}</span>
-                <span :class="['umi-change', m.trend]">
-                  <component :is="m.trend === 'up' ? ArrowUpRight : ArrowDownRight" :size="11" />
+                <span :class="['umi-change-badge', m.trend]">
+                  <component :is="m.trend === 'up' ? ArrowUpRight : ArrowDownRight" :size="12" />
                   {{ Math.abs(m.change) }}%
                 </span>
+              </div>
+              <div class="umi-mid">
+                <span class="umi-value">{{ m.value }}</span>
+                <span class="umi-unit">{{ m.unit }}</span>
               </div>
               <div class="umi-bar-track">
                 <div
                   class="umi-bar-fill"
-                  :style="{ width: m.pct + '%', background: `linear-gradient(90deg, ${m.color}, color-mix(in srgb, ${m.color} 70%, var(--surface)))` }"
+                  :style="{
+                    width: `${Math.min(100, Math.max(0, m.pct))}%`,
+                    background: `linear-gradient(90deg, ${m.color}, color-mix(in srgb, ${m.color} 60%, var(--surface)))`
+                  }"
                 />
               </div>
-              <span class="umi-value">{{ m.value }}{{ m.unit }}</span>
             </div>
           </div>
 
@@ -479,9 +632,9 @@ watch(period, () => { loadData() })
               class="provider-row"
               :style="{ animationDelay: (0.14 + idx * 0.04) + 's' }"
             >
-              <span class="provider-rank">{{ idx + 1 }}</span>
+              <span :class="['provider-rank', { 'provider-rank--first': idx === 0 }]">{{ idx + 1 }}</span>
               <div class="provider-name-wrap">
-                <Server :size="12" class="provider-icon" />
+                <Server :size="14" class="provider-icon" />
                 <span class="provider-name">{{ p.name }}</span>
               </div>
               <div class="provider-bar-bg">
@@ -733,54 +886,111 @@ watch(period, () => { loadData() })
   gap: var(--space-4);
 }
 
-.stat-card {
+.top-stat-card {
   position: relative;
   overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--border-light);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
   animation: lumi-content-fade-up var(--duration-enter) var(--ease-out-expo) both;
-  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
-}
-
-.stat-card-content {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-}
-
-.stat-body {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.stat-label {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.stat-value {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-}
-
-.stat-sub {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-}
-
-.stat-card-accent {
+.top-stat-card::before {
+  content: '';
   position: absolute;
   top: 0;
-  left: 0;
-  width: 3px;
-  height: 100%;
-  opacity: 0.8;
+  right: 0;
+  width: 130px;
+  height: 130px;
+  background: radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--card-accent) 14%, transparent) 0%, transparent 70%);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.top-stat-card:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--card-accent) 45%, var(--border-light));
+  box-shadow: 0 12px 28px -6px color-mix(in srgb, var(--card-accent) 22%, transparent);
+}
+
+.top-stat-card__inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.top-stat-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.top-stat-title {
+  font-size: 1.125rem;
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.top-stat-icon-badge {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--card-accent) 12%, transparent);
+  color: var(--card-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--card-accent) 20%, transparent);
+  transition: transform var(--transition-fast);
+}
+
+.top-stat-card:hover .top-stat-icon-badge {
+  transform: scale(1.08);
+}
+
+.top-stat-card__value-wrap {
+  display: flex;
+  align-items: baseline;
+  margin-top: 2px;
+}
+
+.top-stat-value {
+  font-size: 2.35rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.top-stat-card__footer {
+  display: flex;
+  align-items: center;
+  margin-top: 2px;
+}
+
+.top-stat-sub {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.top-stat-sub-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--card-accent);
+  opacity: 0.85;
+  flex-shrink: 0;
 }
 
 .main-content {
@@ -811,6 +1021,82 @@ watch(period, () => { loadData() })
 .chart-card :deep(.lumi-card__body) {
   padding: 0;
 }
+
+.chart-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.chart-title-icon-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--lumi-brand) 12%, transparent);
+  color: var(--lumi-brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chart-title-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.chart-title-main {
+  font-size: var(--text-base);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.chart-title-sub {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.chart-header-kpis {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.chart-kpi-chip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  backdrop-filter: blur(8px);
+}
+
+.kpi-chip-label {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.kpi-chip-val {
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-chip-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: var(--text-2xs);
+  font-weight: var(--font-semibold);
+}
+
+.kpi-chip-trend.up { color: var(--lumi-success); }
+.kpi-chip-trend.down { color: var(--lumi-danger); }
 
 .section-icon-muted {
   color: var(--text-muted);
@@ -844,16 +1130,17 @@ watch(period, () => { loadData() })
 
 .chart-area {
   position: relative;
-  padding: var(--space-5) var(--space-5) 0;
+  padding: var(--space-4) var(--space-5) var(--space-3);
   cursor: crosshair;
 }
 
 .big-chart-svg-wrap {
   position: relative;
-  height: 200px;
+  height: 270px;
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, color-mix(in srgb, var(--lumi-brand) 8%, transparent) 0%, transparent 70%);
+  background: radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--lumi-brand) 9%, transparent) 0%, transparent 75%), var(--bg-secondary);
   overflow: hidden;
+  border: 1px solid var(--border-light);
 }
 
 .area-chart {
@@ -862,10 +1149,18 @@ watch(period, () => { loadData() })
   display: block;
 }
 
-.chart-grid line {
+.grid-line {
   stroke: var(--border-light);
   stroke-width: 1;
   stroke-dasharray: 4 4;
+  opacity: 0.8;
+}
+
+.grid-tick-text {
+  font-size: 10px;
+  fill: var(--text-muted);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }
 
 .chart-area-fill {
@@ -876,62 +1171,78 @@ watch(period, () => { loadData() })
 @keyframes fadeAreaIn { to { opacity: 1; } }
 
 .chart-line {
-  stroke-dasharray: 800;
-  stroke-dashoffset: 800;
+  stroke-dasharray: 1200;
+  stroke-dashoffset: 1200;
   animation: drawLine 1.2s var(--ease-out-expo) var(--duration-fast) both;
 }
 
 @keyframes drawLine { to { stroke-dashoffset: 0; } }
 
 .chart-point {
-  opacity: 0;
+  fill: var(--surface);
+  stroke: var(--lumi-brand);
+  stroke-width: 2.5;
+  opacity: 0.9;
   transform-box: fill-box;
   transform-origin: center;
-  transform: scale(1);
   transition: opacity var(--transition-fast), transform var(--transition-fast);
   animation: dotIn var(--duration-fast) var(--ease-out-expo) var(--duration-slow) both;
   pointer-events: none;
 }
 
 .chart-point.active {
-  transform: scale(1.6);
+  transform: scale(1.4);
+  fill: var(--lumi-brand);
 }
 
 .chart-point-ring {
-  opacity: 0;
-  transform-box: fill-box;
-  transform-origin: center;
+  fill: none;
+  stroke: var(--lumi-brand);
+  stroke-width: 1.5;
+  opacity: 0.4;
   pointer-events: none;
-  animation: ringIn var(--duration-fast) var(--ease-out-expo) both;
+  animation: ringPulse 1.6s ease-out infinite;
+}
+
+.chart-point-active-center {
+  fill: var(--lumi-brand);
+  pointer-events: none;
+}
+
+@keyframes ringPulse {
+  0% { r: 6px; opacity: 0.7; }
+  100% { r: 16px; opacity: 0; }
 }
 
 @keyframes dotIn { to { opacity: 0.9; } }
 
-@keyframes ringIn {
-  from {
-    opacity: 0;
-    transform: scale(0.4);
-  }
-  to {
-    opacity: 0.45;
-    transform: scale(1);
-  }
-}
-
 .chart-hover-line {
   stroke: var(--lumi-brand);
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
-  opacity: 0.5;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  opacity: 0.6;
   pointer-events: none;
+}
+
+.chart-axis-label {
+  font-size: 11px;
+  fill: var(--text-muted);
+  font-family: var(--font-sans);
+  transition: fill var(--transition-fast), font-weight var(--transition-fast);
+  pointer-events: none;
+}
+
+.chart-axis-label.axis-label--active {
+  fill: var(--lumi-brand);
+  font-weight: var(--font-bold);
 }
 
 .chart-tooltip {
   position: absolute;
-  transform: translate(-50%, calc(-100% - 10px));
+  transform: translate(-50%, calc(-100% - 14px));
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   padding: var(--space-2) var(--space-3);
   background: var(--glass-bg);
   border: 1px solid var(--glass-border);
@@ -941,141 +1252,139 @@ watch(period, () => { loadData() })
   -webkit-backdrop-filter: var(--glass-blur);
   pointer-events: none;
   z-index: 10;
+  min-width: 90px;
   transition: opacity var(--transition-fast);
+}
+
+.ct-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ct-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--lumi-brand);
 }
 
 .ct-label {
   font-size: var(--text-2xs);
   color: var(--text-muted);
+  font-weight: var(--font-medium);
 }
 
-.ct-value {
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-}
-
-.chart-overlay-stats {
-  position: absolute;
-  top: var(--space-4);
-  right: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.overlay-stat {
-  text-align: right;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface) 80%, transparent);
-  border: 1px solid var(--border-light);
-  backdrop-filter: blur(4px);
-}
-
-.os-label {
-  display: block;
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-}
-
-.os-row {
+.ct-value-row {
   display: flex;
   align-items: baseline;
-  justify-content: flex-end;
-  gap: var(--space-2);
+  gap: 4px;
 }
 
-.os-value {
-  font-size: var(--text-2xl);
+.ct-num {
+  font-size: var(--text-base);
   font-weight: var(--font-bold);
   color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
-.os-trend {
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-}
-
-.os-trend.up { color: var(--lumi-success); }
-.os-trend.down { color: var(--lumi-danger); }
-
-.overlay-stat.primary .os-value { color: var(--lumi-primary); }
-.overlay-stat.success .os-value { color: var(--lumi-success); }
-
-.chart-x-axis {
-  display: flex;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-2) var(--space-4);
-}
-
-.chart-x-axis span {
+.ct-unit {
   font-size: var(--text-2xs);
   color: var(--text-muted);
 }
 
 .usage-mini-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
   border-top: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
 }
 
 .usage-mini-item {
   position: relative;
-  padding: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
-  border-top: 2px solid var(--umi-accent, var(--lumi-brand));
-  transition: transform var(--transition-fast);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-xs);
+  transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  overflow: hidden;
 }
 
 .usage-mini-item:hover {
   transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--umi-accent, var(--lumi-brand)) 40%, var(--border-light));
+  box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--umi-accent, var(--lumi-brand)) 15%, transparent);
 }
 
 .umi-top {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-1);
 }
 
 .umi-label {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--text-secondary);
 }
 
-.umi-change {
-  display: flex;
+.umi-change-badge {
+  display: inline-flex;
   align-items: center;
-  gap: calc(var(--space-1) / 2);
+  gap: 2px;
   font-size: var(--text-2xs);
   font-weight: var(--font-semibold);
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
 }
 
-.umi-change.up { color: var(--lumi-success); }
-.umi-change.down { color: var(--lumi-danger); }
+.umi-change-badge.up {
+  background: color-mix(in srgb, var(--lumi-success) 12%, transparent);
+  color: var(--lumi-success);
+  border: 1px solid color-mix(in srgb, var(--lumi-success) 24%, transparent);
+}
+
+.umi-change-badge.down {
+  background: color-mix(in srgb, var(--lumi-danger) 12%, transparent);
+  color: var(--lumi-danger);
+  border: 1px solid color-mix(in srgb, var(--lumi-danger) 24%, transparent);
+}
+
+.umi-mid {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: var(--space-2);
+}
+
+.umi-value {
+  font-size: 1.35rem;
+  font-weight: var(--font-bold);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.umi-unit {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-weight: var(--font-normal);
+}
 
 .umi-bar-track {
-  height: var(--space-1);
-  background: var(--border);
-  border-radius: calc(var(--space-1) / 2);
+  height: 5px;
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: var(--radius-full);
   overflow: hidden;
-  margin-bottom: var(--space-2);
 }
 
 .umi-bar-fill {
   height: 100%;
-  border-radius: calc(var(--space-1) / 2);
+  border-radius: var(--radius-full);
   transition: width var(--duration-enter) var(--ease-out-expo);
-}
-
-.umi-value {
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
 }
 
 .provider-list {
@@ -1102,12 +1411,24 @@ watch(period, () => { loadData() })
 }
 
 .provider-rank {
-  width: 18px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
   font-size: var(--text-xs);
   font-weight: var(--font-bold);
   color: var(--text-muted);
   flex-shrink: 0;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+.provider-rank--first {
+  color: var(--lumi-brand);
+  background: color-mix(in srgb, var(--lumi-brand) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lumi-brand) 28%, transparent);
 }
 
 .provider-name-wrap {
@@ -1515,6 +1836,15 @@ watch(period, () => { loadData() })
 @media (max-width: 900px) {
   .top-stats-row {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .top-stats-row {
+    grid-template-columns: 1fr;
+  }
+  .chart-header-kpis {
+    display: none;
   }
 }
 </style>

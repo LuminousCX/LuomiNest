@@ -6,6 +6,12 @@ export interface ChartPoint {
   value: number
 }
 
+export interface ChartTick {
+  y: number
+  value: number
+  label: string
+}
+
 export interface AggregatedPoint {
   label: string
   value: number
@@ -16,71 +22,127 @@ export interface AreaChartPaths {
   areaPath: string
   linePath: string
   points: ChartPoint[]
+  ticks: ChartTick[]
+  maxVal: number
 }
 
 export interface GenerateAreaChartOptions {
   width?: number
   height?: number
   padding?: { top: number; bottom: number; left: number; right: number }
+  zeroBaseline?: boolean
 }
 
 /**
- * 根据数据点生成平滑面积图的 SVG 路径。
+ * 根据数据点生成平滑三次贝塞尔面积图的 SVG 路径与刻度信息。
  *
- * @param data 数据数组（长度 >= 2），值域会自动映射到图表高度
- * @param options 图表尺寸与边距
- * @returns 面积路径、折线路径、以及映射后的坐标点
+ * @param data 数据数组，值域会自动映射到图表高度
+ * @param options 图表尺寸、边距与基线配置
+ * @returns 面积路径、平滑折线路径、映射坐标点、Y轴刻度线信息
  */
 export const generateAreaChartPaths = (
   data: number[],
   options: GenerateAreaChartOptions = {},
 ): AreaChartPaths => {
-  if (data.length === 0) {
-    return { areaPath: '', linePath: '', points: [] }
-  }
-
   const {
     width = 400,
     height = 160,
-    padding = { top: 16, bottom: 16, left: 0, right: 0 },
+    padding = { top: 20, bottom: 24, left: 36, right: 20 },
+    zeroBaseline = true,
   } = options
 
-  const chartWidth = width - padding.left - padding.right
-  const chartHeight = height - padding.top - padding.bottom
+  if (data.length === 0) {
+    return { areaPath: '', linePath: '', points: [], ticks: [], maxVal: 0 }
+  }
 
-  const maxValue = Math.max(...data, 1)
-  const minValue = Math.min(...data)
-  const range = Math.max(maxValue - minValue, 1)
+  const chartWidth = Math.max(width - padding.left - padding.right, 10)
+  const chartHeight = Math.max(height - padding.top - padding.bottom, 10)
+  const baselineY = padding.top + chartHeight
+
+  const rawMax = Math.max(...data, 0)
+  const rawMin = zeroBaseline ? 0 : Math.min(...data)
+
+  // 计算规整的上限最大值，留出顶部呼吸空间并方便分割刻度
+  let effectiveMax = rawMax
+  if (effectiveMax <= 0) {
+    effectiveMax = 5
+  } else if (effectiveMax <= 5) {
+    effectiveMax = 5
+  } else if (effectiveMax <= 10) {
+    effectiveMax = 10
+  } else if (effectiveMax <= 20) {
+    effectiveMax = 20
+  } else if (effectiveMax <= 50) {
+    effectiveMax = 50
+  } else if (effectiveMax <= 100) {
+    effectiveMax = 100
+  } else {
+    const magnitude = Math.pow(10, Math.floor(Math.log10(effectiveMax)))
+    effectiveMax = Math.ceil((effectiveMax * 1.15) / magnitude) * magnitude
+  }
+
+  const range = Math.max(effectiveMax - rawMin, 1)
+
+  // 生成 3 条水平参考线 (底部 0, 中间 50%, 顶部 100%)
+  const tickSteps = [0, 0.5, 1]
+  const ticks: ChartTick[] = tickSteps.map((step) => {
+    const val = Math.round(rawMin + step * range)
+    const y = padding.top + chartHeight - step * chartHeight
+    let label = String(val)
+    if (val >= 1_000_000) label = (val / 1_000_000).toFixed(1) + 'M'
+    else if (val >= 1_000) label = (val / 1_000).toFixed(1) + 'K'
+    return { y, value: val, label }
+  })
 
   const points: ChartPoint[] = data.map((value, index) => {
-    const x = padding.left + (data.length === 1 ? 0 : (index / (data.length - 1)) * chartWidth)
-    const y = padding.top + chartHeight - ((value - minValue) / range) * chartHeight
+    const x = padding.left + (data.length === 1 ? chartWidth / 2 : (index / (data.length - 1)) * chartWidth)
+    const normalized = Math.max(0, Math.min(1, (value - rawMin) / range))
+    const y = padding.top + chartHeight - normalized * chartHeight
     return { x, y, value }
   })
 
   if (points.length === 1) {
     const p = points[0]
-    const areaPath = `M ${p.x} ${height} L ${p.x} ${p.y} L ${p.x + 1} ${p.y} L ${p.x + 1} ${height} Z`
-    const linePath = `M ${p.x} ${p.y} L ${p.x + 1} ${p.y}`
-    return { areaPath, linePath, points }
+    const areaPath = `M ${padding.left} ${baselineY} L ${padding.left} ${p.y} L ${padding.left + chartWidth} ${p.y} L ${padding.left + chartWidth} ${baselineY} Z`
+    const linePath = `M ${padding.left} ${p.y} L ${padding.left + chartWidth} ${p.y}`
+    return { areaPath, linePath, points, ticks, maxVal: effectiveMax }
   }
 
-  // 使用二次贝塞尔曲线生成平滑折线：M P0 Q mid(P0,P1) P1 T P2 T P3 ...
-  const control = (a: ChartPoint, b: ChartPoint) => ({
-    x: (a.x + b.x) / 2,
-    y: (a.y + b.y) / 2,
-  })
+  // 使用平滑的三次贝塞尔曲线 (Cubic Spline)，避免单调性突变与过冲
+  let linePath = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`
 
-  let linePath = `M ${points[0].x} ${points[0].y} Q ${control(points[0], points[1]).x} ${control(points[0], points[1]).y} ${points[1].x} ${points[1].y}`
-  for (let i = 2; i < points.length; i++) {
-    linePath += ` T ${points[i].x} ${points[i].y}`
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i === 0 ? 0 : i - 1]
+    const p1 = points[i]
+    const p2 = points[i + 1]
+    const p3 = points[i + 2 >= points.length ? points.length - 1 : i + 2]
+
+    const tension = 0.28 // 平滑张力因子
+    const dx1 = (p2.x - p0.x) * tension
+    const dy1 = (p2.y - p0.y) * tension
+    const dx2 = (p3.x - p1.x) * tension
+    const dy2 = (p3.y - p1.y) * tension
+
+    const cp1x = p1.x + dx1
+    let cp1y = p1.y + dy1
+    const cp2x = p2.x - dx2
+    let cp2y = p2.y - dy2
+
+    // 局部极值钳位，防止曲线在两个相邻点间凹凸失控
+    const minY = Math.min(p1.y, p2.y)
+    const maxY = Math.max(p1.y, p2.y)
+    const margin = Math.abs(p2.y - p1.y) * 0.35
+    cp1y = Math.max(minY - margin, Math.min(maxY + margin, cp1y))
+    cp2y = Math.max(minY - margin, Math.min(maxY + margin, cp2y))
+
+    linePath += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`
   }
 
-  const last = points[points.length - 1]
   const first = points[0]
-  const areaPath = `${linePath} L ${last.x} ${height} L ${first.x} ${height} Z`
+  const last = points[points.length - 1]
+  const areaPath = `${linePath} L ${last.x.toFixed(2)} ${baselineY.toFixed(2)} L ${first.x.toFixed(2)} ${baselineY.toFixed(2)} Z`
 
-  return { areaPath, linePath, points }
+  return { areaPath, linePath, points, ticks, maxVal: effectiveMax }
 }
 
 /**
