@@ -317,6 +317,24 @@ export interface CloudModelInfo {
   displayName: string
 }
 
+/**
+ * 云端最近用量条目（GET {baseUrl}/api/v1/llm/usage 的数组元素）。
+ * 服务端字段命名可能仍在演进，main 侧逐项尽力解析（camelCase/snake_case 兼容），
+ * 缺失字段以空值/0 兜底，不抛错。
+ */
+export interface CloudUsageEntry {
+  /** 模型标识（无法识别时为 '—'） */
+  model: string
+  /** 调用次数（缺省 0） */
+  requests: number
+  /** token 消耗合计（缺省 0） */
+  tokens: number
+  /** 芙贝币消耗（服务端未提供为 null，界面不展示该值） */
+  coinsUsed: number | null
+  /** 最后调用时间（ISO 字符串，可能缺失） */
+  lastUsedAt: string | null
+}
+
 /* ============================================================================
  * 云端群聊（cloud-groups，服务端端点未上线时优雅降级）
  * ========================================================================== */
@@ -690,6 +708,8 @@ export const IpcChannels = {
       setRoutingMode: 'cloud:setRoutingMode',
       // 拉取云端可用模型目录（authorized 态设置页展示，失败静默降级）
       fetchModels: 'cloud:fetchModels',
+      // 拉取云端最近用量（authorized 态设置页展示，失败静默降级为空数组）
+      fetchUsage: 'cloud:fetchUsage',
       // 查询本地后端令牌注入状态（消费 Python GET /api/v1/cloud/status）
       getBackendStatus: 'cloud:getBackendStatus',
       // 显示偏好多端同步开关（config cloud.prefSyncEnabled）
@@ -968,6 +988,8 @@ export interface ElectronApi {
     setRoutingMode: (mode: CloudRoutingMode) => Promise<void>
     /** 拉取云端可用模型目录（未登录/失败时返回空数组，界面静默降级） */
     fetchModels: () => Promise<CloudModelInfo[]>
+    /** 拉取云端最近用量（未登录/失败时返回空数组，界面静默降级） */
+    fetchUsage: () => Promise<CloudUsageEntry[]>
     /** 查询本地后端令牌注入状态（后端未就绪/失败时返回 null，不阻塞页面） */
     getBackendStatus: () => Promise<CloudBackendStatus | null>
     /** 显示偏好多端同步开关（仅同步 locale/theme/协议同意记录，最小必要） */

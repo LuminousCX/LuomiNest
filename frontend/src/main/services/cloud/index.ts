@@ -10,6 +10,7 @@ import type {
   CloudBackendStatus,
   CloudModelInfo,
   CloudRoutingMode,
+  CloudUsageEntry,
 } from '@shared/ipc-types'
 import {
   CloudAuthError,
@@ -55,6 +56,8 @@ const CLOUD_PATHS = {
   llmQuota: '/api/v1/llm/quota',
   /** 从站：LLM 可用模型目录 */
   llmModels: '/api/v1/llm/models',
+  /** 从站：LLM 最近用量 */
+  llmUsage: '/api/v1/llm/usage',
   /** 本地后端：令牌注入 */
   backendToken: '/api/v1/cloud/token',
   /** 本地后端：注入状态查询 */
@@ -557,6 +560,58 @@ const fetchModels = async (): Promise<CloudModelInfo[]> => {
 }
 
 /**
+ * 拉取云端最近用量（GET {baseUrl}/api/v1/llm/usage）。
+ * 服务端返回形态可能为 { usage: [...] } / { data: [...] } / 裸数组，逐项尽力解析
+ * （camelCase/snake_case 兼容）；未登录 / 失败 / 空数据一律返回空数组，
+ * 由设置页静默降级为「暂无数据」，不阻塞页面。
+ */
+const fetchUsage = async (): Promise<CloudUsageEntry[]> => {
+  const tokens = loadCloudTokens()
+  if (!tokens?.accessToken) return []
+  const { baseUrl } = configStore.getCloudConfig()
+  try {
+    const response = await fetch(`${baseUrl}${CLOUD_PATHS.llmUsage}`, {
+      headers: { authorization: `Bearer ${tokens.accessToken}` },
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    })
+    if (!response.ok) return []
+    const payload = (await response.json().catch(() => null)) as unknown
+    // 定位条目数组：裸数组优先，包裹对象按常见 key 依次探测
+    let rawList: unknown[] = []
+    if (Array.isArray(payload)) {
+      rawList = payload
+    } else if (payload && typeof payload === 'object') {
+      const record = payload as Record<string, unknown>
+      for (const key of ['usage', 'items', 'records', 'list', 'data']) {
+        const value = record[key]
+        if (Array.isArray(value)) {
+          rawList = value
+          break
+        }
+      }
+    }
+    return rawList
+      .map((item: unknown): CloudUsageEntry | null => {
+        if (!item || typeof item !== 'object') return null
+        const entry = item as Record<string, unknown>
+        const model = pickString(entry, ['modelId', 'model_id', 'model', 'modelName', 'model_name'])
+        const requests = pickNumber(entry, ['requests', 'requestCount', 'request_count', 'count', 'calls']) ?? 0
+        const used = pickNumber(entry, ['tokens', 'totalTokens', 'total_tokens', 'tokenCount', 'token_count']) ?? 0
+        const coinsUsed = pickNumber(entry, ['coinsUsed', 'coins_used', 'coinCost', 'coin_cost', 'coins', 'cost'])
+        const lastUsedAt = pickString(entry, ['lastUsedAt', 'last_used_at', 'createdAt', 'created_at', 'time'])
+        // 全空条目（无法识别形状）直接丢弃，避免界面出现噪音行
+        if (!model && !requests && !used) return null
+        return { model: model || '—', requests, tokens: used, coinsUsed, lastUsedAt: lastUsedAt || null }
+      })
+      .filter((item): item is CloudUsageEntry => item !== null)
+      .slice(0, 20)
+  } catch (err) {
+    logger.warn('Failed to fetch cloud usage:', err instanceof Error ? err.message : err)
+    return []
+  }
+}
+
+/**
  * 查询本地后端云令牌注入状态（GET {backend}/api/v1/cloud/status，令牌仅回传末 4 位）。
  * 后端未就绪 / 失败返回 null，调用方不阻塞页面。
  */
@@ -620,6 +675,7 @@ export const cloudAuth = {
   getRoutingMode,
   setRoutingMode,
   fetchModels,
+  fetchUsage,
   getBackendCloudStatus,
 }
 

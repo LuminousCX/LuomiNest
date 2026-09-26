@@ -200,6 +200,7 @@ const api: ElectronApi = {
     getRoutingMode: () => invoke(IpcChannels.cloud.invoke.getRoutingMode),
     setRoutingMode: (mode: CloudRoutingMode) => invoke(IpcChannels.cloud.invoke.setRoutingMode, mode),
     fetchModels: () => invoke(IpcChannels.cloud.invoke.fetchModels),
+    fetchUsage: () => invoke(IpcChannels.cloud.invoke.fetchUsage),
     getBackendStatus: () => invoke(IpcChannels.cloud.invoke.getBackendStatus),
     getPrefSyncEnabled: () => invoke(IpcChannels.cloud.invoke.getPrefSyncEnabled),
     setPrefSyncEnabled: (enabled: boolean) => invoke(IpcChannels.cloud.invoke.setPrefSyncEnabled, enabled),

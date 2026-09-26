@@ -472,6 +472,11 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     return cloudAuth.fetchModels()
   })
 
+  handleIpc(IpcChannels.cloud.invoke.fetchUsage, async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return []
+    return cloudAuth.fetchUsage()
+  })
+
   handleIpc(IpcChannels.cloud.invoke.getBackendStatus, async (event: IpcMainInvokeEvent) => {
     if (!assertTrustedSender(event)) return null
     return cloudAuth.getBackendCloudStatus()
