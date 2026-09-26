@@ -21,6 +21,8 @@
 
 [English](README.md) | [简体中文](README_zh.md) | [日本語](README_ja.md)
 
+🪺 辰汐エコシステム（Chenxi Ecosystem）のメンバー —— 姉妹プロジェクト：[LuomiBlog](https://github.com/luminous-ChenXi/LuomiBlog)（AI ナレッジベースブログ）、[AstrNest](https://github.com/luminous-ChenXi/AstrNest)（画像ホスティング / メディア管理）、Teachenxi（学習伴走アプリ）
+
 </div>
 
 ---
@@ -61,12 +63,12 @@ LuomiNest は、オープンソースの**分散型マルチユーザー関係�
 |---------|---------|
 | **フロントエンド** | Electron 44 + Vue 3 + TypeScript + Pinia + PixiJS (Live2D Cubism 5) |
 | **バックエンド** | Python 3.12+ + FastAPI + Uvicorn + SQLAlchemy 2 (async) + APScheduler |
-| **ストレージ** | SQLite (SQLAlchemy ORM, WAL モード単一 DB) + JSON キャッシュ（PostgreSQL / Redis はクラウド拡張用予約） |
+| **ストレージ** | SQLite (SQLAlchemy ORM, WAL モード単一 DB) + ローカル JSON ファイルキャッシュ —— 純デスクトップアプリ、データは 100% ローカル完結 |
 | **通信** | WebSocket + MQTT + HTTP/REST + SSE (Server-Sent Events) |
 | **AI / LLM** | OpenAI / Anthropic / DeepSeek / Ollama、マルチベンダーアダプター + パイプラインミドルウェア |
 | **音声** | SherpaOnnx / FunASR / Faster-Whisper (ASR) + Edge TTS / 各種クラウド TTS エンジン |
 | **ハードウェア** | ESP-IDF (ESP32-P4) |
-| **配布/パッケージ** | Docker Compose + PyInstaller + Electron Builder + NSIS |
+| **配布/パッケージ** | PyInstaller + Electron Builder + NSIS |
 
 ## クイックスタート
 
@@ -142,21 +144,6 @@ pnpm build
 
 </details>
 
-<details>
-<summary><strong>Docker デプロイ</strong></summary>
-
-```bash
-cd docker
-
-# 開発環境（backend + PostgreSQL + Redis + MQTT。バックエンドは SQLite を標準使用、pg/redis は予約）
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-
-# 本番環境
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
-
-</details>
-
 ## プロジェクト構成
 
 ```
@@ -188,7 +175,7 @@ LuomiNest/
 │   └── embedded/esp32-p4/       # ESP32-P4 コントローラー（コンポーネント構成：app / bsp / drivers）
 │
 ├── templates/                   # プラグイン・拡張機能開発テンプレート
-└── docker/                      # Docker デプロイ・環境構成
+└── docker/                      # MQTT Broker 設定（Mosquitto）
 ```
 
 ## ドキュメントについて

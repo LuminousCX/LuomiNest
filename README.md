@@ -21,6 +21,8 @@
 
 [English](README.md) | [简体中文](README_zh.md) | [日本語](README_ja.md)
 
+🪺 A member of the **Chenxi Ecosystem** — Sister projects: [LuomiBlog](https://github.com/luminous-ChenXi/LuomiBlog) (AI knowledge-base blog) · [AstrNest](https://github.com/luminous-ChenXi/AstrNest) (image hosting / media management) · Teachenxi (study companion app)
+
 </div>
 
 ---
@@ -59,12 +61,12 @@ The product centers on three pillars: **Memory (remembers who you are), Companio
 |-------|--------------|
 | **Frontend** | Electron 44 + Vue 3 + TypeScript + Pinia + PixiJS (Live2D Cubism 5) |
 | **Backend** | Python 3.12+ + FastAPI + Uvicorn + SQLAlchemy 2 (async) + APScheduler |
-| **Storage** | SQLite (SQLAlchemy ORM, WAL mode single DB) + JSON caching; PostgreSQL / Redis reserved for cloud scaling |
+| **Storage** | SQLite (SQLAlchemy ORM, WAL mode single DB) + local JSON file caching — pure desktop app, 100% local data sovereignty |
 | **Communication** | WebSocket + MQTT + HTTP/REST + SSE (Server-Sent Events) |
 | **AI / LLM** | OpenAI / Anthropic / DeepSeek / Ollama, multi-vendor adapters + middleware pipeline |
 | **Speech** | SherpaOnnx / FunASR / Faster-Whisper (ASR) + Edge TTS / SherpaOnnx / Local / Cloud TTS engines |
 | **Hardware** | ESP-IDF (ESP32-P4) |
-| **Distribution** | Docker Compose + PyInstaller + Electron Builder + NSIS |
+| **Distribution** | PyInstaller + Electron Builder + NSIS |
 
 ## Quick Start
 
@@ -140,21 +142,6 @@ pnpm build
 
 </details>
 
-<details>
-<summary><strong>Docker Deployment</strong></summary>
-
-```bash
-cd docker
-
-# Development environment (backend + PostgreSQL + Redis + MQTT; backend currently uses SQLite, pg/redis reserved)
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-
-# Production environment
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
-
-</details>
-
 ## Project Structure
 
 ```
@@ -186,7 +173,7 @@ LuomiNest/
 │   └── embedded/esp32-p4/       # ESP32-P4 controller (modular: app / bsp / drivers)
 │
 ├── templates/                   # Plugin and skill development templates
-└── docker/                      # Docker deployment configurations
+└── docker/                      # MQTT broker configuration (Mosquitto)
 ```
 
 ## Documentation

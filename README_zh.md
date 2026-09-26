@@ -21,6 +21,8 @@
 
 [English](README.md) | [简体中文](README_zh.md) | [日本語](README_ja.md)
 
+🪺 辰汐生态（Chenxi Ecosystem）成员 —— 姊妹项目：[LuomiBlog](https://github.com/luminous-ChenXi/LuomiBlog)（AI 知识库博客）、[AstrNest](https://github.com/luminous-ChenXi/AstrNest)（图床/媒体管理）、Teachenxi（学习陪伴 App）
+
 </div>
 
 ---
@@ -59,12 +61,12 @@ LuomiNest 是一个开源的**分布式多用户关系型 AI 智能体平台**�
 |------|---------|
 | **前端** | Electron 44 + Vue 3 + TypeScript + Pinia + PixiJS (Live2D) |
 | **后端** | Python 3.12+ + FastAPI + Uvicorn + SQLAlchemy 2 (async) + APScheduler |
-| **存储** | SQLite (SQLAlchemy ORM, WAL 单库) + JSON 缓存；PostgreSQL / Redis 为云端化预留 |
+| **存储** | SQLite (SQLAlchemy ORM, WAL 单库) + 本地 JSON 文件缓存 —— 纯桌面应用，数据 100% 本地闭环 |
 | **通信** | WebSocket + MQTT + HTTP/REST + SSE 流式响应 |
 | **AI/LLM** | OpenAI / Anthropic / DeepSeek / Ollama，多厂商适配器 + 中间件管道 |
 | **语音** | SherpaOnnx / FunASR / Faster-Whisper (ASR) + Edge TTS / SherpaOnnx / 本地 TTS / Gemini / MiniMax / SiliconFlow / Fish Audio |
 | **硬件** | ESP-IDF (ESP32-P4) |
-| **部署** | Docker Compose + PyInstaller + Electron Builder + Inno Setup |
+| **部署** | PyInstaller + Electron Builder + Inno Setup |
 
 ## 快速开始
 
@@ -140,21 +142,6 @@ pnpm build
 
 </details>
 
-<details>
-<summary><strong>Docker 部署</strong></summary>
-
-```bash
-cd docker
-
-# 开发环境（backend + PostgreSQL + Redis + MQTT；后端当前使用 SQLite，pg/redis 为预留）
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-
-# 生产环境
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-```
-
-</details>
-
 ## 项目结构
 
 ```
@@ -186,7 +173,7 @@ LuomiNest/
 │   └── embedded/esp32-p4/       # ESP32-P4 主控（组件化：app / bsp / drivers）
 │
 ├── templates/                   # 插件与扩展开发模板
-└── docker/                      # Docker 部署与环境编排
+└── docker/                      # MQTT Broker 配置（Mosquitto）
 ```
 
 ## 文档
