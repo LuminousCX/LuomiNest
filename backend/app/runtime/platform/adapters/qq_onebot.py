@@ -11,6 +11,7 @@ from typing import Any
 from loguru import logger
 
 from app.runtime.platform.base import BasePlatformAdapter, PlatformMessage, PlatformResponse
+from app.runtime.platform.group_config import safe_get_group_config
 from app.runtime.platform.infrastructure.exposure import (
     is_loopback_host,
     warn_inbound_without_credential,
@@ -67,6 +68,8 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
 
         # OneBot Action 异步回执等待队列 {echo: Future}
         self._pending_action_futures: dict[str, asyncio.Future] = {}
+        # bot 自己发出的消息 id（群配置 at_or_reply 唤醒判定用；dict 当有序集合，封顶防涨）
+        self._bot_message_ids: dict[str, None] = {}
 
         # 防封控防检测机制参数
         self._anti_ban_enabled: bool = True
@@ -673,15 +676,41 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
             raw=event,
         )
 
+    def _remember_bot_message_id(self, message_id: str) -> None:
+        """记录 bot 已发出消息 id，容量封顶（防长期运行内存缓涨）。"""
+        if not message_id:
+            return
+        self._bot_message_ids[message_id] = None
+        while len(self._bot_message_ids) > 256:
+            self._bot_message_ids.pop(next(iter(self._bot_message_ids)))
+
     def _should_respond(self, event: dict, msg: PlatformMessage) -> bool:
         if not msg.is_group:
             return True
 
+        # per-group 群配置（platform.groups.{inst}:{group}，默认保守 @ 才答）
+        group_cfg = safe_get_group_config(self._instance_id, msg.group_id)
+        if not group_cfg.get("enabled", True):
+            return False
+
+        at_hit = False
         for seg in event.get("message", []):
             if isinstance(seg, dict) and seg.get("type") == "at":
-                qq = seg.get("data", {}).get("qq", "")
-                if qq == self._self_id or qq == "all":
-                    return True
+                qq = str(seg.get("data", {}).get("qq", ""))
+                if qq == str(self._self_id) or qq == "all":
+                    at_hit = True
+        if at_hit:
+            return True
+
+        mode = str(group_cfg.get("respond_mode", "at"))
+        if mode == "all":
+            return True
+        if mode == "at_or_reply":
+            for seg in event.get("message", []):
+                if isinstance(seg, dict) and seg.get("type") == "reply":
+                    reply_id = str(seg.get("data", {}).get("id", ""))
+                    if reply_id and reply_id in self._bot_message_ids:
+                        return True
         return False
 
     @staticmethod
@@ -737,7 +766,11 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
         try:
             await websocket.send(json.dumps(payload))
             res = await asyncio.wait_for(fut, timeout=timeout)
-            return res if isinstance(res, dict) else {"status": "ok", "data": res}
+            res = res if isinstance(res, dict) else {"status": "ok", "data": res}
+            # 成功发出的消息回收 message_id（群配置 at_or_reply 模式靠它识别"引用 bot"）
+            if action in ("send_group_msg", "send_private_msg") and res.get("retcode") == 0:
+                self._remember_bot_message_id(str((res.get("data") or {}).get("message_id", "")))
+            return res
         except asyncio.TimeoutError:
             self._pending_action_futures.pop(echo, None)
             return {"status": "failed", "retcode": -2, "msg": f"OneBot action {action} 超时 ({timeout}s)"}

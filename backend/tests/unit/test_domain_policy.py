@@ -64,7 +64,8 @@ class TestResolveDomainPolicyGroupMember:
         assert policy.kind == KIND_PLATFORM
         assert policy.memory_read is True
         assert policy.memory_track == TRACK_USERS
-        assert policy.track_user_key == "qq_onebot_inst_1_10001"
+        # 分册10 §16.1 统一人键：不再叠 instance 段，与私聊同键
+        assert policy.track_user_key == "qq_onebot_10001"
         # 写开关默认关
         assert policy.memory_write is False
 
@@ -94,7 +95,8 @@ class TestResolveDomainPolicyGroupMember:
 
     def test_platform_name_falls_back_to_instance_id(self):
         policy = resolve_domain_policy(self.DOMAIN, sender_id="42")
-        assert policy.track_user_key == "inst_1_inst_1_42"
+        # platform_name 缺省回退 instance_id 作平台段（仍是统一两段键）
+        assert policy.track_user_key == "inst_1_42"
 
     def test_private_chat_user_key_unchanged(self):
         policy = resolve_domain_policy(self.DOMAIN, user_key="qq_onebot_10001")

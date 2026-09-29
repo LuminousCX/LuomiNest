@@ -18,6 +18,11 @@ from app.runtime.platform.registry import (
     stop_instance,
 )
 from app.runtime.platform.platform_logger import platform_logger
+from app.runtime.platform.group_config import (
+    list_group_configs,
+    set_group_config,
+    reset_group_config,
+)
 import app.runtime.platform.adapters
 
 
@@ -945,3 +950,44 @@ async def update_main_agent_info(
 
     logger.info(f"[PlatformAPI] Main agent config updated: {updated_fields}")
     return ok({"updated": True, "fields": updated_fields})
+
+
+# ──────────────────────────────────────────────────────────────
+# per-group 群配置表（分册10 §16.3）：@ 门槛/插话频率/记忆开关/启用
+# ──────────────────────────────────────────────────────────────
+
+
+class GroupConfigUpdate(BaseModel):
+    enabled: bool | None = None
+    respond_mode: str | None = Field(default=None, alias="respondMode")
+    memory_enabled: bool | None = Field(default=None, alias="memoryEnabled")
+    interject_rate: float | None = Field(default=None, alias="interjectRate")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+@router.get("/instances/{instance_id}/groups")
+async def list_group_configs_api(instance_id: str):
+    """列出某平台实例全部群配置（含默认值合并结果）。"""
+    return ok(list_group_configs(instance_id))
+
+
+@router.put("/instances/{instance_id}/groups/{group_id}/config")
+async def set_group_config_api(instance_id: str, group_id: str, body: GroupConfigUpdate):
+    """增量更新群配置（仅提交的字段生效；respond_mode 非法值报错）。"""
+    patch = {k: v for k, v in body.model_dump(by_alias=False).items() if v is not None}
+    if not patch:
+        raise ValidationError("群配置更新内容为空")
+    try:
+        cfg = set_group_config(instance_id, group_id, patch)
+    except ValueError as e:
+        raise ValidationError(str(e))
+    logger.info(f"[PlatformAPI] Group config updated: {instance_id}:{group_id} -> {patch}")
+    return ok({"instanceId": instance_id, "groupId": group_id, "config": cfg})
+
+
+@router.delete("/instances/{instance_id}/groups/{group_id}/config")
+async def reset_group_config_api(instance_id: str, group_id: str):
+    """删除群自定义配置，回到默认保守值。"""
+    removed = reset_group_config(instance_id, group_id)
+    return ok({"instanceId": instance_id, "groupId": group_id, "removed": removed})

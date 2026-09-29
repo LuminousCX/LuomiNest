@@ -6,7 +6,8 @@ import uuid
 from loguru import logger
 
 from app.core.utils import AsyncKeyLocks, extract_llm_text, utc_now
-from app.core.domain_policy import group_member_user_key
+from app.core.domain_policy import platform_user_key
+from app.runtime.platform.group_config import safe_get_group_config
 from app.runtime.platform.base import (
     HIGH_RISK_PLATFORM_TOOLS,
     HIGH_RISK_TOOL_BLOCKED_MESSAGE,
@@ -255,12 +256,14 @@ class LuomiNestPlatformRouter:
             )
             return None
 
-        # 群成员轨（§8.5.10 本期实现）：群消息带 sender_id（PlatformMessage.user_id）
-        # 时解析 {platform}_{instance_id}_{sender_id} 成员轨（按「人」不按「群」）；
-        # 私聊沿用 conv.user_key，无 sender_id 的群消息维持现状（不建轨）
+        # 统一人键（分册10 §16.1）：群成员轨与私聊轨归一为同一把键
+        # {platform}_{sender_id}——同一人在群聊和私聊共享一处记忆；
+        # 私聊沿用 conv.user_key（同为 {platform}_{uid} 格式），无 sender_id
+        # 的群消息维持现状（不建轨）。旧三段键存量由
+        # scripts/migrate_member_tracks.py 幂等并入统一人键。
         member_user_key = ""
         if message.is_group and (message.user_id or "").strip():
-            member_user_key = group_member_user_key(message.platform, instance_id, message.user_id)
+            member_user_key = platform_user_key(message.platform, message.user_id)
         effective_user_key = conv.get("user_key") or member_user_key
         # 在场其他成员（近期群消息去重，不含当前说话者）→ 群友画像块
         group_members = self._collect_group_members(conv, message, instance_id)
@@ -570,6 +573,11 @@ class LuomiNestPlatformRouter:
         # 群聊 = 说话成员轨，关于某群友的事实写进该群友的轨道而非丢弃，§8.5.10），
         # 不污染主人记忆（§8.5.5）
         memory_write_enabled = bool(inst.config.get("memory_write", False)) if inst else False
+        # per-group 记忆开关（platform.groups.*）：群聊在实例开关之上再取与
+        if memory_write_enabled and message.is_group and (group_id_val or "").strip():
+            memory_write_enabled = bool(
+                safe_get_group_config(instance_id, group_id_val).get("memory_enabled", True)
+            )
         self._spawn_background_task(self._schedule_memory_update(
             messages, conv_id, assistant_text,
             domain=conv.get("domain") or f"platform:{instance_id}",
@@ -614,7 +622,7 @@ class LuomiNestPlatformRouter:
             members.append({
                 "sender_id": sender_id,
                 "sender_name": str(meta.get("sender_name", "") or ""),
-                "user_key": group_member_user_key(message.platform, instance_id, sender_id),
+                "user_key": platform_user_key(message.platform, sender_id),
             })
             if len(members) >= max_members:
                 break

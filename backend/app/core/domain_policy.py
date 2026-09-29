@@ -247,9 +247,7 @@ def resolve_domain_policy(
         inst_id = parse_domain(dom)[1]
         effective_user_key = (user_key or "").strip()
         if not effective_user_key and (sender_id or "").strip():
-            effective_user_key = group_member_user_key(
-                platform_name or inst_id, inst_id, sender_id
-            )
+            effective_user_key = platform_user_key(platform_name or inst_id, sender_id)
 
         effective_group_key = ""
         if (group_id or "").strip():
