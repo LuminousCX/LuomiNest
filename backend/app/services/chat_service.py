@@ -26,7 +26,7 @@ from app.core.utils import require_store, sse_data, sse_response, utc_now
 from app.infrastructure.database.conversation_store import conversation_store
 from app.infrastructure.database.facades.model_selection import resolve_global_provider_model
 from app.runtime.provider.llm.adapter import llm_adapter
-from app.runtime.provider.llm.types import LLMResponse, RouteHint
+from app.runtime.provider.llm.types import RouteHint
 from app.schemas.chat import ChatStreamChunk
 from app.security.prompt_security import wrap_untrusted_content
 from app.services.avatar_manager import strip_emotion_tags
@@ -34,7 +34,6 @@ from app.services.context_service import ContextService
 from app.services.distillation_service import distillation_service
 from app.services.stream_processor import StreamProcessor
 from app.services.suggestion_service import SuggestionService
-from app.services.usage_tracker import usage_tracker
 
 # ──────────────────────────────────────────────────────────────
 # 全局钩子注册表
@@ -239,48 +238,76 @@ class ChatService:
         top_p: float | None = None,
         agent_id: str | None = None,
         conv_id: str | None = None,
+        chat_mode: str = "normal",
     ) -> None:
+        """非流式生成（stream=false）：复用流式侧的按需工具注入 + AgentRunner 工具循环。
+
+        - 工具选择与流式路径一致（_select_tools_for_turn 三级注入，P0-5）
+        - 工具执行/循环边界/usage 记录由中间件管线处理（与子 Agent 的 run_non_stream 同路）
+        - 最终文本照旧写入 state（content/reasoning/aborted/errCode），供调用方落库
+        """
         try:
-            async with self._llm_semaphore:
-                raw = await llm_adapter.chat(
-                    messages=all_messages,
-                    provider_name=provider,
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    top_p=top_p,
-                    route_hint=RouteHint.CHAT,
+            # 工具支持：W2 三级注入（与流式侧一致；长尾工具以摘要进 system 的 <tool_index>）
+            available_tools, tool_whitelist = _select_tools_for_turn(
+                provider, model, self._context.get_user_query(all_messages),
+                chat_mode, all_messages,
+            )
+            use_tools = bool(available_tools) and llm_adapter.supports_tool_calls(provider, model)
+            if available_tools and not use_tools:
+                logger.info(
+                    f"[ChatService] non_stream_generate: Provider {provider}/{model} "
+                    "不支持工具调用，纯对话模式"
                 )
-            if isinstance(raw, dict):
-                state["content"] = strip_emotion_tags(raw.get("content", ""))
-                if raw.get("reasoning"):
-                    state["reasoning"] = raw["reasoning"]
-                if raw.get("usage"):
-                    try:
-                        usage_tracker.record_usage(
-                            provider=provider, model=model,
-                            usage=raw["usage"], agent_id=agent_id, conversation_id=conv_id,
-                        )
-                    except Exception as ut_err:
-                        logger.warning(f"[ChatService] Usage tracking failed: {ut_err}")
-            elif isinstance(raw, LLMResponse) and raw.usage:
-                state["content"] = strip_emotion_tags(raw.content if hasattr(raw, "content") else str(raw))
-                try:
-                    usage_tracker.record_usage(
-                        provider=provider, model=model,
-                        usage=raw.usage, agent_id=agent_id, conversation_id=conv_id,
+
+            # full 回退模式下 NORMAL 仍走「固定白名单 + 召回」后置裁剪（与流式侧一致）
+            if tool_whitelist is None and chat_mode == "normal" and \
+                    (settings.LLM_TOOL_INJECTION_MODE or "auto").strip().lower() == "full":
+                tool_whitelist = _build_normal_tool_whitelist(
+                    self._context.get_user_query(all_messages),
+                )
+
+            ctx = AgentContext(
+                messages=all_messages,
+                tools=available_tools if use_tools else None,
+                route_hint=RouteHint.CHAT,
+                state={"provider": provider, "model": model},
+                extra={
+                    "scene": "chat",
+                    "is_stream": False,
+                    "tool_whitelist": tool_whitelist,
+                    "agent_id": agent_id,
+                    "conv_id": conv_id,
+                },
+            )
+
+            async def llm_call_fn(ctx):
+                async with self._llm_semaphore:
+                    return await llm_adapter.chat(
+                        messages=ctx.messages,
+                        tools=ctx.tools,
+                        provider_name=provider,
+                        model=model,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        top_p=top_p,
+                        route_hint=RouteHint.CHAT,
                     )
-                except Exception as ut_err:
-                    logger.warning(f"[ChatService] Usage tracking failed: {ut_err}")
-            else:
-                state["content"] = strip_emotion_tags(raw if isinstance(raw, str) else str(raw))
-                try:
-                    usage_tracker.record_usage(
-                        provider=provider, model=model,
-                        agent_id=agent_id, conversation_id=conv_id,
-                    )
-                except Exception as ut_err:
-                    logger.warning(f"[ChatService] Usage tracking failed: {ut_err}")
+
+            runner = tool_orchestrator.create_runner({
+                "scene": "chat",
+                "is_stream": False,
+                "hook_registry": chat_hook_registry,
+            })
+            result_state = await runner.run_non_stream(ctx, llm_call_fn)
+
+            state["content"] = strip_emotion_tags(result_state.get("content", ""))
+            if result_state.get("reasoning"):
+                state["reasoning"] = result_state["reasoning"]
+            if result_state.get("aborted"):
+                state["aborted"] = True
+            if result_state.get("errCode"):
+                state["errCode"] = result_state["errCode"]
+            # usage 记录由管线内 UsageTrackMiddleware（after_agent）完成，此处不再重复记录
         except Exception as e:
             logger.error(f"[API] Non-stream error: {e}", exc_info=True)
             state["aborted"] = True
@@ -850,8 +877,10 @@ class ChatService:
                     messages[i]["content"] += f"\n\n[搜索结果]\n{wrapped}"
                     break
 
-        ctx_mgr = get_context_manager(resolved_provider, resolved_model)
-        process_result = await ctx_mgr.process(messages)
+        # P0-2：携带会话 id，压缩状态（摘要水位线）按会话隔离并持久化；
+        # 无 conversation_id 的无状态调用保持旧行为（conv_id=None）
+        ctx_mgr = get_context_manager(resolved_provider, resolved_model, conv_id=body.conversation_id)
+        process_result = await ctx_mgr.process(messages, conv_id=body.conversation_id)
         messages = process_result["messages"]
 
         if body.stream:
@@ -1058,8 +1087,10 @@ class ChatService:
                     all_messages[i]["content"] += f"\n\n[搜索结果]\n{wrapped}"
                     break
 
-        ctx_mgr = get_context_manager(resolved_provider, resolved_model)
-        process_result = await ctx_mgr.process(all_messages)
+        # P0-2：携带会话 id，压缩状态（摘要水位线）按会话隔离并持久化，
+        # 流式/非流式路径经此统一生效
+        ctx_mgr = get_context_manager(resolved_provider, resolved_model, conv_id=conv_id)
+        process_result = await ctx_mgr.process(all_messages, conv_id=conv_id)
         all_messages = process_result["messages"]
 
         gen_state: dict = {

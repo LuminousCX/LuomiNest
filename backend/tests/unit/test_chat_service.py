@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.services import chat_service as chat_service_module
+from app.services import usage_tracker as usage_tracker_module
 from app.services.chat_service import ChatService
 
 
@@ -78,7 +79,9 @@ def _patch_generation(monkeypatch):
     """替换生成链路的外部依赖：LLM 返回带 emotion 标签的固定回复。"""
     llm_mock = AsyncMock(return_value="<exp:happy>你好呀！")
     monkeypatch.setattr(chat_service_module.llm_adapter, "chat", llm_mock)
-    monkeypatch.setattr(chat_service_module.usage_tracker, "record_usage", MagicMock())
+    # P0-5 后 usage 记录在 AgentRunner 管线内（UsageTrackMiddleware），
+    # 直接对 usage_tracker 单例打桩（chat_service 模块不再导入该符号）
+    monkeypatch.setattr(usage_tracker_module.usage_tracker, "record_usage", MagicMock())
     monkeypatch.setattr(
         chat_service_module.distillation_service, "maybe_distill", AsyncMock(return_value=None)
     )
@@ -164,7 +167,8 @@ async def test_non_stream_generate_writes_content(chat_svc, monkeypatch):
     llm_mock = AsyncMock(return_value="plain answer")
     monkeypatch.setattr(chat_service_module.llm_adapter, "chat", llm_mock)
     record_usage = MagicMock()
-    monkeypatch.setattr(chat_service_module.usage_tracker, "record_usage", record_usage)
+    # P0-5 后 usage 记录在 UsageTrackMiddleware：对 usage_tracker 单例打桩
+    monkeypatch.setattr(usage_tracker_module.usage_tracker, "record_usage", record_usage)
 
     state = {"content": "", "reasoning": "", "aborted": False, "started": True}
     await chat_svc.non_stream_generate(state, [{"role": "user", "content": "hi"}], "openai", "gpt-test")

@@ -22,7 +22,7 @@ from app.infrastructure.database.base import Base
 
 # 列迁移 schema 版本：_migrate_columns_sync 内新增任何列/回填/索引逻辑时必须 +1，
 # 否则已达标旧库会跳过新迁移。旧库首次升级（user_version=0）会完整执行一遍并回写。
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 @contextlib.contextmanager
@@ -398,9 +398,79 @@ def _migrate_columns_sync(sync_conn) -> None:
                     f"skills table: added {col_name} column",
                 )
 
+    # SCHEMA v4（P0-1 定时任务闭环）：scheduled_tasks 触发信息列 + 结果投递来源列
+    _migrate_scheduled_tasks_sync(sync_conn, inspector)
+
     # ── 回写 schema 版本（全部迁移成功才到达：异常路径不回写，下次启动重试） ──
     if not backfill_failed:
         sync_conn.execute(text(f"PRAGMA user_version={int(SCHEMA_VERSION)}"))
+
+
+def _migrate_scheduled_tasks_sync(sync_conn, inspector) -> None:
+    """scheduled_tasks 表 P0-1 列迁移（SCHEMA v4）。
+
+    旧表缺列时 ALTER TABLE ADD COLUMN，并按遗留 schedule_type 回填 trigger_type：
+    - cron    → trigger_type='cron'（schedule_cron 即真实 cron 表达式，保持不动）
+    - interval→ trigger_type='interval'（旧实现未存 interval_seconds，恢复端降级 3600s 并告警）
+    - 其他（date/once）→ trigger_type='date'；旧实现把 date 任务误存为 "* * * * *"，
+      无真实执行时间可恢复，run_at 保持 NULL（恢复端跳过并告警，不再把 "* * * * *" 当 ISO 日期）；
+      若 schedule_cron 疑似 ISO 时间串（历史手工写入），回填为 run_at 尽力抢救。
+
+    幂等：列已存在则跳过；回填仅命中 trigger_type 为空的行。
+    """
+    from sqlalchemy import text
+
+    if "scheduled_tasks" not in inspector.get_table_names():
+        return
+    existing_cols = {c["name"] for c in inspector.get_columns("scheduled_tasks")}
+
+    def _add_col(ddl: str, desc: str) -> None:
+        try:
+            sync_conn.execute(text(ddl))
+            logger.info(f"[DB] Migrated scheduled_tasks table: {desc}")
+        except Exception as e:
+            if "duplicate column" in str(e).lower() or "already exists" in str(e).lower():
+                logger.debug(f"[DB] scheduled_tasks migration step already applied, skipped: {desc}")
+            else:
+                raise
+
+    if "trigger_type" not in existing_cols:
+        _add_col("ALTER TABLE scheduled_tasks ADD COLUMN trigger_type VARCHAR(16) DEFAULT ''", "added trigger_type column")
+    if "run_at" not in existing_cols:
+        _add_col("ALTER TABLE scheduled_tasks ADD COLUMN run_at VARCHAR(64)", "added run_at column")
+    if "interval_seconds" not in existing_cols:
+        _add_col("ALTER TABLE scheduled_tasks ADD COLUMN interval_seconds INTEGER", "added interval_seconds column")
+    if "origin_kind" not in existing_cols:
+        _add_col("ALTER TABLE scheduled_tasks ADD COLUMN origin_kind VARCHAR(16) DEFAULT ''", "added origin_kind column")
+    if "origin_ref" not in existing_cols:
+        _add_col("ALTER TABLE scheduled_tasks ADD COLUMN origin_ref VARCHAR(128)", "added origin_ref column")
+    if "origin_target" not in existing_cols:
+        _add_col("ALTER TABLE scheduled_tasks ADD COLUMN origin_target VARCHAR(128)", "added origin_target column")
+
+    # 旧行回填：仅命中 trigger_type 为空的行（幂等）
+    result = sync_conn.execute(
+        text(
+            """
+            UPDATE scheduled_tasks SET
+              trigger_type = CASE
+                WHEN schedule_type = 'cron' THEN 'cron'
+                WHEN schedule_type = 'interval' THEN 'interval'
+                ELSE 'date'
+              END,
+              run_at = CASE
+                -- 疑似 ISO 时间串（如 2026-06-21T08:00:00）尽力回填为 run_at
+                WHEN schedule_type NOT IN ('cron', 'interval')
+                     AND schedule_type != ''
+                     AND schedule_cron LIKE '____-__-__%'
+                  THEN schedule_cron
+                ELSE run_at
+              END
+            WHERE trigger_type IS NULL OR trigger_type = ''
+            """
+        )
+    )
+    if result.rowcount:
+        logger.info(f"[DB] Migrated scheduled_tasks table: backfilled trigger_type for {result.rowcount} legacy row(s)")
 
 
 async def dispose_db() -> None:

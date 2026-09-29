@@ -223,6 +223,19 @@ class LuomiNestPlatformRouter:
         inst = get_instance(instance_id)
         adapter_type = inst.adapter_type if inst else message.platform
 
+        # P0-1 定时任务闭环：标记平台会话来源，使 create_scheduled_task 等工具
+        # 执行时能记录结果投递目标（群里建的提醒回该群）；contextvar 随请求任务隔离
+        try:
+            from app.core.tools.builtin.scheduler_tool import set_platform_task_origin
+            set_platform_task_origin(
+                instance_id=instance_id,
+                session_id=session_id or "",
+                is_group=message.is_group,
+                platform=message.platform,
+            )
+        except Exception as e:
+            logger.warning(f"[PlatformRouter] 设置平台任务来源上下文失败: {e}")
+
         conv_id = await get_or_create_conversation(
             instance_id=instance_id,
             session_id=session_id,

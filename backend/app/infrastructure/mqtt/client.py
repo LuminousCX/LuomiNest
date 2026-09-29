@@ -28,6 +28,19 @@ _MAX_RECONNECT_DELAY = 30.0
 _CONNECT_TIMEOUT = 10.0
 
 
+def _reason_code_to_int(reason_code: Any) -> int:
+    """paho 2.x VERSION2 回调的 ReasonCode 枚举 → int（0=成功/正常断开）。
+
+    注意：int(ReasonCode) 会 TypeError（枚举不可直接 int 化），且该异常会把
+    paho 网络线程整个带崩，表现为「CONNACK 已收到但客户端永远连不上」。
+    """
+    value = getattr(reason_code, "value", reason_code)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0 if str(reason_code) in ("Success", "Normal disconnection") else 1
+
+
 class LuomiNestMqttClient:
     """paho-mqtt 异步封装（每实例一条后台网络线程）。
 
@@ -92,9 +105,12 @@ class LuomiNestMqttClient:
         if self._username:
             client.username_pw_set(self._username, self._password)
         # 指数退避自动重连（对齐固件 1s→30s）
+        # 注意：paho-mqtt 2.x 的形参名是 min_delay/max_delay（旧代码的
+        # delay_min/delay_max 会 TypeError，且 connect() 在后台任务中运行时
+        # 异常被静默吞掉，表现为「永远连不上」）
         client.reconnect_delay_set(
-            delay_min=int(_INITIAL_RECONNECT_DELAY),
-            delay_max=int(_MAX_RECONNECT_DELAY),
+            min_delay=int(_INITIAL_RECONNECT_DELAY),
+            max_delay=int(_MAX_RECONNECT_DELAY),
         )
         return client
 
@@ -187,7 +203,12 @@ class LuomiNestMqttClient:
         """paho 线程回调：连接建立。"""
         if self._loop is None or self._loop.is_closed():
             return
-        self._loop.call_soon_threadsafe(self._handle_connected, int(reason_code))
+        try:
+            rc = _reason_code_to_int(reason_code)
+            self._loop.call_soon_threadsafe(self._handle_connected, rc)
+        except Exception:
+            # 线程回调绝不能向外抛异常（会杀死 paho 网络线程，连接永久失效）
+            logger.warning("[MqttClient] on_connect 回调桥接异常", exc_info=True)
 
     def _handle_connected(self, reason_code: int):
         connected = reason_code == 0
@@ -214,7 +235,12 @@ class LuomiNestMqttClient:
         """paho 线程回调：连接断开。"""
         if self._loop is None or self._loop.is_closed():
             return
-        self._loop.call_soon_threadsafe(self._handle_disconnected, int(reason_code))
+        try:
+            rc = _reason_code_to_int(reason_code)
+            self._loop.call_soon_threadsafe(self._handle_disconnected, rc)
+        except Exception:
+            # 同 on_connect：线程回调不能向外抛异常
+            logger.warning("[MqttClient] on_disconnect 回调桥接异常", exc_info=True)
 
     def _handle_disconnected(self, reason_code: int):
         if self._connected:  # 主动 disconnect 不告警

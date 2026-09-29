@@ -1,6 +1,7 @@
 """MCP 服务器管理 API。
 
-提供 MCP 服务器的增删改查、连接管理、工具列表查询等接口。
+提供 MCP 服务器的增删改查、连接管理、工具列表查询等接口，
+以及 P0-3 对外 MCP 服务器的 Bearer token 查看/重置。
 """
 from typing import Any
 
@@ -8,6 +9,7 @@ from fastapi import APIRouter
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.core.exceptions import BadRequestError, NotFoundError
 
 from app.core.tools.mcp.manager import mcp_manager
@@ -24,13 +26,13 @@ router = APIRouter(prefix="/mcp", tags=["mcp"])
 class CreateServerRequest(BaseModel):
     """创建 MCP 服务器请求。"""
     name: str = Field(..., description="服务器唯一名称")
-    transport: McpTransportType = Field(..., description="传输方式：stdio 或 sse")
+    transport: McpTransportType = Field(..., description="传输方式：stdio / sse / streamable_http")
     command: str | None = Field(None, description="stdio: 可执行命令")
     args: list[str] = Field(default_factory=list, description="stdio: 命令参数")
     env: dict[str, str] | None = Field(None, description="stdio: 环境变量")
     cwd: str | None = Field(None, description="stdio: 工作目录")
-    url: str | None = Field(None, description="sse: 服务器 URL")
-    headers: dict[str, str] | None = Field(None, description="sse: 请求头")
+    url: str | None = Field(None, description="sse / streamable_http: 服务器 URL")
+    headers: dict[str, str] | None = Field(None, description="sse / streamable_http: 请求头")
     description: str = ""
     enabled: bool = True
     auto_connect: bool = True
@@ -79,6 +81,13 @@ class ToolListResponse(BaseModel):
     success: bool = True
     tools: list[dict[str, Any]] = []
     count: int = 0
+
+
+class TokenResponse(BaseModel):
+    """对外 MCP 服务器访问 token（P0-3）。"""
+    success: bool = True
+    token: str
+    auth_enabled: bool
 
 
 # ------------------------------------------------------------------
@@ -213,3 +222,31 @@ async def list_prompts(name: str):
         raise NotFoundError(f"Server '{name}' not found", code="MCP_SERVER_NOT_FOUND")
     prompts = await mcp_manager.list_prompts(name)
     return ok({"prompts": prompts, "count": len(prompts)})
+
+
+# ------------------------------------------------------------------
+# 对外 MCP 服务器访问 token（P0-3 传输安全）
+# ------------------------------------------------------------------
+# 本端点挂在 /api 下，受 luomi_auth_middleware 正常鉴权；
+# 返回的 token 供用户在 mcp-remote --header 中使用，日志不落明文。
+
+@router.get("/token", response_model=TokenResponse)
+async def get_mcp_access_token():
+    """查看对外 MCP 服务器的 Bearer token（首次访问自动生成并持久化）。"""
+    # 延迟导入避免模块加载期触碰 DB
+    from app.core.mcp_server.auth import get_mcp_token
+
+    token = get_mcp_token(create=True)
+    if not token:
+        raise BadRequestError("MCP token 生成失败，请检查数据库", code="MCP_TOKEN_UNAVAILABLE")
+    return TokenResponse(token=token, auth_enabled=bool(settings.MCP_SERVER_AUTH))
+
+
+@router.post("/token/reset", response_model=TokenResponse)
+async def reset_mcp_access_token():
+    """重置对外 MCP 服务器的 Bearer token（旧 token 即刻失效）。"""
+    from app.core.mcp_server.auth import reset_mcp_token as do_reset
+
+    token = do_reset()
+    logger.info("[McpAPI] MCP access token reset via API")  # 只记事件，不落 token 明文
+    return TokenResponse(token=token, auth_enabled=bool(settings.MCP_SERVER_AUTH))

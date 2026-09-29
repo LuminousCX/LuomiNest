@@ -90,6 +90,11 @@ _STRUCTURED_SUMMARY_PROMPT = """请对以下对话历史生成结构化摘要，
 请保持摘要简洁，不超过 {max_length} 字符。"""
 
 
+def _summary_store_key(conv_id: str) -> str:
+    """会话摘要持久化键（存于 config_items 表，值 JSON，零表迁移）。"""
+    return f"conv.{conv_id}.context_summary"
+
+
 class LLMSummaryCompressor:
     """增强型 LLM 摘要压缩器。
 
@@ -98,6 +103,9 @@ class LLMSummaryCompressor:
     - 增量水位线：仅对新增消息生成摘要，避免重复处理
     - 防漂移机制：当原始消息可在预算内重建时，从原始消息重新生成摘要
     - 结构化摘要格式：按目标/事实/决策/进展/待办五维度输出
+    - 会话级持久化（P0-2）：传入 conv_id 时，摘要与水位线写入 config_items
+      （键 conv.<id>.context_summary），会话首次压缩时读回恢复，
+      避免进程重启后重复全量摘要；conv_id 为 None 时保持旧的纯内存行为
     """
 
     def __init__(
@@ -119,6 +127,8 @@ class LLMSummaryCompressor:
         self._summary_up_to_msg_id: str | None = None
         # 缓存的最近一次摘要结果（用于增量合并）
         self._cached_summary: str | None = None
+        # 已从 config_items 恢复过持久化状态的会话 ID（避免每次压缩重复读库）
+        self._state_restored_for: str | None = None
 
         # 保留自定义 instruction_text 的向后兼容
         self._custom_instruction = instruction_text
@@ -185,6 +195,54 @@ class LLMSummaryCompressor:
         """将水位线推进到当前消息列表末尾。"""
         if messages:
             self._summary_up_to_msg_id = self._get_msg_id(messages[-1])
+
+    # ── 会话级持久化（P0-2）────────────────────────────────────
+
+    async def _restore_persisted_state(self, conv_id: str) -> None:
+        """从 config_items 恢复该会话的摘要与水位线。
+
+        进程重启后内存水位线丢失，若不恢复会对整段历史重新全量摘要；
+        这里在会话首次进入压缩流程时读回 {summary, watermark}（P0-2）。
+        """
+        from app.infrastructure.database.config_store import luominest_config_store
+
+        # 无论读回成功与否都标记为已恢复，避免每次压缩重复读库
+        self._state_restored_for = conv_id
+        try:
+            record = await luominest_config_store.get_async(_summary_store_key(conv_id))
+        except Exception as exc:
+            logger.warning(f"[Compressor] Failed to load persisted summary for conv={conv_id}: {exc}")
+            return
+
+        if not isinstance(record, dict):
+            return
+        summary = record.get("summary")
+        watermark = record.get("watermark")
+        if isinstance(summary, str) and summary:
+            self._cached_summary = summary
+        if isinstance(watermark, str) and watermark:
+            self._summary_up_to_msg_id = watermark
+        logger.debug(
+            f"[Compressor] Restored persisted summary for conv={conv_id}: "
+            f"summary_len={len(self._cached_summary or '')}, watermark={self._summary_up_to_msg_id}"
+        )
+
+    async def _persist_state(self, conv_id: str) -> None:
+        """把当前摘要与水位线写入 config_items（键 conv.<id>.context_summary）。"""
+        from app.infrastructure.database.config_store import luominest_config_store
+
+        try:
+            await luominest_config_store.set_async(
+                _summary_store_key(conv_id),
+                {
+                    "summary": self._cached_summary,
+                    "watermark": self._summary_up_to_msg_id,
+                },
+            )
+            logger.debug(f"[Compressor] Persisted summary for conv={conv_id}: watermark={self._summary_up_to_msg_id}")
+        except Exception as exc:
+            # 持久化失败不影响本次对话：仅保留进程内缓存，下轮压缩重试写入
+            logger.warning(f"[Compressor] Failed to persist summary for conv={conv_id}: {exc}")
 
     # ── 摘要生成 ──────────────────────────────────────────────
 
@@ -315,12 +373,15 @@ class LLMSummaryCompressor:
         self,
         messages: list[dict],
         force_rebuild: bool = False,
+        conv_id: str | None = None,
     ) -> list[dict]:
         """压缩消息列表。
 
         Args:
             messages: 完整消息列表
             force_rebuild: 强制重建完整摘要（忽略增量水位线）
+            conv_id: 会话 ID。非空时启用会话级持久化——首次压缩从 config_items
+                恢复摘要与水位线、增量摘要完成后写回；None 时保持旧的纯内存行为
         """
         if len(messages) <= self.keep_recent + 1:
             return messages
@@ -335,6 +396,11 @@ class LLMSummaryCompressor:
         # 计算预算
         ctx_window = self.context_window or FALLBACK_CONTEXT_WINDOW
         budgets = self._calculate_budgets(ctx_window)
+
+        # 会话首次进入压缩流程时，从 config_items 恢复摘要与水位线（P0-2），
+        # 避免进程重启后对整段历史重复全量摘要
+        if conv_id and self._state_restored_for != conv_id:
+            await self._restore_persisted_state(conv_id)
 
         # 增量水位线分离
         if force_rebuild:
@@ -373,6 +439,10 @@ class LLMSummaryCompressor:
         # 更新水位线和缓存
         self._update_watermark(messages_to_summarize)
         self._cached_summary = summary_content
+
+        # 增量摘要完成后持久化到 config_items（conv_id 为空时保持旧行为：仅进程内存）
+        if conv_id:
+            await self._persist_state(conv_id)
 
         result = []
         result.extend(system_messages)

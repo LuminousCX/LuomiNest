@@ -2,13 +2,19 @@ import asyncio
 import contextlib
 import json
 import random
+import secrets
 import time
+import urllib.parse
 import uuid
 from typing import Any
 
 from loguru import logger
 
 from app.runtime.platform.base import BasePlatformAdapter, PlatformMessage, PlatformResponse
+from app.runtime.platform.infrastructure.exposure import (
+    is_loopback_host,
+    warn_inbound_without_credential,
+)
 from app.runtime.platform.infrastructure.token_manager import parse_target
 
 
@@ -94,6 +100,13 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
     # ------------------------------------------------------------------
 
     async def start(self) -> None:
+        # P0-3 传输安全：绑定非 loopback 且未配置 access_token 时打告警（不打断运行）
+        if not self._access_token and not is_loopback_host(self._ws_host):
+            warn_inbound_without_credential(
+                "QQ OneBot 反向 WS",
+                self._ws_host,
+                "access_token（协议端将无法通过握手校验）",
+            )
         await self._start_server()
         # 启动消息队列后台重试任务
         self._queue_worker_task = asyncio.create_task(self._queue_retry_worker())
@@ -106,6 +119,20 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
 
         async def connection_handler(websocket: Any) -> None:
             conn_id = id(websocket)
+
+            # P0-3 握手鉴权：实例配置了 access_token 时校验失败 → close(1008)，
+            # 未通过校验的连接不注册、不进入消息循环。
+            if not self._verify_handshake(websocket):
+                peer = websocket.remote_address if hasattr(websocket, "remote_address") else "unknown"
+                self._log(
+                    "warning", "auth_rejected",
+                    f"握手鉴权失败，已拒绝连接（close 1008）: {peer}",
+                    details={"peer": str(peer)},
+                )
+                with contextlib.suppress(Exception):
+                    await websocket.close(code=1008, reason="invalid access token")
+                return
+
             self._connections[conn_id] = websocket
             peer = websocket.remote_address if hasattr(websocket, "remote_address") else "unknown"
             self._log("success", "connection_established", f"客户端已连接: {peer}", details={"peer": str(peer)})
@@ -128,6 +155,62 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
         self._log("info", "handshake_init", f"启动反向 WebSocket 服务: {self._ws_host}:{self._ws_port}", details={"host": self._ws_host, "port": self._ws_port})
         self._server = await websockets.serve(connection_handler, self._ws_host, self._ws_port)
         self._log("success", "handshake_ok", f"WebSocket 服务已监听: {self._ws_host}:{self._ws_port}", details={"host": self._ws_host, "port": self._ws_port})
+
+    # ------------------------------------------------------------------
+    # P0-3 握手鉴权（仅鉴权段；不涉及消息处理）
+    # ------------------------------------------------------------------
+
+    def _verify_handshake(self, websocket: Any) -> bool:
+        """校验反向 WS 握手凭证（P0-3）。
+
+        OneBot v11 协议端两种携带方式均认可：
+        1. Authorization: Bearer <access_token> 请求头；
+        2. ?access_token=<token> 查询参数（部分实现使用）。
+
+        Returns:
+            True 表示允许接入；实例未配置 token 时恒为 True（开放接入，
+            此时若绑定非 loopback，start() 已打安全告警）。
+        """
+        if not self._access_token:
+            return True
+
+        auth_value, raw_path = self._extract_handshake_credentials(websocket)
+
+        provided = ""
+        if auth_value.lower().startswith("bearer "):
+            provided = auth_value[7:].strip()
+        if not provided and raw_path:
+            parsed = urllib.parse.urlparse(raw_path)
+            provided = (urllib.parse.parse_qs(parsed.query).get("access_token") or [""])[0].strip()
+
+        # 常量时间比较防时序侧信道；空 provided 直接拒绝
+        return bool(provided) and secrets.compare_digest(provided, self._access_token)
+
+    @staticmethod
+    def _extract_handshake_credentials(websocket: Any) -> tuple[str, str]:
+        """从握手对象提取 (Authorization 头, 原始路径)，兼容新旧 websockets 实现。
+
+        - websockets >= 13（asyncio 新实现）：websocket.request.headers / request.path
+        - 旧版 legacy 实现：websocket.request_headers / websocket.path
+        """
+        request = getattr(websocket, "request", None)
+        headers = getattr(request, "headers", None)
+        if headers is None:
+            headers = getattr(websocket, "request_headers", None)
+
+        auth_value = ""
+        if headers is not None:
+            try:
+                auth_value = str(headers.get("Authorization", "") or "")
+            except Exception:
+                auth_value = ""
+
+        raw_path = (
+            getattr(request, "path", None)
+            or getattr(websocket, "path", "")
+            or ""
+        )
+        return auth_value, str(raw_path)
 
     async def _do_reconnect(self) -> bool:
         """尝试重新建立 WebSocket 服务器连接。

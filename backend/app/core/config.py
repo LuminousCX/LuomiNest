@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     MQTT_BROKER_PORT: int = 1883
     MQTT_USERNAME: str = ""
     MQTT_PASSWORD: str = ""
+    # P0-4：设备遥测内存缓存（TelemetryCache）TTL——超过该秒数未上报 status 的设备数据视为过期
+    TELEMETRY_CACHE_TTL: int = 600
+
+    # P0-4：天气服务（WeatherService，provider 链 wttr.in → Open-Meteo → 兜底文案）
+    WEATHER_CACHE_TTL: int = 1800      # 同城市查询 LRU 缓存时长（秒），TTL 内连查只打一次外网
+    WEATHER_HTTP_TIMEOUT: float = 8.0  # 上游天气源 HTTP 超时（秒）
 
     # 数据备份（luominest_backup_manager 定时任务）
     BACKUP_ENABLED: bool = True
@@ -89,6 +95,9 @@ class Settings(BaseSettings):
     LLM_AVATAR_EMOTION_ENABLED: bool = True
     # W6-1 对外 MCP 服务器：把陪伴安全工具白名单经 Streamable HTTP 暴露在 /mcp
     MCP_SERVER_ENABLED: bool = True
+    # P0-3 传输安全：/mcp Bearer 鉴权开关（token 见 config_items: mcp_server.token，
+    # 经 /api/v1/mcp/token 查看/重置）。仅限明确知晓风险时关闭。
+    MCP_SERVER_AUTH: bool = True
 
     # 上下文压缩预算配置
     LLM_CONTEXT_BUDGET_RATIO: float = 0.35  # 历史消息预算占上下文窗口的比例
@@ -98,9 +107,17 @@ class Settings(BaseSettings):
     LLM_ANTI_DRIFT_ENABLED: bool = True
     # 记忆注入预算（字符）：ContextBuilder 组装 <user_memory> 块的上限（审计外需求：可配）
     MEMORY_INJECTION_BUDGET: int = 4000
+    # 记忆嵌入模型（P0-5）：显式覆盖记忆向量嵌入模型名；空则按
+    # LLMEmbeddingProvider 兜底解析（仅 openai 系默认 text-embedding-3-small）。
+    # 注意：换 embed 模型 = 换向量空间，存量向量需重嵌入（memory.vector_rebuild）
+    MEMORY_EMBED_MODEL: str = ""
     # 主动关心（晨间简报）：本地记忆驱动的问候，懒生成 + 当日缓存
     PROACTIVE_CARE_ENABLED: bool = True
     PROACTIVE_BRIEFING_HOUR: int = 6  # 防漂移开关
+
+    # 定时任务结果投递（P0-1 闭环）：任务触发后执行结果是否写回创建任务的网页会话
+    # （assistant 消息，带 [定时任务] 前缀）；关闭后结果仅保留在任务记录（任务面板可查）
+    SCHEDULER_RESULT_INTO_CHAT: bool = True
 
     LIVE2D_MODEL_PATH: str = "./models/live2d"
     VRM_MODEL_PATH: str = "./models/vrm"

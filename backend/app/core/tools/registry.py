@@ -156,12 +156,26 @@ class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, ToolBase] = {}
 
-    def register(self, tool: ToolBase) -> None:
-        """注册工具。同名工具将被覆盖并记录警告"""
+    def register(self, tool: ToolBase, force: bool = False) -> bool:
+        """注册工具。同名冲突默认拒绝（防插件/MCP 动态注册顶掉内置工具），force=True 显式覆盖。
+
+        Args:
+            tool: 待注册的工具实例
+            force: 同名冲突时是否强制覆盖（默认 False）
+
+        Returns:
+            True 注册成功；False 同名冲突且未显式 force（原工具保持不变）
+        """
         if tool.name in self._tools:
-            logger.warning(f"[ToolRegistry] 工具已存在，覆盖注册: {tool.name}")
+            if not force:
+                logger.warning(
+                    f"[ToolRegistry] 工具同名注册被拒绝（已存在同名工具，需 force=True 才可覆盖）: {tool.name}"
+                )
+                return False
+            logger.warning(f"[ToolRegistry] 工具已存在，强制覆盖注册: {tool.name}")
         self._tools[tool.name] = tool
         logger.debug(f"[ToolRegistry] 注册工具: {tool.name}")
+        return True
 
     def unregister(self, name: str) -> bool:
         """注销工具"""

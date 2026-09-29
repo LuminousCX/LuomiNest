@@ -31,6 +31,12 @@ class CreateScheduledTaskRequest(BaseModel):
     description: str | None = Field(None, description="任务详细描述")
     context: str | None = Field(None, description="附加上下文信息")
     created_from: str = Field("manual", description="创建来源：manual/workflow/normal_chat")
+    run_at: str | None = Field(None, description="once/date 任务的 ISO 执行时间（P0-1）")
+    interval_seconds: int | None = Field(None, description="interval 任务的间隔秒数（P0-1）")
+
+
+# 遗留 schedule_type → 权威 trigger_type 映射（once/date 归一为 date）
+_LEGACY_TYPE_MAP = {"cron": "cron", "interval": "interval", "once": "date", "date": "date"}
 
 
 @router.get("")
@@ -47,37 +53,68 @@ async def create_scheduled_task(req: CreateScheduledTaskRequest):
 
     task_id = f"task_{uuid.uuid4().hex[:12]}"
 
+    # P0-1：按权威 trigger_type 写入触发信息列（REST 端点创建标 api 来源，结果仅留任务记录）
+    trigger_type = _LEGACY_TYPE_MAP.get(req.schedule_type.strip().lower(), "cron")
+    run_at = req.run_at
+    if trigger_type == "date" and not run_at and req.schedule_cron:
+        # 兼容旧客户端：once 类型曾把执行时间塞在 schedule_cron 字段
+        run_at = req.schedule_cron.strip()
+
     # 写入数据库
     await save_scheduled_task(
         task_id=task_id,
         name=req.name,
-        schedule_cron=req.schedule_cron,
+        schedule_cron=req.schedule_cron if trigger_type == "cron" else "",
         schedule_type=req.schedule_type,
         action=req.action,
         description=req.description,
         context=req.context,
         created_from=req.created_from,
+        trigger_type=trigger_type,
+        run_at=run_at,
+        interval_seconds=req.interval_seconds,
+        origin_kind="api",
     )
 
-    # 同步注册到调度器（可选，调度器未启动时跳过）
+    # 同步注册到调度器（可选，调度器未启动时跳过）；P0-1：按 trigger_type 分支注册，
+    # once/date 不再被误当 cron（旧实现把 ISO 串拆 cron 字段会产生每秒执行的幻象任务）
     try:
         from app.core.scheduler.models import LuomiTaskType, ScheduledTaskConfig
         from app.core.scheduler.manager import luominest_scheduler
 
-        if luominest_scheduler.is_running and req.schedule_cron:
-            config = ScheduledTaskConfig(
+        if luominest_scheduler.is_running:
+            common = dict(
                 name=req.name,
                 description=req.description or "",
-                task_type=LuomiTaskType.CRON,
-                cron_hour=str(_parse_cron_field(req.schedule_cron, 1)),
-                cron_minute=str(_parse_cron_field(req.schedule_cron, 0)),
-                cron_day_of_week=_parse_cron_field(req.schedule_cron, 4),
                 payload={
                     "instruction": req.action,
                     "context": req.context or "",
                 },
                 source=req.created_from,
+                origin_kind="api",
             )
+            if trigger_type == "date":
+                if not run_at:
+                    raise ValueError("once/date 任务缺少 run_at，无法注册到调度器")
+                config = ScheduledTaskConfig(
+                    task_type=LuomiTaskType.DATE, run_date=run_at, **common
+                )
+            elif trigger_type == "interval":
+                if not req.interval_seconds or req.interval_seconds <= 0:
+                    raise ValueError("interval 任务缺少有效 interval_seconds")
+                config = ScheduledTaskConfig(
+                    task_type=LuomiTaskType.INTERVAL,
+                    interval_seconds=req.interval_seconds,
+                    **common,
+                )
+            else:
+                config = ScheduledTaskConfig(
+                    task_type=LuomiTaskType.CRON,
+                    cron_hour=str(_parse_cron_field(req.schedule_cron, 1)),
+                    cron_minute=str(_parse_cron_field(req.schedule_cron, 0)),
+                    cron_day_of_week=_parse_cron_field(req.schedule_cron, 4),
+                    **common,
+                )
             scheduler_task_id = await luominest_scheduler.add_task(config)
             logger.info(
                 f"[ScheduledTaskAPI] Task registered to scheduler: "

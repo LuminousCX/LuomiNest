@@ -245,5 +245,5 @@ class LuomiBrowserAutomationTool(ToolBase):
 
 
 def get_luominest_browser_automation_tools() -> list[LuomiBrowserAutomationTool]:
-    """工厂函数：返回全部 2 个浏览器只读工具实例。"""
+    """工厂函数：返回全部 6 个浏览器只读工具实例。"""
     return [LuomiBrowserAutomationTool(name, spec) for name, spec in BROWSER_ACTION_SPECS.items()]

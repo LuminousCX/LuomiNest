@@ -22,6 +22,10 @@ from app.runtime.platform.base import (
     PlatformMessage,
     PlatformResponse,
 )
+from app.runtime.platform.infrastructure.exposure import (
+    get_backend_listen_host,
+    warn_inbound_without_credential,
+)
 from app.runtime.platform.infrastructure.retry import RetryConfig, async_retry
 
 
@@ -66,6 +70,14 @@ class RESTPlatformAdapter(BasePlatformAdapter):
 
     async def start(self) -> None:
         """启动适配器。"""
+        # P0-3 传输安全：入站经主服务 Webhook/REST 端点，暴露面即主服务监听地址；
+        # 主服务监听非 loopback 且实例未配置 api_key 时打告警（不打断运行）。
+        if not self._api_key:
+            warn_inbound_without_credential(
+                "REST API 平台接入",
+                get_backend_listen_host(),
+                "api_key（消息可被局域网任意进程伪造）",
+            )
         await super().start()
         self.update_status(AdapterStatus.RUNNING)
         self._log(

@@ -27,6 +27,13 @@ class LuomiTaskStatus(str, Enum):
     REMOVED = "removed"      # 已移除
 
 
+# 结果投递来源类型（origin_kind，P0-1 定时任务闭环）。
+# 核心定义处：调度器持久化、创建工具、结果投递器共用同一组取值。
+ORIGIN_WEB_CONVERSATION = "web_conversation"  # 网页会话（origin_ref=会话 ID）
+ORIGIN_PLATFORM = "platform"                  # 平台会话（origin_ref=instance_id:session_id）
+ORIGIN_API = "api"                            # REST 等无会话路径（结果仅留在任务记录）
+
+
 class ScheduledTaskConfig(BaseModel):
     """定时任务配置（创建时传入）"""
     name: str = Field(..., description="任务名称")
@@ -49,6 +56,19 @@ class ScheduledTaskConfig(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict, description="任务载荷")
     # 来源标识
     source: str = Field("main_agent", description="任务来源（main_agent/manual/api）")
+    # 结果投递来源（P0-1 闭环）：决定任务触发后执行结果投递到哪里
+    origin_kind: str = Field(
+        "api",
+        description="创建来源渠道：web_conversation（网页会话）/ platform（平台会话）/ api（REST 等无会话路径）",
+    )
+    origin_ref: str = Field(
+        "",
+        description="投递目标引用：web_conversation 存会话 ID；platform 存 'instance_id:session_id'",
+    )
+    origin_target: str = Field(
+        "",
+        description="显式指定投递目标（D5，可选）：如 'group:123' / 'private:456'，优先于 origin_ref 推导",
+    )
 
 
 class ScheduledTaskInfo(BaseModel):
@@ -64,6 +84,9 @@ class ScheduledTaskInfo(BaseModel):
     last_error: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     source: str = "main_agent"
+    origin_kind: str = "api"
+    origin_ref: str = ""
+    origin_target: str = ""
     created_at: str = ""
 
 

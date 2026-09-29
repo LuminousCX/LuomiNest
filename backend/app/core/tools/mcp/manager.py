@@ -255,6 +255,28 @@ class McpManager:
                 sse_client(config.url, headers=config.headers)
             )
 
+        elif config.transport == McpTransportType.STREAMABLE_HTTP:
+            # P0-3：Streamable HTTP 客户端传输（mcp SDK v2 streamable_http_client，
+            # 与 sse_client 一样 yields (read, write) 二元组）
+            from mcp.client.streamable_http import streamable_http_client
+
+            if not config.url:
+                raise ValueError("streamable_http 模式需要 url 参数")
+
+            if config.headers:
+                # 自定义 headers（如 Authorization）需经预配置的 httpx2 客户端传入；
+                # SDK 不管理外部传入 client 的生命周期，这里挂到本连接的 stack 上，
+                # disconnect 时随 AsyncExitStack 一起关闭。
+                from mcp.shared._httpx_utils import create_mcp_http_client
+
+                client = create_mcp_http_client(headers=dict(config.headers))
+                await stack.enter_async_context(client)
+                return await stack.enter_async_context(
+                    streamable_http_client(config.url, http_client=client)
+                )
+
+            return await stack.enter_async_context(streamable_http_client(config.url))
+
         else:
             raise ValueError(f"不支持的传输方式: {config.transport}")
 

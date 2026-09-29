@@ -42,25 +42,68 @@ class LLMEmbeddingProvider:
     httpx 连接池（provider 的 base_url/api_key 变更时自动重建），避免
     每次请求重建 TCP/TLS 连接。api_key 为空时不携带 Authorization 头
     （本地推理服务如 Ollama 无需鉴权即可使用）。
+
+    模型名解析（P0-5，fail-fast，不再静默发错模型），按序取第一个非空：
+    1. 显式传入的 model 参数；
+    2. MEMORY_EMBED_MODEL 环境变量/配置覆盖；
+    3. provider 已配置模型名含 "embed"（任何厂商，视为用户明确配了嵌入模型）；
+    4. 仅 OpenAI 系（provider_name / base_url 为 openai）才默认
+       text-embedding-3-small；
+    5. 其余 provider 使用其已配置的模型名（default_model）；仍为空则直接抛
+       ValueError——向不存在的模型发 /embeddings 只会得到上游报错或无意义结果。
+
+    注意：换 embed 模型 = 换向量空间，存量向量全部作废，需重嵌入
+    （重跑 memory.vector_rebuild）；维度不符的旧行会在加载时被剔除。
     """
 
-    # 已知模型的维度映射
+    # 已知模型的维度映射（维度常量保持不变；换模型需重嵌入，见类 docstring）
     _KNOWN_DIMS: dict[str, int] = {
         "text-embedding-3-small": 1536,
         "text-embedding-3-large": 3072,
         "text-embedding-ada-002": 1536,
     }
 
-    def __init__(self, provider: Any, model: str = "text-embedding-3-small") -> None:
+    _OPENAI_DEFAULT_MODEL = "text-embedding-3-small"
+
+    def __init__(self, provider: Any, model: str | None = None) -> None:
         self._provider = provider
-        self._model = model
-        if model in self._KNOWN_DIMS:
-            self._dim = self._KNOWN_DIMS[model]
+        self._model = self._resolve_model(provider, model)
+        if self._model in self._KNOWN_DIMS:
+            self._dim = self._KNOWN_DIMS[self._model]
         else:
             self._dim = 1536
-            logger.warning(f"[VectorStore] Unknown embedding model '{model}', defaulting to dim={self._dim}")
+            logger.warning(f"[VectorStore] Unknown embedding model '{self._model}', defaulting to dim={self._dim}")
         self._client: httpx.AsyncClient | None = None
         self._client_key: tuple[str, str] | None = None
+
+    @classmethod
+    def _resolve_model(cls, provider: Any, model: str | None) -> str:
+        """按 docstring 描述的优先级解析嵌入模型名（空值跳过，缺省 fail-fast）。"""
+        explicit = (model or "").strip()
+        if explicit:
+            return explicit
+        try:
+            from app.core.config import settings
+
+            env_model = (getattr(settings, "MEMORY_EMBED_MODEL", "") or "").strip()
+            if env_model:
+                return env_model
+        except Exception:
+            pass
+        configured = str(getattr(provider, "default_model", "") or "").strip()
+        if configured and "embed" in configured.lower():
+            return configured
+        provider_name = str(getattr(provider, "provider_name", "") or "").lower()
+        base_url = str(getattr(provider, "base_url", "") or "").lower()
+        if "openai" in provider_name or "openai.com" in base_url:
+            return cls._OPENAI_DEFAULT_MODEL
+        if configured:
+            return configured
+        raise ValueError(
+            "[VectorStore] 无法确定嵌入模型：当前 provider 非 OpenAI 系且未配置 "
+            "default_model。请通过 MEMORY_EMBED_MODEL 显式指定嵌入模型，或为 "
+            "provider 配置 default_model（换 embed 模型需重嵌入存量向量）。"
+        )
 
     @property
     def dim(self) -> int:

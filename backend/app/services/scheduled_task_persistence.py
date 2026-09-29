@@ -26,8 +26,19 @@ async def save_scheduled_task(
     context: str | None = None,
     created_from: str = "manual",
     is_active: bool = True,
+    *,
+    trigger_type: str = "",
+    run_at: str | None = None,
+    interval_seconds: int | None = None,
+    origin_kind: str = "",
+    origin_ref: str | None = None,
+    origin_target: str | None = None,
 ) -> None:
-    """保存或更新定时任务（upsert）"""
+    """保存或更新定时任务（upsert）
+
+    trigger_type（date/cron/interval）是调度类型的权威字段；schedule_type/schedule_cron
+    为遗留列，仅 cron 任务继续写 schedule_cron。origin_* 记录结果投递来源（P0-1）。
+    """
     await BaseRepository.upsert_async(
         ScheduledTaskORM,
         index_elements=["task_id"],
@@ -42,6 +53,12 @@ async def save_scheduled_task(
             "created_from": created_from,
             "is_active": is_active,
             "created_at": utc_now(),
+            "trigger_type": trigger_type,
+            "run_at": run_at,
+            "interval_seconds": interval_seconds,
+            "origin_kind": origin_kind,
+            "origin_ref": origin_ref,
+            "origin_target": origin_target,
         },
         update_set={
             "name": name,
@@ -51,6 +68,12 @@ async def save_scheduled_task(
             "description": description,
             "context": context,
             "is_active": is_active,
+            "trigger_type": trigger_type,
+            "run_at": run_at,
+            "interval_seconds": interval_seconds,
+            "origin_kind": origin_kind,
+            "origin_ref": origin_ref,
+            "origin_target": origin_target,
         },
     )
     logger.debug(f"[ScheduledTaskPersistence] Task {task_id} saved (name={name})")
@@ -77,6 +100,12 @@ async def list_scheduled_tasks() -> list[dict[str, Any]]:
                 "is_active": t.is_active,
                 "created_at": t.created_at,
                 "last_run_at": t.last_run_at,
+                "trigger_type": t.trigger_type,
+                "run_at": t.run_at,
+                "interval_seconds": t.interval_seconds,
+                "origin_kind": t.origin_kind,
+                "origin_ref": t.origin_ref,
+                "origin_target": t.origin_target,
             }
             for t in tasks
         ]

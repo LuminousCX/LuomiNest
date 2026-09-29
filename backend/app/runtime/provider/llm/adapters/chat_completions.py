@@ -508,20 +508,17 @@ class OpenAICompatibleProvider(ProviderClientMixin, LLMProvider):
         # 消息清洗管道
         request.messages = self._sanitize_messages_pipeline(request.messages)
         payload = self._build_payload(request, stream=False)
-        client = httpx.AsyncClient(timeout=120.0) if self._client is None else self.client
-        try:
-            resp = await client.post(
-                f"{self.base_url}/chat/completions",
-                headers=self._build_headers(),
-                json=payload,
-            )
-            if resp.is_error:
-                logger.error(f"[Provider] {self.base_url}/chat/completions returned HTTP {resp.status_code}: {resp.text}")
-                resp.raise_for_status()
-            data = resp.json()
-        finally:
-            if self._client is None:
-                await client.aclose()
+        # 复用 ProviderClientMixin 懒加载连接池客户端（与流式侧一致，避免每请求重建 TCP/TLS）
+        client = self.client
+        resp = await client.post(
+            f"{self.base_url}/chat/completions",
+            headers=self._build_headers(),
+            json=payload,
+        )
+        if resp.is_error:
+            logger.error(f"[Provider] {self.base_url}/chat/completions returned HTTP {resp.status_code}: {resp.text}")
+            resp.raise_for_status()
+        data = resp.json()
 
         choice = data.get("choices", [{}])[0]
         message = choice.get("message", {})

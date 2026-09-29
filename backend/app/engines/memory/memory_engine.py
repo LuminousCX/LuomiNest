@@ -399,11 +399,12 @@ class MemoryEngine:
                     # 直接注入 VectorStore 会与批量协议错配——历史缺陷曾致
                     # vectors[i] 取到单个向量的第 i 个 float，全索引静默标量化。
                     # 统一经 LLMEmbeddingProvider（批量协议，直连 /embeddings）包装。
-                    model = str(getattr(raw, "default_model", "") or "")
-                    if "embed" not in model.lower():
-                        model = "text-embedding-3-small"
+                    # P0-5：模型名兜底解析收敛到 LLMEmbeddingProvider
+                    # （仅 openai 系默认 text-embedding-3-small，其余用 provider
+                    # 已配置模型名并 fail-fast；MEMORY_EMBED_MODEL 可显式覆盖），
+                    # 不再在调用侧硬编码 text-embedding-3-small 静默发错模型。
                     from .vector_store import LLMEmbeddingProvider
-                    self._embedding_provider = LLMEmbeddingProvider(raw, model=model)
+                    self._embedding_provider = LLMEmbeddingProvider(raw)
                 except Exception as e:
                     logger.warning(f"[Memory] Failed to access llm_adapter for embedding provider: {e}")
 

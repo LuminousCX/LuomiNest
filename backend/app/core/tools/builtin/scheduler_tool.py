@@ -7,14 +7,71 @@
 2. cron - cron 表达式任务（如"每天0点执行"）
 3. interval - 间隔执行任务（如"每30分钟执行一次"）
 
-任务触发时，后端通过子 Agent 执行载荷中的指令，并通过 SSE 推送 task_event 到前端。
+任务触发时，后端通过子 Agent 执行载荷中的指令，并通过 SSE 推送 task_event 到前端；
+执行结果由 task_result_dispatcher 按任务创建时记录的来源（origin_*）投递回
+网页会话或平台会话（P0-1 闭环）。
 """
+import contextvars
 from typing import Any
 
 from loguru import logger
 
-from app.core.scheduler.models import LuomiTaskType, ScheduledTaskConfig
+from app.core.scheduler.models import (
+    ORIGIN_API,
+    ORIGIN_PLATFORM,
+    ORIGIN_WEB_CONVERSATION,
+    LuomiTaskType,
+    ScheduledTaskConfig,
+)
 from app.core.tools.registry import ToolBase, ToolResult
+
+
+# 平台会话来源上下文（P0-1）：platform_router 路由平台消息时设置，
+# 使本工具在平台会话中创建任务时能记录结果投递目标（群里建的提醒回该群）。
+# contextvar 随请求任务隔离，与 subagent_tool 的 _subagent_event_callback_var 同一用法。
+_platform_task_origin_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "luominest_platform_task_origin",
+    default=None,
+)
+
+
+def set_platform_task_origin(
+    instance_id: str,
+    session_id: str,
+    is_group: bool = False,
+    platform: str = "",
+) -> None:
+    """标记当前工具执行所处平台会话（由 platform_router 在路由平台消息时调用）。"""
+    _platform_task_origin_var.set({
+        "instance_id": (instance_id or "").strip(),
+        "session_id": (session_id or "").strip(),
+        "is_group": bool(is_group),
+        "platform": platform or "",
+    })
+
+
+def detect_task_origin() -> tuple[str, str, str]:
+    """探测当前任务的投递来源，返回 (origin_kind, origin_ref, origin_target)。
+
+    优先级：平台会话上下文 > 网页会话上下文（parent_conv_id，chat 端点设置）
+    > api（REST 等无会话路径）。
+    """
+    platform_ctx = _platform_task_origin_var.get()
+    if platform_ctx and platform_ctx.get("instance_id") and platform_ctx.get("session_id"):
+        return (
+            ORIGIN_PLATFORM,
+            f"{platform_ctx['instance_id']}:{platform_ctx['session_id']}",
+            "",
+        )
+    try:
+        from app.core.agents.cluster.agent_tool import get_luominest_parent_conv_id
+
+        conv_id = (get_luominest_parent_conv_id() or "").strip()
+    except Exception:
+        conv_id = ""
+    if conv_id:
+        return ORIGIN_WEB_CONVERSATION, conv_id, ""
+    return ORIGIN_API, "", ""
 
 
 class CreateScheduledTaskTool(ToolBase):
@@ -81,6 +138,13 @@ class CreateScheduledTaskTool(ToolBase):
                     "type": "string",
                     "description": "附加上下文信息（可选），传递给子 Agent",
                 },
+                "notify_target": {
+                    "type": "string",
+                    "description": (
+                        "结果投递目标（可选，仅平台会话内创建时生效）："
+                        "如 'group:123' / 'private:456'，指定后结果发往该目标而非当前会话"
+                    ),
+                },
             },
             "required": ["name", "instruction", "task_type"],
         }
@@ -123,6 +187,21 @@ class CreateScheduledTaskTool(ToolBase):
             },
             source="main_agent",
         )
+
+        # P0-1：记录结果投递来源（平台会话 > 网页会话 > api），
+        # 任务触发后由 task_result_dispatcher 据此把结果送回创建时的会话
+        origin_kind, origin_ref, _origin_ref_target = detect_task_origin()
+        origin_target = (arguments.get("notify_target") or "").strip()
+        if origin_target and origin_kind != ORIGIN_PLATFORM:
+            # 显式目标需配合平台实例路由，网页/api 路径暂不支持
+            logger.warning(
+                f"[CreateScheduledTaskTool] notify_target 仅平台会话内创建任务时生效，"
+                f"已忽略（当前来源: {origin_kind}）"
+            )
+            origin_target = ""
+        config.origin_kind = origin_kind
+        config.origin_ref = origin_ref
+        config.origin_target = origin_target
 
         # 通过任务调度端口调用（组合根可覆盖实现；端口兜底延迟导入调度器单例）
         try:

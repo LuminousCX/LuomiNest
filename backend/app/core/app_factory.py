@@ -432,6 +432,10 @@ async def lifespan(app: FastAPI):
         from app.core.container import container
         from app.core.scheduler import luominest_scheduler
         luominest_scheduler.register_task_executor(container.subagent_executor)
+        # P0-1 定时任务闭环：注册结果投递器为事件回调，任务触发完成后把结果
+        # 回投创建时的网页会话/平台会话（web/platform 来源），api 来源仅留任务记录
+        from app.services.task_result_dispatcher import task_result_dispatcher
+        luominest_scheduler.add_event_callback(task_result_dispatcher.handle_task_event)
         await luominest_scheduler.init()
         logger.info(f"[LuomiNest] Scheduler started, tasks: {len(luominest_scheduler.list_tasks())}")
     except Exception as e:
@@ -458,6 +462,17 @@ async def lifespan(app: FastAPI):
             app.state.embedded_mqtt_broker = embedded_mqtt_broker
         except Exception as e:
             logger.warning(f"[LuomiNest] Embedded MQTT broker init skipped: {e}", exc_info=True)
+
+    # P0-4：设备遥测缓存（订阅 luominest/+/status 与 luominestai/+/status；
+    # 内嵌 broker 在跑时经 loopback 直连，否则按外部 broker 配置连接。
+    # IoT 工具的 iot_get_sensor_data/iot_send_command 依赖此缓存联通内嵌链路）
+    try:
+        from app.infrastructure.mqtt.telemetry_cache import get_telemetry_cache
+        telemetry_cache = get_telemetry_cache()
+        await telemetry_cache.start(embedded_broker=getattr(app.state, "embedded_mqtt_broker", None))
+        app.state.telemetry_cache = telemetry_cache
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Telemetry cache init skipped: {e}", exc_info=True)
 
     # W6-1：对外 MCP 服务器（把陪伴安全工具白名单经 Streamable HTTP 暴露在 /mcp）
     if settings.MCP_SERVER_ENABLED:
@@ -568,6 +583,13 @@ async def lifespan(app: FastAPI):
         logger.info("[LuomiNest] MCP connections closed")
     except Exception as e:
         logger.warning(f"[LuomiNest] MCP shutdown skipped: {e}", exc_info=True)
+
+    # P0-4：停止设备遥测缓存（先于内嵌 broker 停止，避免向已关闭的 broker 断连）
+    try:
+        from app.infrastructure.mqtt.telemetry_cache import get_telemetry_cache
+        await get_telemetry_cache().stop()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Telemetry cache shutdown skipped: {e}", exc_info=True)
 
     # W6-3：停止内嵌 MQTT broker
     try:

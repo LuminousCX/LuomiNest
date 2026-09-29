@@ -78,6 +78,12 @@ def main():
     setup_console_encoding()
     setup_logging()
 
+    # P0-3 传输安全：把监听地址暴露给适配器/工具（如 rest_api/websocket 的暴露告警），
+    # 并在非 loopback 监听时打醒目安全 WARNING（/mcp、QQ 反向 WS 等端口已暴露局域网）。
+    os.environ["LUOMINEST_LISTEN_HOST"] = args.host
+    from app.runtime.platform.infrastructure.exposure import warn_lan_exposure
+    warn_lan_exposure(args.host)
+
     # Use the default ProactorEventLoop on Windows. The SelectorEventLoop breaks
     # edge_tts (aiohttp WebSocket + SSL) — no audio is received from the service.
     # ProactorEventLoop supports subprocess, SSL, and pipes on Python 3.8+.

@@ -46,13 +46,15 @@ class ContextManager:
 
     async def process(
         self, messages: list[dict], trusted_token_usage: int = 0, chat_mode: str = "normal",
-        force_compression: bool = False,
+        force_compression: bool = False, conv_id: str | None = None,
     ) -> dict:
         """处理上下文：截断 + 压缩。
 
         Args:
             force_compression: 强制触发压缩，忽略 should_compress 阈值判断。
                 用于手动压缩端点，避免修改共享的 compressor.compression_threshold。
+            conv_id: 会话 ID。非空时启用会话级摘要持久化（LLM 摘要压缩器从
+                config_items 恢复/写回水位线）；None 时保持旧行为（纯内存、共享实例）。
 
         Returns:
             dict: {"messages": list[dict], "context_tokens": int}
@@ -72,7 +74,7 @@ class ContextManager:
                 total_tokens = self.token_counter.count_tokens(result, trusted_token_usage)
 
                 if force_compression or self.compressor.should_compress(result, total_tokens, self.max_context_tokens):
-                    result = await self._run_compression(result, total_tokens, force_compression)
+                    result = await self._run_compression(result, total_tokens, force_compression, conv_id)
 
             context_tokens = self.token_counter.count_tokens(result)
             logger.debug(
@@ -88,11 +90,12 @@ class ContextManager:
 
     async def _run_compression(
         self, messages: list[dict], prev_tokens: int, force_rebuild: bool = False,
+        conv_id: str | None = None,
     ) -> list[dict]:
         logger.info(f"[Compressor] Compression triggered: {prev_tokens} tokens")
 
         if isinstance(self.compressor, LLMSummaryCompressor):
-            messages = await self.compressor.compress(messages, force_rebuild=force_rebuild)
+            messages = await self.compressor.compress(messages, force_rebuild=force_rebuild, conv_id=conv_id)
         else:
             messages = await self.compressor.compress(messages)
 
@@ -147,6 +150,7 @@ def get_context_manager(
     model: str = "",
     threshold_override: float | None = None,
     force_refresh: bool = False,
+    conv_id: str | None = None,
 ) -> ContextManager:
     from app.core.config import settings
     from app.runtime.provider.llm.adapter import llm_adapter
@@ -161,8 +165,13 @@ def get_context_manager(
     if strategy == "summarize":
         llm_compress = True
 
-    # 复合缓存 key（包含 threshold、llm_compress 和 strategy）
+    # 复合缓存 key（包含 threshold、llm_compress 和 strategy）。
+    # P0-2：对话路径须传入 conv_id，使每个会话持有独立的压缩器实例
+    #（摘要水位线互不串扰）；conv_id 为 None 时沿用旧 key，
+    # 保证子 Agent 等内部路径与既有测试行为不变。
     key = f"{provider_name}:{model}:t{compression_threshold}:c{int(llm_compress)}:s{strategy}"
+    if conv_id:
+        key = f"{key}:conv:{conv_id}"
 
     with _cache_lock:
         if not force_refresh and key in _context_managers:

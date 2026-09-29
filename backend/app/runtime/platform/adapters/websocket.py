@@ -20,6 +20,10 @@ from app.runtime.platform.base import (
     PlatformMessage,
     PlatformResponse,
 )
+from app.runtime.platform.infrastructure.exposure import (
+    get_backend_listen_host,
+    warn_inbound_without_credential,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +49,12 @@ class WebSocketAdapter(BasePlatformAdapter):
             "required": True,
             "label": "WebSocket URL",
         },
+        "access_token": {
+            "type": "string",
+            "required": False,
+            "label": "访问令牌",
+            "sensitive": True,
+        },
         "heartbeat_interval": {
             "type": "number",
             "required": False,
@@ -66,6 +76,7 @@ class WebSocketAdapter(BasePlatformAdapter):
         super().__init__()
         self._ws: Any = None  # websockets 连接对象
         self._ws_url: str = ""
+        self._access_token: str = ""  # P0-3：可选鉴权令牌（握手时以 Bearer 头携带）
         self._heartbeat_interval: float = 30.0
         self._reconnect_delay: float = 5.0
 
@@ -80,6 +91,8 @@ class WebSocketAdapter(BasePlatformAdapter):
         if not self._ws_url:
             raise ValueError("WebSocket URL (ws_url) 为必填项")
 
+        # P0-3：可选访问令牌（对端要求鉴权时配置，握手时随 Authorization 头发送）
+        self._access_token = str(config.get("access_token", "") or "")
         self._heartbeat_interval = float(config.get("heartbeat_interval", 30))
         self._reconnect_delay = float(config.get("reconnect_delay", 5))
 
@@ -94,6 +107,14 @@ class WebSocketAdapter(BasePlatformAdapter):
     # ------------------------------------------------------------------
     async def start(self) -> None:
         """启动适配器：建立 WebSocket 连接。"""
+        # P0-3 传输安全：本适配器虽为出站客户端，但其 JSON 协议无内置鉴权；
+        # 主服务监听非 loopback 且实例未配置 access_token 时给出提示（不打断运行）。
+        if not self._access_token:
+            warn_inbound_without_credential(
+                "通用 WebSocket 接入",
+                get_backend_listen_host(),
+                "access_token（对端要求鉴权时请在实例配置中填写）",
+            )
         await super().start()
         self.update_status(AdapterStatus.STARTING)
         self._log("info", "adapter_starting", "WebSocket 适配器启动中", {"url": self._ws_url})
@@ -172,12 +193,18 @@ class WebSocketAdapter(BasePlatformAdapter):
 
         try:
             logger.info(f"[WebSocket] 正在连接 {self._ws_url} ...")
-            self._ws = await websockets.connect(
-                self._ws_url,
-                ping_interval=self._heartbeat_interval,
-                ping_timeout=self._heartbeat_interval,
-                close_timeout=5,
-            )
+            connect_kwargs: dict[str, Any] = {
+                "ping_interval": self._heartbeat_interval,
+                "ping_timeout": self._heartbeat_interval,
+                "close_timeout": 5,
+            }
+            # P0-3：配置了访问令牌时随握手发送 Authorization 头
+            # （websockets v11+ 新实现参数名为 additional_headers）
+            if self._access_token:
+                connect_kwargs["additional_headers"] = {
+                    "Authorization": f"Bearer {self._access_token}",
+                }
+            self._ws = await websockets.connect(self._ws_url, **connect_kwargs)
             logger.success(f"[WebSocket] 已连接到 {self._ws_url}")
             self._log("success", "connection_established", "WebSocket 连接已建立", {"url": self._ws_url})
 

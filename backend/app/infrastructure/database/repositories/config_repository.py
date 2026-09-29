@@ -33,6 +33,8 @@ class ConfigRepository:
         "platform.*.encoding_aes_key",
         "platform.*.token",
         "platform.*.api_key",
+        # P0-3：对外 MCP 服务器访问 token
+        "mcp_server.token",
         # MQTT
         "mqtt.password",
     }

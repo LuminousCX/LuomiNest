@@ -24,8 +24,10 @@ from __future__ import annotations
 # 统一 topic 前缀（项目品牌 LuomiNest）
 TOPIC_PREFIX = "luominest"
 
-# 旧版前缀（历史部署兼容，仅订阅不发布）
-_LEGACY_TOPIC_PREFIX = "luominestai"
+# 旧版前缀（历史部署兼容，仅订阅不发布；公开常量供 telemetry_cache 等订阅方复用）
+LEGACY_TOPIC_PREFIX = "luominestai"
+# 向后兼容旧私有名（历史引用点均在模块内部）
+_LEGACY_TOPIC_PREFIX = LEGACY_TOPIC_PREFIX
 
 
 # ── 构造器 ──────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 """LuomiNest MCP 数据模型。
 
 定义 MCP 服务器配置与状态的数据结构：
-- McpTransportType：传输方式枚举（stdio / sse）
+- McpTransportType：传输方式枚举（stdio / sse / streamable_http）
 - McpServerConfig：服务器配置（持久化到 mcp_servers.json）
 - McpServerStatus：运行时状态枚举
 """
@@ -15,6 +15,8 @@ class McpTransportType(str, Enum):
     """MCP 传输方式"""
     STDIO = "stdio"
     SSE = "sse"
+    # P0-3：Streamable HTTP 客户端传输（mcp SDK v2 的 streamable_http_client）
+    STREAMABLE_HTTP = "streamable_http"
 
 
 class McpServerStatus(str, Enum):
@@ -30,13 +32,13 @@ class McpServerConfig(BaseModel):
 
     Attributes:
         name: 服务器唯一名称
-        transport: 传输方式（stdio / sse）
+        transport: 传输方式（stdio / sse / streamable_http）
         command: stdio 模式的可执行命令
         args: stdio 模式的命令参数
         env: stdio 模式的环境变量
         cwd: stdio 模式的工作目录
-        url: sse 模式的服务器 URL
-        headers: sse 模式的请求头
+        url: sse / streamable_http 模式的服务器 URL
+        headers: sse / streamable_http 模式的请求头
         description: 服务器描述
         enabled: 是否启用
         auto_connect: 是否在初始化时自动连接

@@ -8,6 +8,16 @@
 - streamable_http_app 返回的 Starlette 子应用挂载在主应用 /mcp 下；
   子应用 lifespan 不会随主应用启动，因此 session_manager.run() 由
   attach_luominest_mcp_server 经 AsyncExitStack 绑定到主应用 lifespan。
+- P0-3 传输安全：子应用外包裹 BearerAuthMiddleware（见 auth.py），
+  每个请求校验 Authorization: Bearer <token>，token 存 config_items
+  键 mcp_server.token，可经 /api/v1/mcp/token 查看/重置。
+
+外部 AI 客户端接入（stdio 宿主经 mcp-remote 桥接本 HTTP 端点）：
+    # 1) 在 LuomiNest 设置页查看 MCP Token（或 POST /api/v1/mcp/token/reset 重置）
+    # 2) 以环境变量携带 token 启动 mcp-remote：
+    npx mcp-remote http://127.0.0.1:18000/mcp \
+        --header "Authorization: Bearer ${LUOMINEST_MCP_TOKEN}"
+注意 --header 值必须整体加引号；非 loopback 部署时务必走 HTTPS 反向代理。
 """
 from __future__ import annotations
 
@@ -17,6 +27,7 @@ from typing import Any, Callable
 
 from loguru import logger
 
+from app.core.config import settings
 from app.core.tools.registry import tool_registry
 
 # 对外暴露白名单：陪伴安全工具（只读/记忆/桥接），不含高权限工具
@@ -120,12 +131,18 @@ async def attach_luominest_mcp_server(app) -> None:
         json_response=True,
         streamable_http_path="/",
     )
-    app.mount("/mcp", asgi_app, name="luominest-mcp")
+
+    # P0-3：Bearer 鉴权包裹挂载的子应用（token 缺失/不匹配 → 401；
+    # MCP_SERVER_AUTH=false 时中间件整体放行）。此处顺带触发首启 token 生成。
+    from app.core.mcp_server.auth import BearerAuthMiddleware, get_mcp_token
+    get_mcp_token(create=True)
+    app.mount("/mcp", BearerAuthMiddleware(asgi_app), name="luominest-mcp")
 
     stack = AsyncExitStack()
     await stack.enter_async_context(server.session_manager.run())
     app.state.luominest_mcp_exit_stack = stack
-    logger.info("[McpServer] 已挂载到 /mcp（Streamable HTTP，仅本机访问）")
+    auth_state = "on" if settings.MCP_SERVER_AUTH else "off"
+    logger.info(f"[McpServer] 已挂载到 /mcp（Streamable HTTP，Bearer 鉴权: {auth_state}）")
 
 
 async def shutdown_luominest_mcp_server(app) -> None:

@@ -60,7 +60,7 @@ class LuomiSchedulerManager:
         self._task_executor = executor
 
     def add_event_callback(self, callback: TaskEventCallback) -> None:
-        """注册任务事件回调（用于 SSE 推送）"""
+        """注册任务事件回调（用于 SSE 推送、结果投递等）"""
         self._event_callbacks.append(callback)
 
     async def _emit_event(self, event: TaskEvent) -> None:
@@ -70,6 +70,10 @@ class LuomiSchedulerManager:
                 await cb(event)
             except Exception as e:
                 logger.warning(f"[LuomiScheduler] 事件回调失败: {e}")
+
+    async def emit_task_event(self, event: TaskEvent) -> None:
+        """对外发布任务事件（供结果投递器等外部组件广播降级/补充通知）。"""
+        await self._emit_event(event)
 
     async def init(self) -> None:
         """初始化调度器并加载持久化配置"""
@@ -181,9 +185,17 @@ class LuomiSchedulerManager:
 
     @staticmethod
     def _db_task_to_config(t: dict[str, Any]) -> ScheduledTaskConfig:
-        """将 DB 记录转换为 ScheduledTaskConfig。"""
-        schedule_type = t.get("schedule_type", "date")
-        schedule_cron = t.get("schedule_cron", "")
+        """将 DB 记录转换为 ScheduledTaskConfig。
+
+        调度类型以 trigger_type（date/cron/interval）为权威；旧数据（trigger_type 为空）
+        按遗留 schedule_type 兜底映射（once/date → date）。恢复失败抛 ValueError，
+        由 _load_persisted_tasks 逐任务捕获并告警，保证问题可见。
+        """
+        trigger_type = (t.get("trigger_type") or "").strip().lower()
+        if not trigger_type:
+            legacy = (t.get("schedule_type") or "").strip().lower()
+            trigger_type = {"date": "date", "once": "date", "cron": "cron", "interval": "interval"}.get(legacy, "")
+        schedule_cron = t.get("schedule_cron", "") or ""
         action = t.get("action", "")
         context = t.get("context", "")
         payload: dict[str, Any] = {}
@@ -198,20 +210,30 @@ class LuomiSchedulerManager:
         cron_day_of_week = cron_hour = cron_minute = cron_second = None
         interval_seconds = None
 
-        if schedule_type == LuomiTaskType.CRON.value:
+        if trigger_type == LuomiTaskType.CRON.value:
             task_type = LuomiTaskType.CRON
             parts = schedule_cron.split()
             if len(parts) >= 5:
                 cron_minute, cron_hour, cron_day, cron_month, cron_day_of_week = parts[:5]
-        elif schedule_type == LuomiTaskType.INTERVAL.value:
+            else:
+                raise ValueError(f"cron 表达式字段不足: '{schedule_cron}'")
+        elif trigger_type == LuomiTaskType.INTERVAL.value:
             task_type = LuomiTaskType.INTERVAL
-            # DB 未存储 interval_seconds，fallback 默认 3600s
-            interval_seconds = 3600
+            interval_seconds = t.get("interval_seconds")
+            if not interval_seconds or int(interval_seconds) <= 0:
+                # 旧实现未存 interval_seconds；显式告警后降级 3600s，不再静默
+                logger.warning(
+                    f"[LuomiScheduler] interval 任务 {t.get('task_id', '?')} 缺少 interval_seconds，降级为 3600s"
+                )
+                interval_seconds = 3600
+            else:
+                interval_seconds = int(interval_seconds)
         else:
-            # date 类型：DB 未存储 run_date，跳过无法恢复的任务
-            if not schedule_cron:
-                raise ValueError("date 类型任务缺少 run_date 信息，无法从 DB 恢复")
-            run_date = schedule_cron
+            # date 类型：从 run_at 列恢复 ISO 执行时间；旧实现的幻象 cron "* * * * *"
+            # 不再被当作执行时间（无法恢复时显式告警跳过，而非 datetime 解析崩溃）
+            run_date = (t.get("run_at") or "").strip() or None
+            if not run_date:
+                raise ValueError("date 类型任务缺少 run_at，无法从 DB 恢复")
 
         return ScheduledTaskConfig(
             name=t.get("name", ""),
@@ -229,7 +251,53 @@ class LuomiSchedulerManager:
             interval_seconds=interval_seconds,
             payload=payload,
             source=t.get("created_from", "main_agent"),
+            origin_kind=t.get("origin_kind") or "",
+            origin_ref=t.get("origin_ref") or "",
+            origin_target=t.get("origin_target") or "",
         )
+
+    @staticmethod
+    def _task_info_to_db_fields(info: dict[str, Any]) -> dict[str, Any]:
+        """将内存任务信息映射为持久化行字段（按 task_type 分支，消除幻象 cron）。
+
+        - date：run_at 存 ISO 执行时间，schedule_cron 置空（旧实现误存 "* * * * *"）
+        - cron：schedule_cron 存五段 cron 表达式
+        - interval：interval_seconds 存间隔秒数，schedule_cron 置空
+        """
+        task_type = info.get("task_type", LuomiTaskType.DATE.value)
+        schedule_cron = ""
+        run_at = None
+        interval_seconds = None
+        if task_type == LuomiTaskType.CRON.value:
+            schedule_cron = " ".join([
+                info.get("cron_minute") or "*",
+                info.get("cron_hour") or "*",
+                info.get("cron_day") or "*",
+                info.get("cron_month") or "*",
+                info.get("cron_day_of_week") or "*",
+            ])
+        elif task_type == LuomiTaskType.INTERVAL.value:
+            interval_seconds = info.get("interval_seconds")
+        else:  # date
+            run_at = info.get("run_date") or None
+        payload = info.get("payload") or {}
+        is_active = info.get("status") not in (
+            LuomiTaskStatus.COMPLETED.value,
+            LuomiTaskStatus.REMOVED.value,
+        )
+        return {
+            "schedule_cron": schedule_cron,
+            "schedule_type": task_type,
+            "trigger_type": task_type,
+            "run_at": run_at,
+            "interval_seconds": interval_seconds,
+            "action": payload.get("instruction", "") if payload else "",
+            "context": payload.get("context", "") if payload else "",
+            "is_active": is_active,
+            "origin_kind": info.get("origin_kind") or "api",
+            "origin_ref": info.get("origin_ref") or None,
+            "origin_target": info.get("origin_target") or None,
+        }
 
     async def _persist_tasks(self) -> None:
         """将内存中的任务状态同步到数据库（不再写入 JSON 文件）。"""
@@ -240,32 +308,13 @@ class LuomiSchedulerManager:
             # 先快照再迭代，防 "dictionary changed size during iteration"
             items = list(self._tasks.items())
             for task_id, info in items:
-                # 构建 cron 表达式
-                cron_parts = [
-                    info.get("cron_minute") or "*",
-                    info.get("cron_hour") or "*",
-                    info.get("cron_day") or "*",
-                    info.get("cron_month") or "*",
-                    info.get("cron_day_of_week") or "*",
-                ]
-                schedule_cron = " ".join(cron_parts)
-                payload = info.get("payload", {})
-                action = payload.get("instruction", "") if payload else ""
-                context_val = payload.get("context", "") if payload else ""
-                is_active = info.get("status") not in (
-                    LuomiTaskStatus.COMPLETED.value,
-                    LuomiTaskStatus.REMOVED.value,
-                )
+                fields = self._task_info_to_db_fields(info)
                 await save_scheduled_task(
                     task_id=task_id,
                     name=info.get("name", ""),
-                    schedule_cron=schedule_cron,
-                    schedule_type=info.get("task_type", LuomiTaskType.DATE.value),
-                    action=action,
                     description=info.get("description", ""),
-                    context=context_val,
                     created_from=info.get("source", "main_agent"),
-                    is_active=is_active,
+                    **fields,
                 )
         except Exception as e:
             logger.warning(f"[LuomiScheduler] 同步任务到 DB 失败: {e}")
@@ -324,6 +373,9 @@ class LuomiSchedulerManager:
             "interval_seconds": config.interval_seconds,
             "payload": config.payload,
             "source": config.source,
+            "origin_kind": config.origin_kind,
+            "origin_ref": config.origin_ref,
+            "origin_target": config.origin_target,
             "created_at": utc_now(),
             "last_run_time": None,
             "last_result": None,
@@ -386,6 +438,9 @@ class LuomiSchedulerManager:
             "interval_seconds": config.interval_seconds,
             "payload": config.payload,
             "source": config.source,
+            "origin_kind": config.origin_kind,
+            "origin_ref": config.origin_ref,
+            "origin_target": config.origin_target,
             "created_at": utc_now(),
             "last_run_time": None,
             "last_result": None,
@@ -494,8 +549,10 @@ class LuomiSchedulerManager:
                 result = await delegate_task(instruction, context=context, depth=0)
             return result
         except Exception as e:
+            # fail-fast（P0-1）：执行失败上抛，由 _execute_task 记入 FAILED 状态、
+            # last_error 与 FAILED 事件（原先吞成结果字符串会让任务假性"完成"）
             logger.error(f"[LuomiScheduler] 子 Agent 执行失败: {e}", exc_info=True)
-            return f"子 Agent 执行失败: {e}"
+            raise
 
     async def remove_task(self, task_id: str) -> bool:
         """移除任务"""
@@ -550,6 +607,9 @@ class LuomiSchedulerManager:
                 last_error=info.get("last_error"),
                 payload=info.get("payload", {}),
                 source=info.get("source", "main_agent"),
+                origin_kind=info.get("origin_kind") or "api",
+                origin_ref=info.get("origin_ref") or "",
+                origin_target=info.get("origin_target") or "",
                 created_at=info.get("created_at", ""),
             ))
         return result
@@ -571,6 +631,9 @@ class LuomiSchedulerManager:
             last_error=info.get("last_error"),
             payload=info.get("payload", {}),
             source=info.get("source", "main_agent"),
+            origin_kind=info.get("origin_kind") or "api",
+            origin_ref=info.get("origin_ref") or "",
+            origin_target=info.get("origin_target") or "",
             created_at=info.get("created_at", ""),
         )
 

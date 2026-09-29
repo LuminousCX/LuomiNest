@@ -41,7 +41,7 @@ class PlatformInvokeTool(ToolBase):
             },
             "required": ["platform", "action", "arguments"],
         }
-        self.tier = "standard"
+        self.tier = "domain"
         self.category = "platform"
 
     @property

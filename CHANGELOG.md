@@ -5,7 +5,41 @@ All notable changes to LuomiNest will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.3] - 2026-09-27
+
+> 本轮为「P0 硬伤修复包」（修改书见本地 文档/规划/20260926）：定时任务陪伴闭环、上下文压缩会话隔离与持久化、
+> 传输安全加固（/mcp 鉴权 + QQ 反向 WS token 校验）、IoT 与内嵌 MQTT broker 联通（含 paho 客户端两处存量致命 bug 修复）、
+> 天气多源缓存、非流式路径工具循环，一批工具注册/Provider 层小修，以及针对全部新增模块的一轮单测补强。
+>
+> This round is the "P0 hard-defect package": scheduled-task companionship loop, context-compression per-conversation isolation
+> & persistence, transport security hardening (/mcp auth + QQ reverse-WS token check), IoT ⇆ embedded MQTT broker integration
+> (incl. two pre-existing fatal paho client bugs), multi-source weather with caching, non-stream tool loop, a batch of
+> tool-registry / provider-layer fixes, plus a round of unit-test reinforcement for all new modules.
+
+### Added（新增）
+
+- 定时任务闭环：任务触发结果按来源回投——网页会话收到带 `[定时任务]` 前缀的 AI 播报（开关 `SCHEDULER_RESULT_INTO_CHAT`，默认开）、平台任务回发群聊/私聊（显式目标优先），api 来源留任务记录；新建 `task_result_dispatcher` 并接入调度器事件回调 — Scheduled tasks loop: task results are routed back to their origin — web conversations receive an AI announcement prefixed `[定时任务]` (switch `SCHEDULER_RESULT_INTO_CHAT`, on by default), platform tasks reply to group/private targets (explicit target first), api-originated tasks keep results in the task record
+- scheduled_tasks 表 SCHEMA v4 迁移：新增 `trigger_type`/`run_at`/`interval_seconds` 与 `origin_kind`/`origin_ref`/`origin_target` 六列，启动时探测补列并按遗留 `schedule_type` 回填（date 任务的时间不再以幻象 cron `"* * * * *"` 存储） — scheduled_tasks SCHEMA v4 migration adds six columns with idempotent backfill from legacy `schedule_type`
+- /mcp Bearer 鉴权：首启自动生成 token（AES 加密落库 `config_items:mcp_server.token`，`GET /api/v1/mcp/token` 查看、`POST /api/v1/mcp/token/reset` 重置），`MCP_SERVER_AUTH` 开关默认开；MCP 客户端管理器新增 streamable_http 传输（支持自定义 headers） — /mcp Bearer auth with auto-generated encrypted token (view/reset endpoints), `MCP_SERVER_AUTH` switch; MCP client manager gains streamable_http transport with custom headers
+- QQ 反向 WS access_token 校验：同时接受 `Authorization: Bearer` 头与 `?access_token=` 参数，校验失败 close(1008)；rest_api/websocket 适配器非 loopback 未配凭证启动告警；主服务非 loopback 监听时多行醒目暴露告警 — QQ reverse-WS access_token verification (header or query param, close 1008 on failure); rest_api/websocket uncredentialled LAN-exposure startup warnings; prominent multi-line warning when the main service listens on non-loopback
+- 天气服务：`WeatherService` 双源链 wttr.in → Open-Meteo（免 key，WMO 代码全量中文映射）→ 兜底文案，同城市 LRU 缓存 30 分钟 — Weather: dual-source chain wttr.in → Open-Meteo (keyless, full WMO-code zh mapping) → fallback text, 30-min per-city LRU cache
+- 设备遥测缓存 `TelemetryCache`：订阅 `luominest/+/status`（含固件直连简写与 `luominestai` 旧前缀），内嵌 broker 经 loopback 直连；`iot_get_sensor_data` 缓存优先、`iot_send_command` 内嵌模式直发 `luominest/device/{id}/command` — TelemetryCache service unifying the two MQTT chains; IoT tools now read the embedded-broker path first
+
+### Changed（变更）
+
+- 非流式对话（stream=false）接入工具循环：复用三级按需注入与 AgentRunner 中间件管线，与流式路径能力对齐（usage 改由管线内 UsageTrackMiddleware 统一记录） — Non-stream chat now runs the full tool loop via tiered injection + AgentRunner middleware pipeline, matching stream capabilities
+- 上下文压缩按会话隔离并持久化：压缩器缓存 key 纳入会话 id，摘要与水位线落库（`config_items: conv.<id>.context_summary`），重启后免全量重摘，多会话摘要不再串扰 — Context compression is now per-conversation and persisted (summary + watermark), eliminating cross-session summary bleed and post-restart re-summarization
+- 工具注册表 `register(tool, force=False)`：同名默认拒绝覆盖（防插件顶掉内置工具）；`platform_bridge_tool`/`mqtt_iot_tool` 的非法 `tier="standard"` 修正为 `domain` — Tool registry rejects silent same-name overwrite unless `force=True`; invalid `tier="standard"` corrected to `domain`
+- Provider 层：`chat()` 复用懒加载连接池 client；记忆嵌入模型解析 fail-fast（仅 openai 系默认 `text-embedding-3-small`，新增 `MEMORY_EMBED_MODEL` 覆盖；换模型需重嵌入） — Provider layer: lazy pooled client in `chat()`; fail-fast embed-model resolution with `MEMORY_EMBED_MODEL` override
+- 移除未使用的 `openai`/`anthropic` SDK 依赖（全库零 import） — Removed unused `openai`/`anthropic` SDK dependencies
+- 新增模块单测补强：围绕 /mcp 鉴权中间件、暴露面告警、任务回投派发、遥测缓存、天气服务补 52 个单测，覆盖错误路径、降级链路与边界分支（全量套件 435 → 487 全绿） — Unit-test reinforcement: 52 new tests across the MCP auth middleware, exposure warnings, task-result dispatcher, telemetry cache, and weather service, covering error paths, fallback chains, and edge branches (full suite 435 → 487 green)
+
+### Fixed（修复）
+
+- 定时任务持久化（数据丢失级）：date 任务重启即丢（ISO 串被当 cron 解析抛错静默跳过）、interval 任务重启一律退化 3600s——现按 `trigger_type` 分支存取，重启后三类任务均正确恢复 — Scheduled-task persistence data loss: date tasks silently dropped after restart, interval tasks degraded to 3600s; both now round-trip correctly via `trigger_type`
+- MQTT 客户端两处存量致命 bug：`reconnect_delay_set` 形参错误被静默吞掉导致客户端永远连不上、VERSION2 回调 `int(ReasonCode)` 异常杀死 paho 网络线程——修复后 mqtt_terminal 平台链路与遥测缓存端到端打通 — Two pre-existing fatal MQTT client bugs (swallow TypeError on reconnect params; `int(ReasonCode)` crash killing the paho network thread)
+- 执行器异常不再伪装成任务完成：`_run_payload` 异常上抛，FAILED 状态可达，事件/投递/状态三侧一致 — Executor exceptions now propagate so task state truly reaches FAILED
+- 文档烂账：`basic_tools` 移除未实现的"农历/节气"宣称、`browser_automation` 工具数 2→6 与规格表对齐 — Docstring rot fixed (unimplemented lunar-calendar claim removed; browser tool count 2→6)
 
 ## [0.8.2] - 2026-09-20
 
