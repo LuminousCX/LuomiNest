@@ -19,7 +19,6 @@ import {
   Calendar,
   User,
   MessageSquare,
-  Activity,
 } from 'lucide-vue-next'
 import LumiCard from '../../components/common/LumiCard.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
