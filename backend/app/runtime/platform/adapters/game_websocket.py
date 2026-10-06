@@ -1,9 +1,17 @@
 import asyncio
+import contextlib
 import json
+import secrets
 from typing import Any
 from loguru import logger
 
 from app.runtime.platform.base import BasePlatformAdapter, PlatformMessage, PlatformResponse
+from app.runtime.platform.infrastructure.exposure import is_loopback_host, warn_inbound_without_credential
+from app.runtime.platform.infrastructure.ws_gateway_auth import (
+    DEFAULT_WS_BIND_HOST,
+    connection_allowed,
+    resolve_ws_bind_host,
+)
 
 
 class LuomiNestGameWebSocketAdapter(BasePlatformAdapter):
@@ -32,9 +40,10 @@ class LuomiNestGameWebSocketAdapter(BasePlatformAdapter):
     }
 
     配置项：
-    - ws_host: 监听地址
+    - ws_host: 监听地址（默认 127.0.0.1，仅本机客户端可接入）
     - ws_port: 监听端口
-    - auth_token: 可选鉴权 token
+    - auth_token: 可选鉴权 token（配置后握手须携带 Bearer 头或 ?access_token=
+      参数，未配置时仅允许本机回环来源匿名接入）
     - max_clients: 最大客户端数
     """
 
@@ -45,18 +54,35 @@ class LuomiNestGameWebSocketAdapter(BasePlatformAdapter):
         self._server: Any = None
         self._clients: dict[str, Any] = {}
         self._client_meta: dict[str, dict] = {}
+        self._ws_host: str = DEFAULT_WS_BIND_HOST
+        self._ws_port: int = 8082
+        self._auth_token: str = ""
+        self._max_clients: int = 50
 
     def initialize(self, config: dict[str, Any]) -> None:
         super().initialize(config)
-        self._ws_host = config.get("ws_host", "0.0.0.0")
+        self._ws_host = resolve_ws_bind_host(config.get("ws_host"))
         self._ws_port = int(config.get("ws_port", 8082))
-        self._auth_token = config.get("auth_token", "")
+        self._auth_token = str(config.get("auth_token", "") or "")
         self._max_clients = int(config.get("max_clients", 50))
 
     async def start(self) -> None:
         import websockets
 
         async def client_handler(websocket: Any) -> None:
+            # P0-4 握手鉴权：配置了 auth_token 时校验凭证；未配置时仅允许
+            # loopback 来源匿名接入，未通过校验的连接不注册、不进入消息循环。
+            if not connection_allowed(websocket, self._auth_token):
+                peer = websocket.remote_address if hasattr(websocket, "remote_address") else "unknown"
+                self._log(
+                    "warning", "auth_rejected",
+                    f"握手鉴权失败，已拒绝连接（close 1008）: {peer}",
+                    details={"peer": str(peer)},
+                )
+                with contextlib.suppress(Exception):
+                    await websocket.close(code=1008, reason="invalid access token")
+                return
+
             client_id = id(websocket)
             if len(self._clients) >= self._max_clients:
                 logger.warning(f"[GameWS] Max clients reached, rejecting connection")
@@ -82,6 +108,15 @@ class LuomiNestGameWebSocketAdapter(BasePlatformAdapter):
             finally:
                 self._clients.pop(client_id, None)
                 self._client_meta.pop(client_id, None)
+
+        # P0-4 传输安全：绑定非 loopback 且未配置 token 时打告警
+        # （非 loopback 来源会在握手阶段被拒，配 token 后局域网客户端才可接入）
+        if not self._auth_token and not is_loopback_host(self._ws_host):
+            warn_inbound_without_credential(
+                "游戏 WebSocket 网关",
+                self._ws_host,
+                "auth_token（未配置时仅本机客户端可接入）",
+            )
 
         logger.info(f"[GameWS] Starting WebSocket server on {self._ws_host}:{self._ws_port}")
         self._server = await websockets.serve(client_handler, self._ws_host, self._ws_port)
@@ -180,8 +215,12 @@ class LuomiNestGameWebSocketAdapter(BasePlatformAdapter):
             await self.send_message(response, str(client_id))
 
     async def _handle_auth(self, data: dict, websocket: Any, client_id: int) -> None:
+        """兼容旧客户端的消息级鉴权（握手鉴权之后的兜底路径，常量时间比较）。"""
         token = data.get("token", "")
-        if not self._auth_token or token == self._auth_token:
+        if not self._auth_token or (
+            isinstance(token, str) and token
+            and secrets.compare_digest(token, self._auth_token)
+        ):
             self._client_meta.setdefault(client_id, {})["authenticated"] = True
             await websocket.send(json.dumps({"type": "auth_ok"}))
             logger.info(f"[GameWS] Client {client_id} authenticated")

@@ -1,11 +1,17 @@
 import uuid
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ConfigDict
 from loguru import logger
 
 from app.core.utils import utc_now, require_value, ok
-from app.core.exceptions import NotFoundError, LuomiNestError, ValidationError
+from app.core.exceptions import AuthenticationError, BadRequestError, NotFoundError, LuomiNestError, ValidationError
 from app.api.v1.deps import get_platforms_store, get_conversation_store, get_llm_adapter
+from app.security.crypto.platform_config_crypto import (
+    mask_config,
+    strip_masked_values,
+)
+from app.runtime.platform.base import AdapterStatus
 from app.runtime.platform.registry import (
     PlatformStatus,
     list_adapter_types,
@@ -76,6 +82,13 @@ class PlatformInstanceResponse(BaseModel):
     created_at: str = Field(alias="createdAt", default="")
     updated_at: str = Field(alias="updatedAt", default="")
     model_config_data: dict = Field(alias="modelConfig", default_factory=dict)
+    # 适配器七态可观测（P2-2）：registry 四态之外，透出适配器真实运行状态
+    adapter_status: str = Field(alias="adapterStatus", default="")
+    healthy: bool | None = None
+    uptime_seconds: float = Field(alias="uptimeSeconds", default=0.0)
+    # 适配器最近错误（区别于 registry 层 error_message——后者在 start/stop 之间冻结）
+    adapter_error: str = Field(alias="adapterError", default="")
+    error_count: int = Field(alias="errorCount", default=0)
 
     model_config = ConfigDict(populate_by_name=True, from_attributes=True)
 
@@ -117,13 +130,47 @@ class PlatformModelConfigUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+def _adapter_status_snapshot(inst) -> dict:
+    """合并适配器 get_status() 只读内存快照（P2-2：RECONNECTING/ERROR 对 UI 可见）。
+
+    只读内存态，不做真实网络探测（home_assistant/mqtt_terminal/websocket 重写的
+    health_check 会发起连接），列表页每实例调用也零成本；适配器缺失或读取异常
+    时返回空快照，不影响实例列表主流程。healthy 语义对齐 base.health_check
+    默认实现（status == running 即健康）。
+    """
+    snapshot = {
+        "adapter_status": "",
+        "healthy": None,
+        "uptime_seconds": 0.0,
+        "adapter_error": "",
+        "error_count": 0,
+    }
+    adapter = getattr(inst, "adapter", None)
+    if adapter is None:
+        return snapshot
+    try:
+        status = adapter.get_status()
+    except Exception as e:
+        logger.warning(f"[PlatformAPI] Failed to read adapter status for {inst.instance_id}: {e}")
+        return snapshot
+    adapter_status = status.get("status", "")
+    snapshot["adapter_status"] = adapter_status
+    snapshot["healthy"] = adapter_status == AdapterStatus.RUNNING.value
+    snapshot["uptime_seconds"] = float(status.get("uptime") or 0.0)
+    snapshot["adapter_error"] = status.get("last_error") or ""
+    snapshot["error_count"] = int(status.get("error_count") or 0)
+    return snapshot
+
+
 def _instance_to_response(inst) -> PlatformInstanceResponse:
     at = get_adapter_type(inst.adapter_type)
     return PlatformInstanceResponse(
         id=inst.instance_id,
         adapter_type=inst.adapter_type,
         name=inst.name,
-        config=inst.config,
+        # 凭据脱敏（P1-6）：config 不外泄明文凭据，凭据字段返回掩码哨兵
+        # （PATCH 原样回传哨兵视为「未修改」，不会覆盖真实值）
+        config=mask_config(inst.config),
         status=inst.status.value if isinstance(inst.status, PlatformStatus) else inst.status,
         enable=inst.config.get("enable", True),
         message_count=inst.message_count,
@@ -135,6 +182,7 @@ def _instance_to_response(inst) -> PlatformInstanceResponse:
         created_at=inst.created_at,
         updated_at=inst.updated_at,
         model_config_data=inst.config.get("model_config", {}) or {},
+        **_adapter_status_snapshot(inst),
     )
 
 
@@ -264,7 +312,10 @@ async def update_platform_instance(
     if "name" in update_data and update_data["name"] is not None:
         inst.name = update_data["name"]
     if "config" in update_data and update_data["config"] is not None:
-        merged = {**inst.config, **update_data["config"]}
+        # 掩码哨兵保护（P1-6）：前端把 GET /instances 返回的 config 原样回传时，
+        # 未修改的凭据字段是掩码值而非真实凭据，剔除后合并以防覆盖
+        incoming_config = strip_masked_values(update_data["config"])
+        merged = {**inst.config, **incoming_config}
         inst.config = merged
         if inst.adapter:
             inst.adapter.initialize(merged)
@@ -724,11 +775,13 @@ async def platform_webhook_verify(
 
 
 @router.post("/instances/{instance_id}/webhook")
-async def platform_webhook_receive(instance_id: str, request: dict):
+async def platform_webhook_receive(instance_id: str, request: dict, http_request: Request):
     """平台 Webhook 消息接收（QQ官方/企业微信/公众号 POST 请求）。
 
     请求体由 FastAPI 解析为 dict（JSON）或由调用方传入 XML 解析后的 dict。
     对于企业微信/公众号的 XML 格式，前端代理层需先转换为 JSON 或直接调用适配器。
+    http_request 为原始请求对象：QQ 官方推送的 Ed25519 验签（P0-1）需要
+    原始请求体与签名请求头，不能使用重新序列化后的 dict。
     """
     inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
     if not inst.adapter:
@@ -739,7 +792,23 @@ async def platform_webhook_receive(instance_id: str, request: dict):
 
     try:
         if adapter_type == "qq_official" and hasattr(adapter, "handle_webhook"):
-            await adapter.handle_webhook(request)
+            # P0-1：QQ 官方推送必须先过 Ed25519 验签（签名对象为
+            # 「X-Signature-Timestamp + 原始请求体」），失败返回 401
+            handled = await adapter.handle_webhook(
+                request,
+                signature=http_request.headers.get("X-Signature-Ed25519", ""),
+                timestamp=http_request.headers.get("X-Signature-Timestamp", ""),
+                raw_body=await http_request.body(),
+            )
+            # op=13 回调地址验证：适配器返回 {"plain_token", "signature"}
+            # 应答载荷时原样透出（QQ 控制台要求响应体就是该 JSON，不能包统一信封）
+            if isinstance(handled, dict) and "plain_token" in handled:
+                return JSONResponse(content=handled)
+            if not handled:
+                return JSONResponse(
+                    status_code=401,
+                    content={"error": "webhook signature verification failed"},
+                )
             return ok({"received": True})
 
         if adapter_type == "wechat_work" and hasattr(adapter, "handle_webhook"):
@@ -771,6 +840,63 @@ async def platform_webhook_receive(instance_id: str, request: dict):
     except Exception as e:
         logger.error(f"[API] Webhook handling failed for {instance_id}: {e}")
         raise LuomiNestError(f"Webhook handling failed: {e}", code="PLATFORM_WEBHOOK_FAILED", status_code=500)
+
+
+def _extract_rest_api_key(http_request: Request) -> str:
+    """从请求头提取 REST API 密钥（X-API-Key 优先，其次 Authorization: Bearer）。"""
+    key = http_request.headers.get("X-API-Key", "")
+    if key:
+        return key
+    auth = http_request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        return auth[len("Bearer "):]
+    return ""
+
+
+def _require_rest_api_adapter(instance_id: str):
+    """取 rest_api 实例的适配器；类型不符或适配器缺失时抛业务异常。"""
+    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
+    adapter = inst.adapter
+    if inst.adapter_type != "rest_api" or adapter is None:
+        raise ValidationError("Only rest_api instance supports REST message inbound")
+    return adapter
+
+
+@router.post("/instances/{instance_id}/rest/messages")
+async def rest_api_inbound_message(instance_id: str, request: dict, http_request: Request):
+    """REST API 平台入站消息（通用 HTTP 接入，P0-5 补全入站通路）。
+
+    外部系统 POST JSON 消息 → api_key 校验 → 转换为 PlatformMessage
+    （process_incoming_message）→ 后台路由到主 Agent → 响应经 callback_url
+    推送或由 GET 同路径轮询端点拉取（不在本请求内同步返回）。
+    """
+    adapter = _require_rest_api_adapter(instance_id)
+
+    if not adapter.verify_api_key(_extract_rest_api_key(http_request)):
+        raise AuthenticationError("Invalid API key")
+
+    content = str(request.get("content", "") or "")
+    image_urls = request.get("image_urls") or []
+    if not content and not image_urls:
+        raise BadRequestError("content 与 image_urls 不能同时为空")
+
+    platform_msg = await adapter.process_incoming_message(request)
+    return ok({
+        "received": True,
+        "messageId": platform_msg.message_id,
+        "sessionId": platform_msg.session_id,
+    })
+
+
+@router.get("/instances/{instance_id}/rest/messages")
+async def rest_api_poll_messages(instance_id: str, user_id: str, http_request: Request):
+    """REST API 平台响应轮询（未配置 callback_url 时由外部按 user_id 拉取 Agent 响应）。"""
+    adapter = _require_rest_api_adapter(instance_id)
+
+    if not adapter.verify_api_key(_extract_rest_api_key(http_request)):
+        raise AuthenticationError("Invalid API key")
+
+    return ok({"messages": adapter.poll_messages(user_id)})
 
 
 @router.get("/instances/{instance_id}/wechat/qrcode")

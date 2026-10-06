@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import threading
 from typing import Any
 
@@ -7,6 +8,44 @@ from loguru import logger
 
 from app.core.config import settings
 from app.core.utils import utc_now
+from app.runtime.platform.infrastructure.sanitizer import LogSanitizer
+
+# 敏感字段键名模式（与 security/audit/logger.py 同一口径）：
+# 键名命中即整值遮蔽，字符串值再过 LogSanitizer 文本规则
+_SENSITIVE_KEY_PATTERN = re.compile(
+    r"(password|api_key|apikey|secret|token|credential|auth)",
+    re.IGNORECASE,
+)
+
+
+# URL 路径内嵌 bot token（telegram 将 token 拼进 base_url，httpx 异常字符串
+# 会携带完整 URL 进日志；内置规则只覆盖 token=xxx 键值形式，补一条结构形态规则）
+_URL_BOT_TOKEN_PATTERN = re.compile(r"(?i)(bot)\d{4,12}:([A-Za-z0-9_\-]{25,})")
+
+
+def _sanitize_text(text: str) -> str:
+    """对自由文本执行 LogSanitizer 内置规则 + URL 内嵌 token 规则。"""
+    if not isinstance(text, str):
+        return text
+    result = LogSanitizer.get_instance().sanitize(text)
+    return _URL_BOT_TOKEN_PATTERN.sub(r"\1***:***", result)
+
+
+def _sanitize_value(value: Any) -> Any:
+    """递归脱敏：敏感键名整值遮蔽，字符串值过文本规则，容器逐项处理。"""
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, val in value.items():
+            if isinstance(key, str) and _SENSITIVE_KEY_PATTERN.search(key):
+                sanitized[key] = "***"
+            else:
+                sanitized[key] = _sanitize_value(val)
+        return sanitized
+    if isinstance(value, (list, tuple)):
+        return [_sanitize_value(item) for item in value]
+    if isinstance(value, str):
+        return _sanitize_text(value)
+    return value
 
 
 class PlatformLogEntry:
@@ -180,6 +219,12 @@ class PlatformLogger:
     ) -> dict[str, Any]:
         import uuid
 
+        # 出口统一脱敏（P1-6）：适配器/路由层传入的 message 与 details 可能携带
+        # bot token（如 httpx 异常字符串中的完整 URL）、corpsecret、用户手机号等，
+        # 在唯一汇聚点过滤，JSON 落盘与 loguru 回流共用同一份已脱敏内容。
+        message = _sanitize_text(message)
+        safe_details = _sanitize_value(details)
+
         entry = {
             "id": str(uuid.uuid4())[:8],
             "timestamp": utc_now(),
@@ -188,7 +233,7 @@ class PlatformLogger:
             "message": message,
             "instance_id": instance_id,
             "adapter_type": adapter_type,
-            "details": details or {},
+            "details": safe_details or {},
         }
 
         with self._file_lock:

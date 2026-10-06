@@ -1,6 +1,6 @@
 """平台适配器包 - 导入所有适配器并注册。"""
 
-from app.runtime.platform.adapters.discord import DiscordAdapter
+from app.runtime.platform.adapters.discord import DEFAULT_INTENTS, DiscordAdapter
 from app.runtime.platform.adapters.game_websocket import LuomiNestGameWebSocketAdapter
 from app.runtime.platform.adapters.home_assistant import HomeAssistantAdapter
 from app.runtime.platform.adapters.minecraft import LuomiNestMinecraftAdapter
@@ -46,11 +46,18 @@ def _register_all_adapter_types():
         display_name="WebSocket 连接",
         description="通过 WebSocket 协议实现双向实时通信，适用于自定义客户端接入",
         adapter_cls=WebSocketAdapter,
+        # 模板键以 WebSocketAdapter.initialize 实际读取的键为准（P1-5 防漂移）
         config_template={
-            "endpoint": "/ws/platform",
+            "ws_url": "",
+            "access_token": "",
+            "heartbeat_interval": 30,
+            "reconnect_delay": 5,
         },
         config_metadata={
-            "endpoint": {"label": "WebSocket 端点", "type": "text", "required": True},
+            "ws_url": {"label": "WebSocket 服务地址 (ws://...)", "type": "text", "required": True},
+            "access_token": {"label": "访问 Token (对端要求鉴权时填写)", "type": "password", "required": False},
+            "heartbeat_interval": {"label": "心跳间隔 (秒)", "type": "number", "required": False},
+            "reconnect_delay": {"label": "重连间隔 (秒)", "type": "number", "required": False},
         },
         icon="Cable",
         category="general",
@@ -62,13 +69,16 @@ def _register_all_adapter_types():
         display_name="REST API",
         description="通过 HTTP REST API 接入第三方平台，支持 Webhook 回调",
         adapter_cls=RESTPlatformAdapter,
+        # 模板键以 RESTPlatformAdapter.initialize 实际读取的键为准（P1-5 防漂移）
         config_template={
-            "webhook_url": "",
+            "callback_url": "",
             "api_key": "",
+            "max_queue_size": 100,
         },
         config_metadata={
-            "webhook_url": {"label": "Webhook URL", "type": "text", "required": False},
-            "api_key": {"label": "API Key", "type": "password", "required": False},
+            "callback_url": {"label": "回调通知 URL (选填，回复产生后 POST 推送)", "type": "text", "required": False},
+            "api_key": {"label": "API Key (入站鉴权)", "type": "password", "required": False},
+            "max_queue_size": {"label": "离线回复队列上限", "type": "number", "required": False},
         },
         icon="Link",
         category="general",
@@ -109,7 +119,7 @@ def _register_all_adapter_types():
     register_adapter_type(
         name="qq_official",
         display_name="QQ 官方机器人",
-        description="通过 QQ 开放平台 OpenAPI 接入 QQ 官方机器人，支持群消息和 C2C 消息，需要公网 Webhook",
+        description="通过 QQ 开放平台 OpenAPI 接入 QQ 官方机器人，支持群消息和 C2C 消息，需要公网 Webhook（推送经 Ed25519 验签，密钥为 AppSecret）",
         adapter_cls=LuomiNestQQOfficialAdapter,
         config_template={
             "app_id": "",
@@ -120,8 +130,8 @@ def _register_all_adapter_types():
         },
         config_metadata={
             "app_id": {"label": "App ID", "type": "text", "required": True},
-            "app_secret": {"label": "App Secret", "type": "password", "required": True},
-            "token": {"label": "Token（Webhook校验）", "type": "password", "required": False},
+            "app_secret": {"label": "App Secret（同时用于 Webhook 验签）", "type": "password", "required": True},
+            "token": {"label": "Token（QQ 已弃用，不参与验签）", "type": "password", "required": False},
             "enable_group": {"label": "启用群消息", "type": "switch", "required": False},
             "enable_private": {"label": "启用 C2C 消息", "type": "switch", "required": False},
         },
@@ -194,6 +204,8 @@ def _register_all_adapter_types():
             "token": "",
             "app_id": "",
             "callback_url": "",
+            "webhook_token": "",
+            "self_wxid": "",
             "anti_ban_enabled": True,
             "typing_delay_enabled": True,
             "rate_limit_per_minute": 20,
@@ -204,6 +216,12 @@ def _register_all_adapter_types():
             "token": {"label": "访问 Token", "type": "password", "required": False},
             "app_id": {"label": "设备/实例 AppID (选填)", "type": "text", "required": False},
             "callback_url": {"label": "回调 URL (选填)", "type": "text", "required": False},
+            "webhook_token": {
+                "label": "Webhook 回调密钥 (必填，推送体需携带，未配置回调全拒绝)",
+                "type": "password",
+                "required": True,
+            },
+            "self_wxid": {"label": "机器人自身 wxid (选填，登录后自动学习)", "type": "text", "required": False},
             "anti_ban_enabled": {"label": "启用防封控保护", "type": "switch", "required": False},
             "typing_delay_enabled": {"label": "启用拟人打字延迟", "type": "switch", "required": False},
             "rate_limit_per_minute": {"label": "每分钟发送上限", "type": "number", "required": False},
@@ -225,8 +243,9 @@ def _register_all_adapter_types():
             "auto_spawn_bot": True,
             "bot_name": "",
             "ws_enabled": True,
-            "ws_host": "0.0.0.0",
+            "ws_host": "127.0.0.1",
             "ws_port": 8081,
+            "ws_token": "",
             "rcon_host": "127.0.0.1",
             "rcon_port": 25575,
             "rcon_password": "",
@@ -241,6 +260,7 @@ def _register_all_adapter_types():
             "ws_enabled": {"label": "启用模组 WebSocket 通道", "type": "switch", "required": False},
             "ws_host": {"label": "WS 监听地址", "type": "text", "required": False},
             "ws_port": {"label": "WS 监听端口", "type": "number", "required": False},
+            "ws_token": {"label": "WS 网关鉴权 Token (选填，未配置时仅本机模组可接入)", "type": "password", "required": False},
             "rcon_host": {"label": "RCON 地址 (选填)", "type": "text", "required": False},
             "rcon_port": {"label": "RCON 端口 (选填)", "type": "number", "required": False},
             "rcon_password": {"label": "RCON 密码 (选填)", "type": "password", "required": False},
@@ -258,7 +278,7 @@ def _register_all_adapter_types():
         description="通用 WebSocket 游戏网关，支持任意游戏客户端通过 WebSocket 接入，自定义 JSON 协议，支持鉴权",
         adapter_cls=LuomiNestGameWebSocketAdapter,
         config_template={
-            "ws_host": "0.0.0.0",
+            "ws_host": "127.0.0.1",
             "ws_port": 8082,
             "auth_token": "",
             "max_clients": 50,
@@ -279,13 +299,20 @@ def _register_all_adapter_types():
         display_name="Telegram",
         description="通过 Telegram Bot API 接入 Telegram 平台，支持私聊和群组消息",
         adapter_cls=TelegramAdapter,
+        # 模板键以 TelegramAdapter.initialize 实际读取的键为准（P1-5 防漂移）
         config_template={
             "bot_token": "",
-            "command_register": True,
+            "allowed_users": "",
+            "polling_interval": 1,
+            "use_webhook": False,
+            "webhook_url": "",
         },
         config_metadata={
             "bot_token": {"label": "Bot Token", "type": "password", "required": True},
-            "command_register": {"label": "自动注册命令", "type": "switch", "required": False},
+            "allowed_users": {"label": "允许的用户 (逗号分隔用户名/ID，留空不限制)", "type": "text", "required": False},
+            "polling_interval": {"label": "轮询间隔 (秒，最小 1)", "type": "number", "required": False},
+            "use_webhook": {"label": "使用 Webhook 模式 (关闭则长轮询)", "type": "switch", "required": False},
+            "webhook_url": {"label": "Webhook URL (Webhook 模式必填)", "type": "text", "required": False},
         },
         icon="Send",
         category="social",
@@ -297,13 +324,19 @@ def _register_all_adapter_types():
         display_name="Discord",
         description="通过 Discord Bot 接入 Discord 服务器，支持频道消息和私聊",
         adapter_cls=DiscordAdapter,
+        # 模板键以 DiscordAdapter.initialize 实际读取的键为准（P1-5 防漂移：
+        # 原 guild_id 实现从不读取，改为 allowed_guilds 白名单才真正生效）
         config_template={
             "bot_token": "",
-            "guild_id": "",
+            "allowed_guilds": "",
+            "prefix": "",
+            "intents": DEFAULT_INTENTS,
         },
         config_metadata={
             "bot_token": {"label": "Bot Token", "type": "password", "required": True},
-            "guild_id": {"label": "服务器 ID", "type": "text", "required": False},
+            "allowed_guilds": {"label": "允许的服务器 ID (逗号分隔，留空不限制)", "type": "text", "required": False},
+            "prefix": {"label": "消息前缀 (选填，仅响应带前缀消息)", "type": "text", "required": False},
+            "intents": {"label": "Gateway Intents 位掩码 (留空用默认)", "type": "number", "required": False},
         },
         icon="Gamepad2",
         category="social",
@@ -332,13 +365,21 @@ def _register_all_adapter_types():
         display_name="小米 IoT",
         description="接入小米 IoT 平台，控制米家智能设备",
         adapter_cls=XiaomiIoTAdapter,
+        # 模板键以 XiaomiIoTAdapter.initialize 实际读取的键为准（P1-5 防漂移：
+        # 原 mi_user/mi_pass 实现从不读取，缺 app_key/app_secret 建实例必失败）
         config_template={
-            "mi_user": "",
-            "mi_pass": "",
+            "app_key": "",
+            "app_secret": "",
+            "server_url": "https://api.io.mi.com",
+            "polling_interval": 60,
+            "webhook_url": "",
         },
         config_metadata={
-            "mi_user": {"label": "小米账号", "type": "text", "required": True},
-            "mi_pass": {"label": "小米密码", "type": "password", "required": True},
+            "app_key": {"label": "App Key (开放平台应用标识)", "type": "text", "required": True},
+            "app_secret": {"label": "App Secret", "type": "password", "required": True},
+            "server_url": {"label": "服务器 URL", "type": "text", "required": False},
+            "polling_interval": {"label": "轮询间隔 (秒)", "type": "number", "required": False},
+            "webhook_url": {"label": "Webhook URL (选填，配置后走事件推送)", "type": "text", "required": False},
         },
         icon="Smartphone",
         category="iot",

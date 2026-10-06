@@ -240,3 +240,46 @@ async def stop_all_instances() -> None:
             await stop_instance(inst.instance_id)
         except Exception as e:
             logger.warning(f"[PlatformRegistry] Error stopping {inst.instance_id}: {e}")
+
+
+async def auto_start_enabled_instances() -> dict[str, bool]:
+    """应用启动时按持久化 enable 开关自动拉起平台实例（P1-2 重启自恢复）。
+
+    由 lifespan 在平台路由接线完成后调用：遍历 registry 中 enable=True
+    且未运行的实例，并发 start_instance。逐实例结果写入实例平台日志
+    （instance_started / start_failed 事件，实例日志页可见）；失败的实例
+    由 start_instance 置 ERROR 态并携带 error_message（UI 经既有实例
+    status/errorMessage 字段可见），不阻断其余实例与应用启动。
+
+    Returns:
+        instance_id -> 是否成功启动 的结果映射（无可拉起实例时为空）。
+    """
+    targets = [
+        inst for inst in _instances.values()
+        if inst.config.get("enable", True) and inst.status != PlatformStatus.RUNNING
+    ]
+    if not targets:
+        logger.info("[PlatformRegistry] No enabled platform instance to auto-start")
+        return {}
+
+    logger.info(f"[PlatformRegistry] Auto-starting {len(targets)} enabled platform instance(s)")
+    results: dict[str, bool] = {}
+
+    async def _start_one(inst: PlatformInstance) -> None:
+        try:
+            results[inst.instance_id] = await start_instance(inst.instance_id)
+        except Exception as e:
+            # start_instance 已捕获常规异常，这里兜底防止 gather 被单个实例打断
+            results[inst.instance_id] = False
+            inst.status = PlatformStatus.ERROR
+            inst.error_message = str(e)
+            logger.error(f"[PlatformRegistry] Auto-start {inst.instance_id} unexpected failure: {e}")
+
+    await asyncio.gather(*(_start_one(inst) for inst in targets))
+
+    failed = [iid for iid, ok in results.items() if not ok]
+    if failed:
+        logger.warning(f"[PlatformRegistry] Auto-start finished with failures: {failed}")
+    else:
+        logger.success(f"[PlatformRegistry] Auto-start finished: {len(results)} instance(s) running")
+    return results

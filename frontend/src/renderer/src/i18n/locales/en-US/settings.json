@@ -423,6 +423,33 @@
       "accessPasswordPlaceholder": "Enter the launch password",
       "accessPasswordDevToast": "Access control is under development; the password is kept only for the current session and is not saved"
     },
+    "backup": {
+      "title": "Data Backup & Restore",
+      "subtitle": "Backups are stored locally in data/backups (last 10 kept). For safety, credential files (auth token, keys) are never included in backup archives.",
+      "loading": "Loading backups…",
+      "createNow": "Back Up Now",
+      "creating": "Creating backup…",
+      "createSuccess": "Backup created",
+      "createFailed": "Backup failed: {message}",
+      "empty": "No backups yet. Click \"Back Up Now\" to create the first one.",
+      "restore": "Restore",
+      "remove": "Delete",
+      "confirmRestoreTitle": "Restore this backup?",
+      "confirmRestoreMessage": "Restoring will overwrite ALL current data (conversations, memory, settings, etc.) and cannot be undone. It is recommended to restart LuomiNest afterwards to refresh in-memory caches.",
+      "confirmRestore": "Restore Now",
+      "cancel": "Cancel",
+      "restoring": "Restoring…",
+      "restoreSuccess": "Data restored from backup. Please restart LuomiNest soon.",
+      "restoreFailed": "Restore failed: {message}",
+      "confirmDeleteTitle": "Delete this backup?",
+      "confirmDeleteMessage": "This cannot be undone: {name}",
+      "confirmDelete": "Delete",
+      "deleteSuccess": "Backup deleted",
+      "deleteFailed": "Delete failed: {message}",
+      "listFailed": "Failed to load backup list",
+      "credentialNoteTitle": "Credentials to verify after restore",
+      "credentialHint": "Backups contain no credential files. Same-machine restores need no action; after restoring onto another machine or a fresh OS install, encrypted items such as LLM provider API keys cannot be decrypted and must be re-entered, and you will need to sign in again."
+    },
     "mainAgent": {
       "loading": "Loading main agent configuration...",
       "personaTitle": "Persona & System Prompt",
@@ -997,6 +1024,7 @@
   "api": {
     "requestFailed": "Request failed ({status})",
     "streamReadFailed": "Unable to read the response stream. Please check the backend service",
+    "streamInterrupted": "Connection lost. The response may be incomplete, please retry",
     "http": {
       "400": "Invalid request parameters, please check your input",
       "401": "Unauthorized, please check the API Key configuration",
@@ -1042,7 +1070,8 @@
       "SCHEDULER_TASK_NOT_FOUND": "The scheduled task does not exist",
       "SCHEDULER_NOT_RUNNING": "The scheduler is not running, please try again later",
       "SCHEDULER_TASK_INVALID": "Invalid scheduled task configuration, please check the expression",
-      "SUBMARKET_NOT_FOUND": "The sub-market does not exist"
+      "SUBMARKET_NOT_FOUND": "The sub-market does not exist",
+      "CONVERSATION_STREAMING": "This conversation is still generating a reply. Please wait for it to finish"
     },
     "cloudErrors": {
       "13005": "Insufficient coin balance. Redeem on the Luomi Passport or complete the daily check-in before retrying",

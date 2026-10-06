@@ -1,6 +1,8 @@
 """REST API 平台适配器 - 通过 HTTP REST API 接入第三方系统。
 
 提供标准的 HTTP 接口，让外部系统可以通过 REST API 与 LuomiNest 对话。
+入站：外部系统 POST 消息到主服务入站端点（含 api_key 校验），
+适配器转换为 PlatformMessage 后路由到主 Agent（process_incoming_message）。
 支持两种出站模式：
 - 回调推送：配置 callback_url 后，响应会主动 POST 到该 URL
 - 主动轮询：未配置回调时，响应存入内存队列，由外部轮询拉取
@@ -8,6 +10,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import secrets
 import time
 import uuid
 from collections import defaultdict
@@ -32,7 +36,8 @@ from app.runtime.platform.infrastructure.retry import RetryConfig, async_retry
 class RESTPlatformAdapter(BasePlatformAdapter):
     """REST API 适配器：通过标准 HTTP 接口与外部系统交互。
 
-    入站：外部系统 POST 消息到本适配器，转换为 PlatformMessage 路由到主 Agent。
+    入站：外部系统 POST 消息到主服务入站端点，端点调用 process_incoming_message()
+    走完整闭环：格式验证+转换 → 路由到主 Agent（_emit_message）→ 响应回写。
     出站：主 Agent 的响应通过 callback_url 推送，或存入队列供外部轮询。
     """
 
@@ -52,6 +57,8 @@ class RESTPlatformAdapter(BasePlatformAdapter):
         # user_id -> list of response dicts
         self._message_queues: dict[str, list[dict[str, Any]]] = defaultdict(list)
         self._http_client: httpx.AsyncClient | None = None
+        # 入站路由后台任务（wechat_mp 同款持有模式，防任务被 GC）
+        self._background_tasks: set[asyncio.Task] = set()
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -88,7 +95,13 @@ class RESTPlatformAdapter(BasePlatformAdapter):
         )
 
     async def stop(self) -> None:
-        """停止适配器，释放 HTTP 客户端。"""
+        """停止适配器，终止在途路由任务并释放 HTTP 客户端。"""
+        pending = [t for t in self._background_tasks if not t.done()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        self._background_tasks.clear()
         if self._http_client:
             await self._http_client.aclose()
             self._http_client = None
@@ -100,10 +113,51 @@ class RESTPlatformAdapter(BasePlatformAdapter):
     # 入站：消息接收（REST API 特有格式验证 + 内部闭环）
     # ------------------------------------------------------------------
 
+    async def process_incoming_message(self, data: dict[str, Any]) -> PlatformMessage:
+        """REST API 入站完整通路（供 HTTP 入站端点调用）。
+
+        流程（对齐 qq_onebot 标杆「转换→过滤→路由 Agent→回写」）：
+        格式验证+转换（handle_incoming_message）→ 后台任务路由到主 Agent
+        （_emit_message，经 base._message_handler 通路）→ Agent 响应回写
+        （callback_url 推送，或转入轮询队列供 poll 端点拉取）。
+
+        Args:
+            data: 请求体，格式同 handle_incoming_message。
+
+        Returns:
+            转换后的 PlatformMessage（含生成的 message_id，供外部系统做请求关联；
+            Agent 响应异步经回调/轮询送达，不在本请求内同步返回）。
+        """
+        platform_msg = await self.handle_incoming_message(data)
+        task = asyncio.create_task(self._route_and_reply(platform_msg))
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return platform_msg
+
+    async def _route_and_reply(self, message: PlatformMessage) -> None:
+        """将 PlatformMessage 路由到主 Agent，并把响应回写（回调推送/轮询队列）。"""
+        try:
+            response = await self._emit_message(message)
+            if response and (response.content or response.image_urls):
+                await self.send_message(response, message.user_id)
+        except Exception as e:
+            logger.error(f"[rest_api] 消息路由失败: {e}")
+            self._log(
+                "error",
+                "route_failed",
+                f"消息路由到主 Agent 失败: {e}",
+                details={
+                    "error": str(e),
+                    "message_id": message.message_id,
+                    "user_id": message.user_id,
+                },
+            )
+
     async def handle_incoming_message(self, data: dict[str, Any]) -> PlatformMessage:
         """接收外部系统的 JSON 消息，进行 REST API 格式验证并转换为 PlatformMessage。
 
-        本方法仅负责格式验证与转换，消息路由由路由层调用 ``_emit_message()`` 完成。
+        本方法仅负责格式验证与转换；完整入站闭环（路由到主 Agent + 响应回写）
+        见 process_incoming_message()。
 
         Args:
             data: 请求体，格式如下::
@@ -206,7 +260,7 @@ class RESTPlatformAdapter(BasePlatformAdapter):
     # ------------------------------------------------------------------
 
     def verify_api_key(self, provided_key: str | None) -> bool:
-        """验证请求中提供的 API 密钥。
+        """验证请求中提供的 API 密钥（常量时间比较，防时序侧信道）。
 
         Args:
             provided_key: 请求中携带的 API 密钥。
@@ -216,7 +270,9 @@ class RESTPlatformAdapter(BasePlatformAdapter):
         """
         if not self._api_key:
             return True
-        return provided_key == self._api_key
+        if not provided_key:
+            return False
+        return secrets.compare_digest(provided_key, self._api_key)
 
     # ------------------------------------------------------------------
     # 内部方法

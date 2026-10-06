@@ -51,6 +51,15 @@ _MEMORY_TABLES = [
 _TZ = ZoneInfo("Asia/Shanghai")
 
 
+class MemoryStoreLoadError(RuntimeError):
+    """记忆轨道加载失败（P0-3 fail-loud）。
+
+    load 失败后拒绝执行写路径：save_data 的语义是"以给定数据整轨覆盖"
+    （facts 全量 DELETE+INSERT），在未成功加载的状态下写入 = 以空数据
+    清空整轨记忆。读路径可降级（返回空数据不缓存），写路径必须显式失败。
+    """
+
+
 # ──────────────────────────────────────────────────────────────
 # 双轨目录解析（洋葱架构 §8.5.2 / §13 B18）
 # ──────────────────────────────────────────────────────────────
@@ -407,6 +416,9 @@ class MemoryStore:
         # threading.RLock 在此场景下是正确的选择（asyncio.Lock 不能在非 async 函数中使用）。
         self._lock = threading.RLock()
         self._cache: MemoryData | None = None
+        # P0-3 fail-loud：最近一次 load 是否失败。失败期间禁止写路径
+        # （mutate/save_data 抛 MemoryStoreLoadError），防止以空数据覆盖整轨记忆
+        self._load_failed = False
         self._owner_key = _derive_owner_key(self._path)
         self._conversation_id = _derive_conversation_id(self._path)
         self._db = _MemoryDB(self._path)
@@ -479,9 +491,27 @@ class MemoryStore:
                     )
                     data.summaries = self._summaries_from_rows(summary_rows)
             except Exception as e:
-                logger.warning(f"[Memory] Failed to load memory data from SQLite: {e}")
+                # P0-3 fail-loud：加载失败不缓存空数据（读路径降级返回空，
+                # 写路径经 _ensure_writable 守卫拒绝），否则后续任意写入
+                # 会以空 facts 整轨覆盖、清空该轨全部记忆
+                self._load_failed = True
+                logger.error(f"[Memory] Failed to load memory data from SQLite: {e}")
+                return data
+            self._load_failed = False
             self._cache = data
             return data
+
+    def _ensure_writable(self) -> None:
+        """写路径守卫：从未成功加载过（load 失败且缓存为空）时拒绝写入。
+
+        save_data 是整轨覆盖语义（facts 全量 DELETE+INSERT），带着"未成功
+        加载"状态写入 = 以空/残缺数据清空该轨记忆，必须显式失败（fail-loud）。
+        """
+        if self._cache is None and self._load_failed:
+            raise MemoryStoreLoadError(
+                f"[Memory] Refusing to write track {self._owner_key!r}: "
+                "last load failed; writing now would overwrite the track with empty data"
+            )
 
     def mutate(self, fn):
         """读-改-写原子化：在 store 锁内 load → fn(data) → save，返回 fn 的返回值。
@@ -489,15 +519,20 @@ class MemoryStore:
         FactManager 的单条写操作（add/remove/update/clear）原先为
         load→改→save 三步无锁序列，并发调用会相互覆盖（后写者整体覆盖
         先写者的修改）。收进同一锁段后序列化执行。
+
+        P0-3：load 失败（未成功加载）时先于 fn 抛 MemoryStoreLoadError，
+        避免 fn 副作用与随后的空数据覆盖。
         """
         with self._lock:
             data = self.load_data()
+            self._ensure_writable()
             result = fn(data)
             self.save_data(data)
             return result
 
     def save_data(self, data: MemoryData) -> None:
         with self._lock:
+            self._ensure_writable()
             data.last_updated = utc_now()
             try:
                 with self._db.session() as session:

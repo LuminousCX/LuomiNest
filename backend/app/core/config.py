@@ -3,6 +3,7 @@ import sys
 from functools import lru_cache
 
 from loguru import logger
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.hardware import get_hardware_profile
@@ -17,6 +18,23 @@ class Settings(BaseSettings):
     APP_VERSION: str = __version__
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
+
+    # ── 部署形态单开关（链路 E 容器化 / 05 报告 §6 双形态设计）──
+    # desktop（默认）：单人桌面形态，全部行为与历史版本完全一致
+    # headless：Docker/无头容器形态——允许绑定非 loopback；认证凭据来源必须
+    #   显式三选一（LUOMINEST_AUTH_TOKEN env / 数据卷 auth_token 文件 /
+    #   AUTH_MODE=jwt+显式 JWT_SECRET_KEY），否则拒绝启动；认证永远强制开启
+    #   （LUOMINEST_NO_AUTH 不豁免，保持既有加固）。行为差异清单见
+    #   app/security/auth/local_token.py::ensure_boot_auth_token 与 main.py。
+    DEPLOYMENT_MODE: str = "desktop"
+
+    # 主 API 监听地址/端口。原 main.py argparse 硬编码 127.0.0.1:18000，收编进
+    # Settings 打通 env 通道（12-Factor III；无头容器没有传 CLI 参数的入口）。
+    # env 名沿项目 LUOMINEST_ 前缀惯例：LUOMINEST_HOST / LUOMINEST_PORT。
+    # 刻意不接受裸 HOST/PORT——那是太多无关工具的常用变量名，误读风险大。
+    # 优先级链：CLI --host/--port > 本字段（env）> 默认值，见 main.py::resolve_host_port。
+    HOST: str = Field(default="127.0.0.1", validation_alias="LUOMINEST_HOST")
+    PORT: int = Field(default=18000, validation_alias="LUOMINEST_PORT", ge=1, le=65535)
 
     # 空字符串表示运行时根据 DATA_DIR 自动计算（见 get_settings）
     DATABASE_URL: str = ""
@@ -276,6 +294,17 @@ def get_settings() -> Settings:
     s.DEV_MODE = not is_frozen
     s.DATA_DIR_INJECTED = env_data_dir_set
 
+    # 部署形态归一化：非法值按 desktop 处理并告警（与 LLM_CONTEXT_STRATEGY 同策略，
+    # 保守回退到历史行为而非拒绝启动——desktop 即现状，认证本来就强制开启）
+    _mode = (s.DEPLOYMENT_MODE or "").strip().lower()
+    if _mode not in ("desktop", "headless"):
+        logger.warning(
+            f"DEPLOYMENT_MODE={s.DEPLOYMENT_MODE!r} is invalid, "
+            f"must be 'desktop' or 'headless'. Falling back to 'desktop'"
+        )
+        _mode = "desktop"
+    s.DEPLOYMENT_MODE = _mode
+
     # 若未显式配置 DATABASE_URL，则基于 DATA_DIR 自动生成 SQLite 路径
     if not s.DATABASE_URL:
         db_path = os.path.join(s.DATA_DIR, "luominest.db")
@@ -307,6 +336,19 @@ def get_settings() -> Settings:
         s.SECRET_KEY = load_or_create_secret_key(s.DATA_DIR)
         logger.success("[Config] SECRET_KEY loaded from persistent store")
     return s
+
+
+def resolve_host_port(cli_host: str | None, cli_port: int | None) -> tuple[str, int]:
+    """解析主 API 监听地址/端口，优先级链：CLI > env（Settings 字段）> 默认值。
+
+    P0-2（链路 E）：host/port 原本只认 main.py 的 CLI 参数，无头容器没有传参
+    入口，故收编进 Settings（env: LUOMINEST_HOST / LUOMINEST_PORT）；
+    CLI 显式传入时仍是最高优先级（桌面启动方式不变）。
+    """
+    s = settings
+    host = cli_host if cli_host is not None else s.HOST
+    port = cli_port if cli_port is not None else s.PORT
+    return host, port
 
 
 settings = get_settings()

@@ -177,6 +177,10 @@ export interface ChatStreamChunk {
    * 仅错误 chunk 携带；命中 i18n api.cloudErrors 映射时展示本地化文案。
    */
   errCode?: string
+  /** 本回合 assistant 消息落库持久 id（仅 done=True 携带，用于替换本地占位 id） */
+  message_id?: string
+  /** 本回合 user 消息落库持久 id（仅 done=True 携带，用于替换本地占位 id） */
+  user_message_id?: string
 }
 /** Agent 命令执行三档确认请求载荷（后端 PermissionGate 中间件） */
 export interface PermissionRequest {

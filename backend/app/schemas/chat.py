@@ -27,6 +27,9 @@ class ChatRequest(BaseModel):
     ] | None = None
     search_results: str | None = Field(default=None, max_length=100_000)
     versions: list[dict[str, Any]] | None = None
+    # 客户端消息幂等键（链路审查 P1-6）：前端/平台重试携带同一标识时，
+    # 后端按（会话 + client_message_id）查重，命中则跳过重复落库 user 消息行
+    client_message_id: str | None = Field(default=None, max_length=64)
     # 用户本次请求显式选择的技能 ID（优先于关键词自动匹配注入）
     skill_ids: list[str] | None = None
     # Agent 集群调用内部字段（不暴露前端，仅供 agent_tool_call 递归守卫使用）
@@ -47,6 +50,9 @@ class ChatResponse(BaseModel):
     # 云链路业务错误码（数字字符串，如 "13005"；无业务码为 null）。
     # 非流式业务错误随 200 响应携带（content 以 "[Error] " 开头），前端映射本地化文案
     errCode: str | None = None
+    # 本回合落库消息持久 id（链路审查 P1-6：assistant/user 消息行 uuid，非流式随体返回）
+    message_id: str | None = None
+    user_message_id: str | None = None
 
 
 class ChatStreamChunk(BaseModel):
@@ -69,15 +75,22 @@ class ChatStreamChunk(BaseModel):
     # 命令执行确认请求（PermissionGate：{request_id, tool, command, timeout}，
     # 前端弹三档确认窗后 POST /chat/tool-permission/{request_id} 回调）
     permission_request: dict[str, Any] | None = None
-    # 压缩后上下文 token 数（done 时回填）
+    # 压缩后上下文 token 数（done 时回填；字符加权估算口径）
     context_tokens: int | None = None
     # 上下文窗口容量（done 时回填，前端用于计算使用百分比）
     context_max_tokens: int | None = None
+    # 本回合真实 token 用量（done 时回填；多轮工具调用累加值，snake_case 键与
+    # usage_tracker 读取口径一致。与 context_tokens 估算口径为双口径分名，P2-1）
+    usage: dict[str, Any] | None = None
     # 模型路由通知（如专业模式推理模型退化为主模型，前端右上角 toast 展示）
     notice: str | None = None
     # 云链路业务错误码（数字字符串，如 "13005"；无业务码为 null）。
     # 出现在错误 chunk 上，前端按 errCode 映射本地化文案（message 为人类可读兜底）
     errCode: str | None = None
+    # 本回合落库消息持久 id（仅 done chunk 携带，链路审查 P1-6）：
+    # 前端收到后用服务端 uuid 替换本地占位 id，删除/重生成/引用按落库 id 定位
+    message_id: str | None = None
+    user_message_id: str | None = None
 
     @field_validator("content", "reasoning_content", mode="before")
     @classmethod

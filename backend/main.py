@@ -68,27 +68,46 @@ def setup_logging():
 
 def parse_args():
     parser = argparse.ArgumentParser(description="LuomiNest Backend Server")
-    parser.add_argument("--host", type=str, default="127.0.0.1", help="Host to bind")
-    parser.add_argument("--port", type=int, default=18000, help="Port to bind")
+    # P0-2（链路 E 容器化）：host/port 默认值不在 argparse 写死，收编进 Settings
+    # （env: LUOMINEST_HOST / LUOMINEST_PORT，默认 127.0.0.1:18000 与历史一致）；
+    # CLI 显式传入时仍是最高优先级（桌面启动方式不变），无头容器靠 env 配置。
+    parser.add_argument("--host", type=str, default=None, help="Host to bind (default: LUOMINEST_HOST env or 127.0.0.1)")
+    parser.add_argument("--port", type=int, default=None, help="Port to bind (default: LUOMINEST_PORT env or 18000)")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     return parser.parse_args()
+
+def warn_listen_exposure(host: str) -> None:
+    """监听面安全告警：非 loopback 的 LAN 暴露告警 + headless loopback 提示。
+
+    - desktop 下显式配 0.0.0.0 维持历史行为：告警不阻断（05 报告未建议 desktop 拒绝）
+    - headless 下绑 loopback 打提示性告警：容器外表现为 connection refused（P0-2 症状），
+      但不阻断——sidecar/集成测试等场景确实可能只在本容器内访问
+    """
+    os.environ["LUOMINEST_LISTEN_HOST"] = host
+    from app.core.config import settings
+    from app.runtime.platform.infrastructure.exposure import is_loopback_host, warn_lan_exposure
+    warn_lan_exposure(host)
+    if settings.DEPLOYMENT_MODE == "headless" and is_loopback_host(host):
+        logger.warning(
+            f"[Headless] Listening on loopback address {host} — unreachable from outside "
+            f"the container. Set LUOMINEST_HOST=0.0.0.0 (or --host 0.0.0.0) to expose the API."
+        )
 
 def main():
     args = parse_args()
     setup_console_encoding()
     setup_logging()
 
-    # P0-3 传输安全：把监听地址暴露给适配器/工具（如 rest_api/websocket 的暴露告警），
-    # 并在非 loopback 监听时打醒目安全 WARNING（/mcp、QQ 反向 WS 等端口已暴露局域网）。
-    os.environ["LUOMINEST_LISTEN_HOST"] = args.host
-    from app.runtime.platform.infrastructure.exposure import warn_lan_exposure
-    warn_lan_exposure(args.host)
+    # host/port 优先级链：CLI --host/--port > env LUOMINEST_HOST/PORT（Settings）> 默认值
+    from app.core.config import resolve_host_port
+    host, port = resolve_host_port(args.host, args.port)
+    warn_listen_exposure(host)
+
+    logger.info(f"LuomiNest Backend starting on {host}:{port}")
 
     # Use the default ProactorEventLoop on Windows. The SelectorEventLoop breaks
     # edge_tts (aiohttp WebSocket + SSL) — no audio is received from the service.
     # ProactorEventLoop supports subprocess, SSL, and pipes on Python 3.8+.
-
-    logger.info(f"LuomiNest Backend starting on {args.host}:{args.port}")
 
     # 依赖缺失时直接报错退出，绝不静默降级为 minimal mode
     # （历史教训：minimal mode 会占用端口并让前端误以为后端就绪，导致所有 /api/v1/* 返回 404）
@@ -107,8 +126,8 @@ def main():
         app = create_app()
         uvicorn.run(
             app,
-            host=args.host,
-            port=args.port,
+            host=host,
+            port=port,
             log_level="debug" if args.debug else "info",
             access_log=args.debug
         )

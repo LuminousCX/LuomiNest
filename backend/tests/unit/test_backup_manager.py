@@ -3,10 +3,14 @@
 覆盖：
 - create_backup 产出 zip 且不再因 list_backups 的 timezone NameError 被误删
 - 备份内 luominest.db 为一致性快照（-wal/-shm 不入包），其他文件照旧打包
+- 凭据文件（auth_token / secret_key* / jwt_secret_key*）与锁/.bak 残留不入包，
+  包内清单记录排除项与恢复指引（04 审查 P0-1）
 - list_backups 正常返回带 UTC 时区的条目
 - restore_backup 对损坏 zip 预检失败，不污染现有数据
+- restore roundtrip：备份 → 破坏现库 → 恢复 → 数据回归，清单不落盘（P0-2）
 """
 
+import json
 import os
 import sqlite3
 import zipfile
@@ -14,11 +18,15 @@ import zipfile
 import pytest
 
 from app.core.config import settings
-from app.infrastructure.backup.backup_manager import LumiBackupManager
+from app.infrastructure.backup.backup_manager import (
+    BACKUP_MANIFEST_NAME,
+    CREDENTIAL_EXCLUDES,
+    LumiBackupManager,
+)
 
 
 def _make_data_dir(tmp_path):
-    """构造一个带最小 SQLite 库与配置文件的数据目录。"""
+    """构造一个带最小 SQLite 库、配置文件与凭据文件的数据目录。"""
     data_dir = tmp_path / "data"
     (data_dir / "config").mkdir(parents=True)
     conn = sqlite3.connect(data_dir / "luominest.db")
@@ -32,6 +40,15 @@ def _make_data_dir(tmp_path):
     (data_dir / "luominest.db-wal").write_bytes(b"wal")
     (data_dir / "luominest.db-shm").write_bytes(b"shm")
     (data_dir / "config" / "app.json").write_text("{}", encoding="utf-8")
+    # 凭据文件（P0-1）：明文令牌与机器绑定密钥材料，备份中不应出现
+    (data_dir / "config" / "auth_token").write_text("secret-bearer-token", encoding="utf-8")
+    (data_dir / "config" / "secret_key").write_text("gAAAAA-fernet-blob", encoding="utf-8")
+    (data_dir / "config" / "secret_key.kdf-salt").write_bytes(b"s" * 32)
+    (data_dir / "config" / "jwt_secret_key").write_text("gAAAAA-jwt-blob", encoding="utf-8")
+    (data_dir / "config" / "jwt_secret_key.kdf-salt").write_bytes(b"j" * 32)
+    # 锁文件 / 手工 .bak 残留（P3-3）：备份中不应出现
+    (data_dir / "db_init.lock").write_bytes(b"lock")
+    (data_dir / "luominest.db.bak-20260910").write_bytes(b"old db")
     return data_dir
 
 
@@ -73,6 +90,33 @@ def test_create_backup_produces_consistent_zip(backup_env):
         conn.close()
 
 
+def test_create_backup_excludes_credentials(backup_env):
+    """P0-1：凭据文件与锁/.bak 残留不入包，包内清单记录排除项与恢复指引。"""
+    manager = LumiBackupManager()
+    path = manager.create_backup(label="cred")
+    assert path is not None
+
+    with zipfile.ZipFile(path) as zf:
+        names = [n.replace("\\", "/") for n in zf.namelist()]
+        # 普通数据文件照旧入包
+        assert "config/app.json" in names
+        # 全部凭据文件不入包
+        for cred in CREDENTIAL_EXCLUDES:
+            assert cred not in names, f"credential leaked into backup: {cred}"
+        assert "db_init.lock" not in names
+        assert "luominest.db.bak-20260910" not in names
+        # zip 内容层面再验一遍：令牌明文不出现在任何包内条目中
+        for name in names:
+            assert b"secret-bearer-token" not in zf.read(name)
+        # 包内清单存在，列出被排除的凭据与恢复指引
+        assert BACKUP_MANIFEST_NAME in names
+        manifest = json.loads(zf.read(BACKUP_MANIFEST_NAME).decode("utf-8"))
+        excluded_paths = {c["path"] for c in manifest["excluded_credentials"]}
+        assert excluded_paths == set(CREDENTIAL_EXCLUDES)
+        for cred in manifest["excluded_credentials"]:
+            assert cred["hint"]
+
+
 def test_list_backups_after_create(backup_env):
     manager = LumiBackupManager()
     path = manager.create_backup(label="test")
@@ -92,7 +136,9 @@ def test_restore_rejects_corrupted_zip(backup_env):
     corrupt = backup_env / "corrupt.zip"
     corrupt.write_bytes(b"PK\x03\x04 this is not a valid zip")
 
-    assert manager.restore_backup(str(corrupt)) is False
+    result = manager.restore_backup(str(corrupt))
+    assert result["ok"] is False
+    assert result["message"]
 
     # 现有数据不被污染
     conn = sqlite3.connect(backup_env / "luominest.db")
@@ -100,3 +146,95 @@ def test_restore_rejects_corrupted_zip(backup_env):
         assert conn.execute("SELECT COUNT(*) FROM demo").fetchone()[0] == 3
     finally:
         conn.close()
+
+
+def test_restore_roundtrip_recovers_data(backup_env):
+    """P0-2 roundtrip：备份 → 破坏现库 → 恢复 → 数据回归。
+
+    现库文件存在且为合法 SQLite 库 → 走 sqlite3 backup API 在线写回路径。
+    """
+    manager = LumiBackupManager()
+    backup_path = manager.create_backup(label="roundtrip")
+    assert backup_path is not None
+
+    # 破坏现库：清空 demo 表
+    conn = sqlite3.connect(backup_env / "luominest.db")
+    try:
+        conn.execute("DELETE FROM demo")
+        conn.commit()
+        assert conn.execute("SELECT COUNT(*) FROM demo").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+    result = manager.restore_backup(backup_path)
+    assert result["ok"] is True, result
+    assert result["db_restore_method"] == "live_backup_api"
+    assert "luominest.db" in result["restored"]
+    assert result["failed"] == []
+    assert result["restart_recommended"] is True
+    # 恢复摘要携带凭据重配指引（来自包内清单）
+    hint_paths = {c["path"] for c in result["credentials_to_reconfigure"]}
+    assert hint_paths == set(CREDENTIAL_EXCLUDES)
+
+    # 数据回归
+    conn = sqlite3.connect(backup_env / "luominest.db")
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM demo").fetchone()[0] == 3
+    finally:
+        conn.close()
+    # 清单是元数据，不落盘；临时恢复目录已清理
+    assert not (backup_env / BACKUP_MANIFEST_NAME).exists()
+    assert not (backup_env / "_restore_temp").exists()
+
+
+def test_restore_file_replace_recovers_data(backup_env):
+    """现库文件不存在（如误删/损坏后被移走）→ 整文件替换路径。"""
+    manager = LumiBackupManager()
+    backup_path = manager.create_backup(label="replace")
+    assert backup_path is not None
+
+    (backup_env / "luominest.db").unlink()
+
+    result = manager.restore_backup(backup_path)
+    assert result["ok"] is True, result
+    assert result["db_restore_method"] == "file_replace"
+
+    conn = sqlite3.connect(backup_env / "luominest.db")
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM demo").fetchone()[0] == 3
+    finally:
+        conn.close()
+
+
+def test_restore_rejects_corrupted_db_in_backup(backup_env):
+    """备份内库文件损坏 → integrity_check 拦截，不落盘、不污染现有数据。"""
+    manager = LumiBackupManager()
+    bad = backup_env / "bad_db.zip"
+    with zipfile.ZipFile(bad, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("luominest.db", b"this is not a sqlite database at all")
+        zf.writestr("config/app.json", "{}")
+
+    result = manager.restore_backup(str(bad))
+    assert result["ok"] is False
+    assert "完整性" in result["message"]
+
+    conn = sqlite3.connect(backup_env / "luominest.db")
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM demo").fetchone()[0] == 3
+    finally:
+        conn.close()
+    assert not (backup_env / "_restore_temp").exists()
+
+
+def test_resolve_backup_path_rejects_traversal(backup_env):
+    """恢复/删除入口只接受 backups 目录内的 .zip 文件名（防路径穿越）。"""
+    manager = LumiBackupManager()
+    assert manager.resolve_backup_path("../evil.zip") is None
+    assert manager.resolve_backup_path("missing.zip") is None
+    assert manager.resolve_backup_path("not-a-zip") is None
+    assert manager.resolve_backup_path("") is None
+
+    path = manager.create_backup(label="resolve")
+    assert path is not None
+    resolved = manager.resolve_backup_path(os.path.basename(path))
+    assert resolved == path

@@ -18,6 +18,7 @@ from app.schemas.chat import (
 )
 from app.core.utils import utc_now, require_store, ok
 from app.core.exceptions import BadRequestError, NotFoundError, ValidationError
+from app.services.chat_service import normalize_message_versions
 from app.security.rate_limiter import limiter, RATE_CHAT
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -294,6 +295,12 @@ class RegenerateRequest(BaseModel):
     temperature: float | None = None
     max_tokens: int | None = None
     top_p: float | None = None
+    # 待重建的 assistant 消息 id（链路审查 P1-8）：后端从该消息起整段截断后原地重建，
+    # 修复非尾重生成时旧回答残留 + 新回答错位追加末尾；未携带时兼容旧行为弹尾条
+    message_id: str | None = Field(default=None, max_length=64)
+    # 用户显式选择的技能 ID（与 ChatRequest 对齐）：process_conversation_turn 无条件
+    # 读取该字段，缺失时 regenerate 路由会 AttributeError（历史缺陷，此处补齐）
+    skill_ids: list[str] | None = None
 
 
 class UpdateMessageVersionRequest(BaseModel):
@@ -310,9 +317,20 @@ async def regenerate_message(
     conversation_store=Depends(get_conversation_store),
 ):
     logger.info(f"[API] POST /chat/conversations/{conversation_id}/regenerate")
-    result = await chat_service.process_conversation_turn(
-        conversation_id, request, adapter, conversation_store, regenerate=True,
-    )
+    # 会话流互斥（链路审查 P1-8）：先占位再进入业务流程，同会话已有流在跑直接 409；
+    # 令牌未被流生成器接管（业务前置失败/请求取消）时在此释放，避免标记泄漏
+    stream_token = chat_service.begin_conv_stream(conversation_id) if request.stream else None
+    try:
+        result = await chat_service.process_conversation_turn(
+            conversation_id, request, adapter, conversation_store,
+            regenerate=True,
+            regenerate_message_id=request.message_id,
+            stream_token=stream_token,
+        )
+    except BaseException:
+        if stream_token:
+            chat_service.end_conv_stream(conversation_id, stream_token)
+        raise
     if request.stream:
         return result
     logger.success(f"[API] Regenerate done: conv={conversation_id}")
@@ -322,6 +340,9 @@ async def regenerate_message(
         model=result["model"],
         provider=result["provider"],
         errCode=result.get("errCode"),
+        # 新 assistant 消息落库 id（链路审查 P1-6，非流式随体返回）
+        message_id=result.get("message_id"),
+        user_message_id=result.get("user_message_id"),
     )
 
 
@@ -340,9 +361,12 @@ async def update_message_version(
 
     for msg in conv["messages"]:
         if msg.get("id") == request.message_id:
-            versions = msg.get("versions", [])
+            # 读时归一（链路审查 P1-8）：旧数据存在 camelCase 版本条目，先统一为
+            # snake_case 再取值并写回，切换一次即完成该消息版本的渐进迁移（不批量改库）
+            versions = normalize_message_versions(msg.get("versions", []))
             if not versions or request.current_version < 0 or request.current_version >= len(versions):
                 raise ValidationError(f"Invalid version index {request.current_version}")
+            msg["versions"] = versions
             msg["current_version"] = request.current_version
             v = versions[request.current_version]
             msg["content"] = v.get("content", "")
@@ -424,9 +448,19 @@ async def add_message(
     conversation_store=Depends(get_conversation_store),
 ):
     logger.info(f"[API] POST /chat/conversations/{conversation_id}/messages - Adding message")
-    result = await chat_service.process_conversation_turn(
-        conversation_id, body, adapter, conversation_store,
-    )
+    # 会话流互斥标记登记（链路审查 P1-8）：发送新消息沿用前端 cancel-and-replace
+    # 契约（replace=True 强制登记新令牌，顶掉进行中的旧流标记），
+    # 使后续 regenerate 在本流结束前被 409 拒绝
+    stream_token = chat_service.begin_conv_stream(conversation_id, replace=True) if body.stream else None
+    try:
+        result = await chat_service.process_conversation_turn(
+            conversation_id, body, adapter, conversation_store,
+            stream_token=stream_token,
+        )
+    except BaseException:
+        if stream_token:
+            chat_service.end_conv_stream(conversation_id, stream_token)
+        raise
     if body.stream:
         return result
     return ChatResponse(
@@ -435,6 +469,9 @@ async def add_message(
         model=result["model"],
         provider=result["provider"],
         errCode=result.get("errCode"),
+        # 本回合落库消息持久 id（链路审查 P1-6，非流式随体返回）
+        message_id=result.get("message_id"),
+        user_message_id=result.get("user_message_id"),
     )
 
 

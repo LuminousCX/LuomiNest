@@ -349,6 +349,7 @@
     "workflowDone": "工作流执行完成",
     "workflowFailed": "工作流执行失败：{msg}",
     "regenerateFailed": "重新生成失败：{msg}",
+    "streamInProgress": "正在生成回复中，请等待完成后再试",
     "loadHistoryFailed": "加载历史消息失败：{msg}",
     "compressSuccess": "上下文压缩成功：{before} → {after} tokens",
     "compressFailed": "上下文压缩失败：{msg}",

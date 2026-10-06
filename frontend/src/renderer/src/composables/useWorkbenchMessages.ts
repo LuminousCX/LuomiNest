@@ -173,10 +173,8 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
         statsStore.interceptChunk(chunk, chatStore.currentConvId)
       }
 
-      // 模型路由通知（如专业模式推理模型退化为主模型）：右上角 toast
-      if (chunk.notice) {
-        toast.warning(chunk.notice)
-      }
+      // 模型路由通知（chunk.notice）由 chat store 的 createStreamCallbacks 统一
+      // toast（P1-2 修复后 notice 已映射可达），此处不再重复提示
 
       if (chunk.done) {
         pendingPermissionRequests.value = []

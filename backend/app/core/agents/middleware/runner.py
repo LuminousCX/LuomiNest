@@ -425,6 +425,22 @@ class AgentRunner:
 
         return ctx.state
 
+    @staticmethod
+    def _accumulate_usage(ctx: AgentContext, usage: dict[str, Any] | None) -> None:
+        """把单次 LLM 调用的 usage 累加进 ctx.state["usage"]。
+
+        多轮工具调用每轮 LLM 调用都会上报一次 usage，直接覆盖会系统性低估
+        整回合真实消耗（链路审查 P2-1）。按 canonical snake_case 键累加，
+        与 usage_tracker / ChatStreamChunk.usage 的读取口径一致。
+        """
+        if not usage:
+            return
+        prev = ctx.state.get("usage") or {}
+        merged = dict(prev)
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            merged[key] = (prev.get(key) or 0) + (usage.get(key) or 0)
+        ctx.state["usage"] = merged
+
     def _process_stream_event(
         self, ctx: AgentContext, event: StreamEvent,
     ) -> str | None:
@@ -469,7 +485,7 @@ class AgentRunner:
             return None
 
         if event.type == "usage":
-            ctx.state["usage"] = event.data.get("usage")
+            self._accumulate_usage(ctx, event.data.get("usage"))
             return None
 
         return None
@@ -509,8 +525,7 @@ class AgentRunner:
             if response.reasoning:
                 ctx.state["reasoning"] = response.reasoning
             ctx.state["tool_calls"] = response.tool_calls or []
-            if response.usage:
-                ctx.state["usage"] = response.usage
+            AgentRunner._accumulate_usage(ctx, response.usage)
             ctx.state["finish_reason"] = response.finish_reason
             return
 
@@ -521,8 +536,7 @@ class AgentRunner:
             if response.get("reasoning"):
                 ctx.state["reasoning"] = response["reasoning"]
             ctx.state["tool_calls"] = response.get("tool_calls") or []
-            if response.get("usage"):
-                ctx.state["usage"] = response["usage"]
+            AgentRunner._accumulate_usage(ctx, response.get("usage"))
             ctx.state["finish_reason"] = response.get("finish_reason", "stop")
             return
 

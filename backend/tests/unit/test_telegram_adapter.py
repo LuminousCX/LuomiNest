@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.runtime.platform.adapters.telegram import (
+    TELEGRAM_LONG_POLL_TIMEOUT,
     TELEGRAM_MAX_MESSAGE_LENGTH,
     TelegramAdapter,
 )
@@ -374,20 +375,99 @@ class TestApiRequest:
             await adapter._api_request("getMe")
 
 
-# ─── handle_webhook 测试 ──────────────────────────────────────
+# ─── handle_webhook / 入站闭环测试 ────────────────────────────
+
+
+def _mock_api_client(adapter: TelegramAdapter) -> AsyncMock:
+    """给适配器挂一个返回 ok 的 mock Telegram API 客户端。"""
+    adapter._http_client = AsyncMock()
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {"ok": True, "result": {}}
+    mock_resp.raise_for_status = MagicMock()
+    adapter._http_client.post = AsyncMock(return_value=mock_resp)
+    return adapter._http_client
+
+
+async def _drain(adapter: TelegramAdapter) -> None:
+    """等待适配器在途后台任务结束（rest_api 同款模式，telegram 当前无后台任务）。"""
+    if adapter._poll_task:
+        await asyncio.gather(adapter._poll_task, return_exceptions=True)
 
 
 class TestHandleWebhook:
-    """Webhook 入口测试。"""
+    """Webhook 入口完整闭环测试（P0-4：入站死路修复回归）。"""
 
     @pytest.mark.asyncio
-    async def test_handle_webhook_delegates(self, adapter: TelegramAdapter) -> None:
-        update = make_telegram_update(text="webhook test")
-        result = await adapter.handle_webhook(update)
-        # handle_webhook 返回 None（它调用 handle_update 但不返回值）
-        # 但 handle_update 内部返回了 PlatformMessage
-        # handle_webhook 的签名是 async -> None，所以结果是 None
-        assert result is None
+    async def test_full_loop_agent_called_and_reply_sent(self, adapter: TelegramAdapter) -> None:
+        """模拟入站消息 → 断言 Agent（message handler）被调用 → 断言回复回写 Telegram。"""
+        received: list[tuple[Any, str]] = []
+
+        async def fake_agent(message, instance_id):
+            received.append((message, instance_id))
+            return PlatformResponse(content="agent reply")
+
+        adapter.set_instance_id("inst-tg-1")
+        adapter.set_message_handler(fake_agent)
+        client = _mock_api_client(adapter)
+
+        update = make_telegram_update(
+            text="hello bot", user_id=42, chat_id=42, chat_type="private", message_id=7,
+        )
+        handled = await adapter.handle_webhook(update)
+
+        # Update 被接受处理
+        assert handled is True
+        # Agent 被调用，收到转换后的 PlatformMessage
+        assert len(received) == 1
+        msg, inst_id = received[0]
+        assert msg.platform == "telegram"
+        assert msg.content == "hello bot"
+        assert msg.user_id == "42"
+        assert msg.session_id == "42"
+        assert msg.message_id == "7"
+        assert inst_id == "inst-tg-1"
+        # 回复回写 Telegram（sendMessage 到原 chat）
+        client.post.assert_called_once()
+        call = client.post.call_args
+        assert call[0][0] == "sendMessage"
+        assert call[1]["json"]["chat_id"] == "42"
+        assert call[1]["json"]["text"] == "agent reply"
+
+    @pytest.mark.asyncio
+    async def test_filtered_update_returns_false_and_skips_agent(self, adapter_with_users: TelegramAdapter) -> None:
+        """白名单外用户的消息被过滤：Agent 不被调用，回写不发生。"""
+        handler = AsyncMock(return_value=PlatformResponse(content="should not"))
+        adapter_with_users.set_message_handler(handler)
+        client = _mock_api_client(adapter_with_users)
+
+        update = make_telegram_update(text="blocked", user_id=999)
+        handled = await adapter_with_users.handle_webhook(update)
+
+        assert handled is False
+        handler.assert_not_awaited()
+        client.post.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_group_message_without_mention_filtered(self, adapter: TelegramAdapter) -> None:
+        """群聊消息未被 @ 也未回复 bot：过滤，Agent 不被调用。"""
+        handler = AsyncMock(return_value=None)
+        adapter.set_message_handler(handler)
+
+        update = make_telegram_update(text="普通群聊", chat_id=-100, chat_type="group")
+        assert await adapter.handle_webhook(update) is False
+        handler.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_agent_no_response_no_writeback(self, adapter: TelegramAdapter) -> None:
+        """Agent 无响应（handler 返回 None）：不回写。"""
+        handler = AsyncMock(return_value=None)
+        adapter.set_message_handler(handler)
+        client = _mock_api_client(adapter)
+
+        update = make_telegram_update(text="hello", user_id=1)
+        assert await adapter.handle_webhook(update) is True
+        handler.assert_awaited_once()
+        client.post.assert_not_called()
 
 
 # ─── get_target 测试 ─────────────────────────────────────────
@@ -462,3 +542,207 @@ class TestDownloadImage:
     async def test_download_image_no_client(self, adapter: TelegramAdapter) -> None:
         url = await adapter.download_image("abc123")
         assert url is None
+
+
+# ─── 长轮询入站测试 ────────────────────────────────────────────
+
+
+class TestPollingLoop:
+    """getUpdates 长轮询入站闭环测试（P0-4：全仓无轮询调 getUpdates 修复回归）。"""
+
+    @pytest.mark.asyncio
+    async def test_polling_processes_updates_and_advances_offset(self, adapter: TelegramAdapter) -> None:
+        """轮询拿到 Update → Agent 被调用 → 回复回写；offset 推进到最大 update_id+1。"""
+        received: list[Any] = []
+
+        async def fake_agent(message, instance_id):
+            received.append(message)
+            return PlatformResponse(content=f"reply:{message.content}")
+
+        adapter.set_instance_id("inst-tg-1")
+        adapter.set_message_handler(fake_agent)
+        client = _mock_api_client(adapter)
+
+        update1 = make_telegram_update(text="first", user_id=42, chat_id=42, message_id=1)
+        update1["update_id"] = 101
+        update2 = make_telegram_update(text="second", user_id=42, chat_id=42, message_id=2)
+        update2["update_id"] = 102
+
+        api_calls: list[tuple[str, dict | None]] = []
+        real_api_request = adapter._api_request
+
+        async def fake_api_request(method, params=None, timeout=None):
+            api_calls.append((method, params))
+            if method == "getUpdates":
+                if len(api_calls) == 1:
+                    return [update1, update2]
+                adapter._stop_polling.set()
+                return []
+            # 出站（sendMessage 等）走真实实现，落在 mock http 客户端上
+            return await real_api_request(method, params, timeout=timeout)
+
+        adapter._api_request = AsyncMock(side_effect=fake_api_request)
+
+        adapter._stop_polling.clear()
+        await adapter._polling_loop()
+
+        # Agent 被调用两次，回复依次回写
+        assert [m.content for m in received] == ["first", "second"]
+        sent_texts = [c[0][0] for c in client.post.call_args_list]
+        assert sent_texts == ["sendMessage", "sendMessage"]
+        first_call = client.post.call_args_list[0]
+        assert first_call[1]["json"]["text"] == "reply:first"
+        assert first_call[1]["json"]["chat_id"] == "42"
+
+        # offset 确认：第二次 getUpdates 只拉取 update_id > 102 的更新
+        assert adapter._update_offset == 103
+        assert api_calls[0][0] == "getUpdates"
+        assert api_calls[0][1]["offset"] == 0
+        assert api_calls[0][1]["timeout"] == TELEGRAM_LONG_POLL_TIMEOUT
+        second_get = [c for c in api_calls if c[0] == "getUpdates"][1]
+        assert second_get[1]["offset"] == 103
+        # 长轮询请求侧超时需大于服务端挂起时长
+        assert adapter._api_request.call_args_list[0].kwargs.get("timeout", None) == TELEGRAM_LONG_POLL_TIMEOUT + 10.0
+
+    @pytest.mark.asyncio
+    async def test_polling_survives_handler_exception(self, adapter: TelegramAdapter) -> None:
+        """单条 Update 处理失败只记日志：后续 Update 继续处理，循环不断路。"""
+        calls = {"n": 0}
+
+        async def flaky_agent(message, instance_id):
+            calls["n"] += 1
+            if message.content == "boom":
+                raise RuntimeError("agent exploded")
+            return PlatformResponse(content=f"reply:{message.content}")
+
+        adapter.set_message_handler(flaky_agent)
+        client = _mock_api_client(adapter)
+
+        bad = make_telegram_update(text="boom", user_id=42, chat_id=42)
+        bad["update_id"] = 1
+        good = make_telegram_update(text="fine", user_id=42, chat_id=42)
+        good["update_id"] = 2
+
+        api_calls: list[str] = []
+        real_api_request = adapter._api_request
+
+        async def fake_api_request(method, params=None, timeout=None):
+            api_calls.append(method)
+            if method == "getUpdates":
+                if len(api_calls) == 1:
+                    return [bad, good]
+                adapter._stop_polling.set()
+                return []
+            return await real_api_request(method, params, timeout=timeout)
+
+        adapter._api_request = AsyncMock(side_effect=fake_api_request)
+        adapter._stop_polling.clear()
+        await adapter._polling_loop()
+
+        # 两条都被投递给 Agent（异常不影响后续处理）
+        assert calls["n"] == 2
+        # 只有 good 拿到回复
+        sent = [c[1]["json"]["text"] for c in client.post.call_args_list]
+        assert sent == ["reply:fine"]
+
+    @pytest.mark.asyncio
+    async def test_polling_retries_after_network_error(self, adapter: TelegramAdapter) -> None:
+        """getUpdates 网络异常：退避后重试，循环不断路。"""
+        adapter._polling_interval = 0.01  # 加快退避，避免拖慢用例
+        api_calls: list[str] = []
+
+        async def fake_api_request(method, params=None, timeout=None):
+            api_calls.append(method)
+            if len(api_calls) == 1:
+                raise RuntimeError("Telegram API 网络错误: timeout")
+            adapter._stop_polling.set()
+            return []
+
+        adapter._api_request = AsyncMock(side_effect=fake_api_request)
+        adapter._stop_polling.clear()
+        await asyncio.wait_for(adapter._polling_loop(), timeout=5)
+
+        assert api_calls.count("getUpdates") == 2
+
+
+# ─── 生命周期与入站调度模式测试 ────────────────────────────────
+
+
+class TestLifecycleScheduling:
+    """start/stop 的入站调度（长轮询 vs Webhook）测试。"""
+
+    @pytest.mark.asyncio
+    async def test_start_polling_mode_starts_poll_task(self, adapter: TelegramAdapter) -> None:
+        adapter._http_client = AsyncMock()
+        api_methods: list[str] = []
+
+        async def fake_api_request(method, params=None, timeout=None):
+            api_methods.append(method)
+            if method == "getUpdates":
+                adapter._stop_polling.set()
+                return []
+            return {"id": 555, "username": "test_bot"}
+
+        adapter._api_request = AsyncMock(side_effect=fake_api_request)
+
+        await adapter.start()
+        assert adapter._status == AdapterStatus.RUNNING
+        assert adapter._poll_task is not None
+        # 长轮询模式启动前清掉残留 webhook，避免 getUpdates 409
+        assert "deleteWebhook" in api_methods
+
+        # 让轮询任务跑完一轮（fake getUpdates 置位 stop 事件）
+        await _drain(adapter)
+        assert "getUpdates" in api_methods
+
+        await adapter.stop()
+        assert adapter._poll_task is None
+        assert adapter._status == AdapterStatus.STOPPED
+
+    @pytest.mark.asyncio
+    async def test_start_webhook_mode_registers_and_skips_polling(self) -> None:
+        a = TelegramAdapter()
+        a.initialize({
+            "bot_token": "test_token_123",
+            "use_webhook": True,
+            "webhook_url": "https://example.com/tg/hook",
+        })
+        a._http_client = AsyncMock()
+        api_calls: list[tuple[str, dict | None]] = []
+
+        async def fake_api_request(method, params=None, timeout=None):
+            api_calls.append((method, params))
+            if method == "getMe":
+                return {"id": 555, "username": "test_bot"}
+            return {}
+
+        a._api_request = AsyncMock(side_effect=fake_api_request)
+
+        await a.start()
+        assert a._status == AdapterStatus.RUNNING
+        # Webhook 模式：注册 setWebhook，不启动长轮询
+        set_calls = [c for c in api_calls if c[0] == "setWebhook"]
+        assert len(set_calls) == 1
+        assert set_calls[0][1]["url"] == "https://example.com/tg/hook"
+        assert a._poll_task is None
+
+        await a.stop()
+        # 停止时注销 webhook
+        assert any(c[0] == "deleteWebhook" for c in api_calls)
+        assert a._webhook_registered is False
+
+    @pytest.mark.asyncio
+    async def test_execute_platform_tools_use_api_request(self, adapter: TelegramAdapter) -> None:
+        """三个平台工具走 _api_request（P0-4：未定义的 _call_api 修复回归）。"""
+        adapter._http_client = AsyncMock()
+        adapter._api_request = AsyncMock(return_value={})
+
+        cases = [
+            ("telegram.send_message", {"chat_id": "42", "text": "hi"}, "sendMessage"),
+            ("telegram.delete_message", {"chat_id": "42", "message_id": "1"}, "deleteMessage"),
+            ("telegram.pin_message", {"chat_id": "42", "message_id": "2"}, "pinChatMessage"),
+        ]
+        for tool_name, args, expected_method in cases:
+            result = await adapter.execute_platform_tool(tool_name, args)
+            assert result["success"] is True, f"{tool_name} 应成功: {result}"
+            assert adapter._api_request.call_args[0][0] == expected_method

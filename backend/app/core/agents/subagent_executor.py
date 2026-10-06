@@ -299,7 +299,19 @@ class SubagentExecutor:
                 "depth": depth,
                 "error": cancel_msg,
             })
-            return cancel_msg
+            # 取消传播（链路审查 P1-4 / 汇总报告 §4 主题二）：CancelledError 不再吞掉。
+            # - 协作式取消（cancel_event 置位且当前任务自身无待处理取消请求）：
+            #   保持原契约，把取消文案作为工具结果字符串返回父 Agent；
+            # - 结构化取消（父任务被 cancel / wait_for 超时向内传播）：
+            #   必须 re-raise，吞掉会破坏上游任务取消与超时机制。
+            is_cooperative = (
+                cancel_event is not None
+                and cancel_event.is_set()
+                and asyncio.current_task().cancelling() == 0
+            )
+            if is_cooperative:
+                return cancel_msg
+            raise
 
         except Exception as e:
             logger.error(

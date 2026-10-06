@@ -1,5 +1,7 @@
 import asyncio
+import contextlib
 import json
+import re
 import struct
 import time
 import uuid
@@ -7,6 +9,31 @@ from typing import Any
 from loguru import logger
 
 from app.runtime.platform.base import BasePlatformAdapter, PlatformMessage, PlatformResponse
+from app.runtime.platform.infrastructure.exposure import is_loopback_host, warn_inbound_without_credential
+from app.runtime.platform.infrastructure.ws_gateway_auth import (
+    DEFAULT_WS_BIND_HOST,
+    connection_allowed,
+    resolve_ws_bind_host,
+)
+
+# Minecraft Java 版玩家名合法字符集：官方限制 1-16 位 [A-Za-z0-9_]。
+# 作为 target_player 白名单，防止恶意玩家名经 RCON 命令拼接注入任意指令。
+_MC_PLAYER_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{1,16}$")
+
+
+def _sanitize_mc_text(text: str) -> str:
+    """中和 say 文本中的控制字符：换行/回车/制表符折叠为空格，其余控制字符剔除。
+
+    RCON 单包即单条命令，换行等控制字符无合法语义，折叠后可避免文本
+    拼入命令行时越界（游戏内聊天本身也是单行的）。
+    """
+    cleaned: list[str] = []
+    for ch in text:
+        if ch in ("\n", "\r", "\t"):
+            cleaned.append(" ")
+        elif ord(ch) >= 32:
+            cleaned.append(ch)
+    return "".join(cleaned)
 
 
 class _LuomiNestRconClient:
@@ -129,8 +156,10 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
     - rcon_port: RCON 端口（默认 25575）
     - rcon_password: RCON 密码
     - ws_enabled: 是否启用 WebSocket 聊天事件接收
-    - ws_host: WS 服务器监听地址
+    - ws_host: WS 服务器监听地址（默认 127.0.0.1，仅本机模组可接入）
     - ws_port: WS 服务器监听端口
+    - ws_token: WS 网关鉴权 token（可选；配置后握手须携带 Bearer 头或
+      ?access_token= 参数，未配置时仅允许本机回环来源匿名接入）
     - bot_name: 机器人在游戏内的显示名称
     - screenshot_enabled: 是否启用截图识别
     """
@@ -149,8 +178,9 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
         self._rcon_port: int = 25575
         self._rcon_password: str = ""
         self._ws_enabled: bool = True
-        self._ws_host: str = "0.0.0.0"
+        self._ws_host: str = DEFAULT_WS_BIND_HOST
         self._ws_port: int = 8081
+        self._ws_token: str = ""
         self._game_host: str = "127.0.0.1"
         self._game_port: int = 56587
         self._bot_name: str = "主Agent"
@@ -176,8 +206,10 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
         else:
             self._ws_enabled = bool(ws_val)
 
-        self._ws_host = config.get("ws_host", "0.0.0.0")
+        self._ws_host = resolve_ws_bind_host(config.get("ws_host"))
         self._ws_port = int(config.get("ws_port", 8081))
+        # P0-4 握手鉴权 token：可选；未配置时仅 loopback 来源允许匿名接入
+        self._ws_token = str(config.get("ws_token", "") or "")
 
         # 优先使用显式指定的 bot_name，若未指定则统一继承设置里的主 Agent 名称
         from app.runtime.platform.main_agent_config import load_luominest_main_agent_config
@@ -221,6 +253,14 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
             self._log("warning", "config_missing", "未配置 RCON 密码，RCON 功能禁用")
 
         if self._ws_enabled:
+            # P0-4 传输安全：绑定非 loopback 且未配置 ws_token 时打告警
+            # （非 loopback 来源会在握手阶段被拒，配 token 后局域网模组才可接入）
+            if not self._ws_token and not is_loopback_host(self._ws_host):
+                warn_inbound_without_credential(
+                    "Minecraft 模组 WS 网关",
+                    self._ws_host,
+                    "ws_token（未配置时仅本机模组可接入）",
+                )
             await self._start_ws_server()
 
         if self._auto_spawn_bot and self._game_port > 0:
@@ -341,6 +381,19 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
 
         target_player = target if target and target != "broadcast" else None
 
+        # P0-3 注入防护：指定目标时必须匹配 Minecraft 玩家名白名单
+        # （[A-Za-z0-9_]{1,16}），否则拒绝发送（fail-closed，不降级广播）。
+        if target_player and not _MC_PLAYER_NAME_PATTERN.fullmatch(target_player):
+            logger.warning(
+                f"[Minecraft] Rejected invalid target_player (RCON injection guard): {target_player[:32]!r}"
+            )
+            self._log(
+                "warning", "message_failed",
+                "目标玩家名不合法（仅允许 1-16 位字母/数字/下划线），已拒绝发送",
+                details={"target_preview": target_player[:32]},
+            )
+            return False
+
         # 1. 优先尝试 RCON 发送（若配置了 RCON）
         if self._rcon:
             try:
@@ -407,6 +460,19 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
         import websockets
 
         async def ws_handler(websocket: Any) -> None:
+            # P0-4 握手鉴权：配置了 ws_token 时校验凭证；未配置时仅允许
+            # loopback 来源匿名接入，其余连接不注册、不进入消息循环。
+            if not connection_allowed(websocket, self._ws_token):
+                peer = websocket.remote_address if hasattr(websocket, "remote_address") else "unknown"
+                self._log(
+                    "warning", "auth_rejected",
+                    f"WS 握手鉴权失败，已拒绝连接（close 1008）: {peer}",
+                    details={"peer": str(peer)},
+                )
+                with contextlib.suppress(Exception):
+                    await websocket.close(code=1008, reason="invalid access token")
+                return
+
             conn_id = id(websocket)
             self._ws_connections[conn_id] = websocket
             peer = websocket.remote_address if hasattr(websocket, "remote_address") else "unknown"
@@ -586,7 +652,10 @@ class LuomiNestMinecraftAdapter(BasePlatformAdapter):
             await self.send_message(response, player)
 
     def _build_say_command(self, text: str, target_player: str | None) -> str:
-        escaped = text.replace('\\', '\\\\').replace('"', '\\"')
+        # 纵深防御：send_message 已做白名单校验，此处兜底拒绝非法目标
+        if target_player and not _MC_PLAYER_NAME_PATTERN.fullmatch(target_player):
+            raise ValueError(f"invalid target_player: {target_player[:32]!r}")
+        escaped = _sanitize_mc_text(text).replace('\\', '\\\\').replace('"', '\\"')
 
         if self._message_format == "tellraw":
             display_name = self._bot_name.replace('"', '')

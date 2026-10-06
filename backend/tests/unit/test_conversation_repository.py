@@ -8,7 +8,7 @@
 """
 
 import pytest
-from sqlalchemy import delete as sa_delete
+from sqlalchemy import delete as sa_delete, select
 
 from app.infrastructure.database.models.conversation import Conversation
 from app.infrastructure.database.models.conversation_message import ConversationMessage
@@ -119,3 +119,29 @@ def test_count_messages_join_aggregates_and_skips_soft_deleted(repo):
     assert repo.soft_delete("conv-c") is True
     assert repo.count_messages() == 5
     assert repo.count_messages(agent_id="agent-2") == 0
+
+
+def test_user_message_id_roundtrip_and_delete_by_id(repo):
+    """user 消息持久 id 回归（链路审查 P1-6）：落库行 mid/data.id 同一 uuid、
+    读回带出；按 id 删除（DELETE /messages/{id} → 全量替换重建行）后消失。"""
+    repo.save("conv-id", {"title": "ID", "messages": []})
+    assert repo.append_message(
+        "conv-id", {"id": "user-uuid-1", "role": "user", "content": "带 id 用户消息"}
+    ) is True
+
+    # 读回：消息 dict 带原 id（data JSON 与 mid 列一致）
+    conv = repo.get("conv-id")
+    assert [m["id"] for m in conv["messages"]] == ["user-uuid-1"]
+    # 分页游标（before_id）按 user 消息 id 定位
+    page = repo.get_paginated("conv-id", limit=10, before_id="user-uuid-1")
+    assert page["messages"] == []
+
+    # 删除端点语义：按 id 过滤后全量替换 → 消息行重建，目标行消失
+    conv["messages"] = [m for m in conv["messages"] if m["id"] != "user-uuid-1"]
+    repo.save("conv-id", conv)
+    assert repo.get("conv-id")["messages"] == []
+    with sync_session_factory() as session:
+        remain = session.execute(
+            select(ConversationMessage).where(ConversationMessage.conversation_id == "conv-id")
+        ).scalars().all()
+    assert remain == []

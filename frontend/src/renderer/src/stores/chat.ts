@@ -379,8 +379,9 @@ export const useChatStore = defineStore('chat', () => {
   /**
    * 流式回调工厂：sendMessage 与 regenerateMessage 共用
    *
-   * 统一处理：content/reasoning 累加、done 时 context_tokens 回写、完成时版本 push、
-   * 错误 [Error] 追加、AbortController 清理与 convStreaming 复位。
+   * 统一处理：content/reasoning 累加、done 时 context_tokens/usage 回写、
+   * notice 模型路由通知 toast（工作台/对话页/桌宠全入口统一，避免各端重复实现）、
+   * 完成时版本 push、错误 [Error] 追加、AbortController 清理与 convStreaming 复位。
    * 两条路径的差异点：
    * - 发送：非 done chunk 清空推荐问题（等 done 一次性写入）；出错时清空未完成的推荐
    * - 重生成：流式期间保留消息上已有的推荐问题（新版本未生成前不清空）
@@ -403,6 +404,11 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     const onChunk = (chunk: ChatStreamChunk): void => {
+      // 模型路由通知（如专业模式推理模型退化为主模型）：统一在 store 层 toast，
+      // 工作台/对话页/桌宠等所有入口共用，不再依赖各端自行映射（P1-2）
+      if (chunk.notice) {
+        toast.warning(chunk.notice)
+      }
       const msgsList = convMessages.value[streamingConvId]
       if (!msgsList) return
       const lastIdx = msgsList.length - 1
@@ -421,6 +427,25 @@ export const useChatStore = defineStore('chat', () => {
           }
           if (chunk.context_max_tokens !== undefined && chunk.context_max_tokens > 0) {
             convContextMaxTokens.value = { ...convContextMaxTokens.value, [streamingConvId]: chunk.context_max_tokens }
+          }
+          // 本回合真实 token 用量（后端 done chunk 回填，P2-1）：
+          // 写回消息供对话页 contextUsage 读取，与下方 lastUsage 全局口径并行
+          if (chunk.usage) {
+            lastMsg.usage = chunk.usage
+          }
+          // 落库持久 id 回填（链路审查 P1-6）：done 后用服务端 uuid 替换本地占位 id，
+          // 此后删除/重生成/引用均按与 DB 消息行 mid 一致的 id 定位
+          if (chunk.message_id) {
+            lastMsg.id = chunk.message_id
+          }
+          if (chunk.user_message_id) {
+            for (let i = lastIdx - 1; i >= 0; i--) {
+              const prevMsg = msgsList[i]
+              if (prevMsg?.role === 'user') {
+                prevMsg.id = chunk.user_message_id
+                break
+              }
+            }
           }
         }
         // 直接修改响应式代理属性，避免每个 chunk 都拷贝整个消息数组
@@ -481,10 +506,16 @@ export const useChatStore = defineStore('chat', () => {
         const errorLastIndex = errorMsgList.length - 1
         if (errorLastIndex >= 0 && errorMsgList[errorLastIndex]?.role === 'assistant') {
           const lastMsg = errorMsgList[errorLastIndex]
+          // 半截回答（断流前已输出部分内容）标记为不完整：
+          // 消息气泡显示"已中断"角标，重试入口复用消息操作区的重新生成按钮
+          const hadPartialContent = !!lastMsg.content
           lastMsg.content = lastMsg.content
             ? `${lastMsg.content}\n\n[Error] ${err}`
             : `[Error] ${err}`
           lastMsg.done = true
+          if (hadPartialContent) {
+            lastMsg.interrupted = true
+          }
           if (!opts.isRegenerate) {
             lastMsg.suggestedQuestions = undefined
           }
@@ -614,6 +645,9 @@ export const useChatStore = defineStore('chat', () => {
       messages: apiMessages,
       stream: true,
       timestamp: Date.now() / 1000,
+      // 客户端消息幂等键（链路审查 P1-6）：重试同一消息时后端按它去重，
+      // 不再重复落库 user 消息行
+      client_message_id: userMessage.id,
     }
 
     if (targetAgentId) {
@@ -721,6 +755,13 @@ export const useChatStore = defineStore('chat', () => {
     const msgs = convMessages.value[convId]
     if (!msgs) return
 
+    // 流互斥（链路审查 P1-8）：该会话已有生成流在跑时拒绝重试，
+    // 给出「正在生成中」可见反馈而非静默并发踩踏
+    if (convStreaming.value[convId]) {
+      toast.warning(i18n.global.t('chat.streamInProgress'))
+      return
+    }
+
     const aiIndex = msgs.findIndex(m => m.id === messageId)
     if (aiIndex === -1) return
     const aiMsg = msgs[aiIndex]
@@ -735,11 +776,9 @@ export const useChatStore = defineStore('chat', () => {
           suggestedQuestions: aiMsg.suggestedQuestions || undefined,
         }]
 
-    const updatedMsgs = [...msgs.slice(0, aiIndex), ...msgs.slice(aiIndex + 1)]
-    convMessages.value = {
-      ...convMessages.value,
-      [convId]: updatedMsgs
-    }
+    // 与后端截断语义对齐（message_id 原地重建，P1-8）：目标消息及其后的本地消息
+    // 随旧回答一并移除，新回答接在原位置，避免旧回答/后续消息残留错位
+    const updatedMsgs = msgs.slice(0, aiIndex)
 
     const lastExistingVersion = existingVersions.length > 0 ? existingVersions[existingVersions.length - 1] : null
     const assistantMessage: ChatMessage = {
@@ -753,11 +792,9 @@ export const useChatStore = defineStore('chat', () => {
       versions: existingVersions,
       currentVersion: existingVersions.length,
     }
-    const newMsgs = [...updatedMsgs]
-    newMsgs.splice(aiIndex, 0, assistantMessage)
     convMessages.value = {
       ...convMessages.value,
-      [convId]: newMsgs
+      [convId]: [...updatedMsgs, assistantMessage]
     }
 
     convStreaming.value = { ...convStreaming.value, [convId]: true }
@@ -768,6 +805,9 @@ export const useChatStore = defineStore('chat', () => {
     const requestBody: Record<string, unknown> = {
       stream: true,
       versions: existingVersions,
+      // 后端按该 id 定位原消息并从该位置整段截断重建（P1-8 原地重建）；
+      // 刚生成、尚未刷新的消息为前端本地占位 id，后端找不到时回退尾条语义
+      message_id: messageId,
     }
 
     const targetAgentId = options?.agentId || activeAgentId.value

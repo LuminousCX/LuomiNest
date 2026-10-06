@@ -78,8 +78,9 @@ class LuomiNestQQOfficialAdapter(AppTokenMixin, BasePlatformAdapter):
 
     配置项：
     - app_id: QQ 开放平台应用 ID
-    - app_secret: 应用密钥
-    - token: 机器人 token（可选，用于 webhook 签名校验）
+    - app_secret: 应用密钥（同时作为 Webhook Ed25519 验签密钥的种子，官方算法）
+    - webhook_secret: Webhook 验签密钥（可选，缺省回退 app_secret）
+    - token: 机器人 token（QQ 官方已弃用，不参与任何校验，仅为兼容保留）
     - enable_group: 启用群消息
     - enable_private: 启用 C2C 消息
     """
@@ -103,12 +104,19 @@ class LuomiNestQQOfficialAdapter(AppTokenMixin, BasePlatformAdapter):
         self._app_id = config.get("app_id", "")
         self._app_secret = config.get("app_secret", "")
         self._token = config.get("token", "")
+        # P0-1 webhook 验签密钥：官方以 AppSecret 作为 Ed25519 种子，
+        # webhook_secret 仅作显式覆盖入口，缺省回退 app_secret
+        self._webhook_secret = str(config.get("webhook_secret", "") or self._app_secret or "")
         self._enable_group = bool(config.get("enable_group", True))
         self._enable_private = bool(config.get("enable_private", True))
 
     async def start(self) -> None:
         if not self._app_id or not self._app_secret:
             logger.warning("[QQOfficial] Missing app_id/app_secret, API calls will fail")
+            logger.warning(
+                "[QQOfficial] Webhook secret not configured, "
+                "all webhook events will be rejected (fail-closed)"
+            )
             return
         token_ok = await self._refresh_access_token()
         if token_ok:
@@ -298,19 +306,145 @@ class LuomiNestQQOfficialAdapter(AppTokenMixin, BasePlatformAdapter):
     # Webhook 事件处理
     # ------------------------------------------------------------------
 
-    async def handle_webhook(self, data: dict) -> None:
-        """处理 QQ 官方 webhook 事件（由 platform endpoint 调用）。"""
+    def _webhook_signing_key(self):
+        """由 webhook secret 派生 Ed25519 签名私钥（对齐官方 Go 示例的种子推导）。
+
+        官方算法：将 secret 字节串反复翻倍至 >= 32 字节后截取 32 字节作为
+        Ed25519 种子，由种子确定性生成密钥对；事件推送用对应私钥签名，
+        本端用派生公钥验签；op=13 回调地址验证则用本私钥对挑战串签名。
+        webhook 调用量低，按请求即时派生即可。
+        """
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        seed = self._webhook_secret.encode("utf-8")
+        while len(seed) < 32:
+            seed = seed * 2
+        return Ed25519PrivateKey.from_private_bytes(seed[:32])
+
+    def _webhook_verify_key(self):
+        """由 webhook secret 派生 Ed25519 验签公钥（复用同一套种子推导）。"""
+        return self._webhook_signing_key().public_key()
+
+    def _build_callback_validation_payload(self, data: dict) -> dict[str, str] | None:
+        """计算 op=13 回调地址验证应答（QQ 开放平台官方算法）。
+
+        控制台保存回调地址时会推送 op=13 挑战（该请求本身不带签名头）：
+            {"op": 13, "d": {"plain_token": "...", "event_ts": "..."}}
+        服务端须用派生私钥对「event_ts + plain_token」做 Ed25519 签名（hex），
+        并以 {"plain_token": ..., "signature": ...} 作为响应体原样返回。
+
+        Returns:
+            应答载荷；secret 未配置或挑战字段缺失时返回 None（fail-closed）。
+        """
+        if not self._webhook_secret:
+            logger.warning(
+                "[QQOfficial] Webhook secret not configured, "
+                "reject op=13 callback validation (fail-closed)"
+            )
+            return None
+        payload = data.get("d") or {}
+        plain_token = str(payload.get("plain_token", "") or "")
+        event_ts = str(payload.get("event_ts", "") or "")
+        if not plain_token or not event_ts:
+            logger.warning(
+                "[QQOfficial] op=13 payload missing plain_token/event_ts, "
+                "reject callback validation"
+            )
+            return None
+        message = event_ts.encode("utf-8") + plain_token.encode("utf-8")
+        signature = self._webhook_signing_key().sign(message).hex()
+        logger.info("[QQOfficial] op=13 callback validation answered")
+        return {"plain_token": plain_token, "signature": signature}
+
+    def _verify_webhook_signature(
+        self, signature: str, timestamp: str, raw_body: bytes | str
+    ) -> bool:
+        """校验 webhook 事件推送签名（P0-1，QQ 开放平台官方算法）。
+
+        官方推送在请求头携带：
+        - X-Signature-Ed25519：对「X-Signature-Timestamp + 原始请求体」的
+          Ed25519 签名（hex 编码）；
+        - X-Signature-Timestamp：签名所用时间戳。
+
+        Fail-closed：未配置 secret、缺签名头、hex 格式非法或验签不通过
+        一律拒绝，由调用方（platform endpoint）返回 401，不触发任何业务逻辑。
+
+        Returns:
+            True 表示验签通过；False 表示拒绝。
+        """
+        if not self._webhook_secret:
+            logger.warning(
+                "[QQOfficial] Webhook secret not configured, reject webhook (fail-closed)"
+            )
+            return False
+        if not signature or not timestamp:
+            logger.warning(
+                "[QQOfficial] Missing X-Signature-Ed25519/X-Signature-Timestamp, "
+                "reject webhook"
+            )
+            return False
+        try:
+            from cryptography.exceptions import InvalidSignature
+
+            if isinstance(raw_body, str):
+                raw_body = raw_body.encode("utf-8")
+            message = timestamp.encode("utf-8") + raw_body
+            self._webhook_verify_key().verify(bytes.fromhex(signature), message)
+            return True
+        except InvalidSignature:
+            logger.warning("[QQOfficial] Webhook signature mismatch, reject webhook")
+            return False
+        except (ValueError, TypeError) as e:
+            # hex 解码失败、时间戳非法等格式异常同样 fail-closed
+            logger.warning(f"[QQOfficial] Malformed webhook signature, reject: {e}")
+            return False
+
+    async def handle_webhook(
+        self,
+        data: dict,
+        *,
+        signature: str = "",
+        timestamp: str = "",
+        raw_body: bytes | str = b"",
+    ) -> bool | dict[str, str]:
+        """处理 QQ 官方 webhook 事件（由 platform endpoint 调用）。
+
+        op=13 回调地址验证：控制台保存回调地址时推送的挑战请求，本身不携带
+        签名头，必须在验签之前识别；命中时返回
+        ``{"plain_token": ..., "signature": ...}`` 应答载荷（endpoint 据此
+        原样透出响应体，不能包统一信封），未配置 secret/字段缺失返回 False。
+
+        普通事件推送（P0-1）：入口强制 Ed25519 验签，验签失败不触发任何业务
+        逻辑并返回 False（endpoint 据此返回 401）。验签材料取自原始请求：
+        - signature: 请求头 X-Signature-Ed25519
+        - timestamp: 请求头 X-Signature-Timestamp
+        - raw_body: 原始请求体字节（签名对象为 timestamp + 原始 body，
+          不可用重新序列化后的 dict 代替）
+
+        Returns:
+            True 表示验签通过且事件已分发；False 表示验签失败被拒绝；
+            dict 表示 op=13 回调地址验证应答载荷。
+        """
+        # op=13 回调地址验证（官方挑战请求不带签名头，先于验签识别）
+        if data.get("op") in (13, "13"):
+            payload = self._build_callback_validation_payload(data)
+            return payload if payload is not None else False
+
+        if not self._verify_webhook_signature(signature, timestamp, raw_body):
+            return False
+
         event_type = data.get("event_type") or data.get("t", "")
         event_data = data.get("event") or data.get("d", {})
 
         if event_type in ("GROUP_AT_MESSAGE_CREATE", "GROUP_MESSAGE_CREATE"):
             if not self._enable_group:
-                return
+                return True
             await self._handle_group_message(event_data)
         elif event_type in ("C2C_MESSAGE_CREATE", "DIRECT_MESSAGE_CREATE"):
             if not self._enable_private:
-                return
+                return True
             await self._handle_private_message(event_data)
+        return True
 
     async def _handle_group_message(self, data: dict) -> None:
         group_openid = data.get("group_openid", "")

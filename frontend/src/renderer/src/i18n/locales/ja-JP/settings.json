@@ -423,6 +423,33 @@
       "accessPasswordPlaceholder": "起動パスワードを入力",
       "accessPasswordDevToast": "アクセス制御は開発中のため、パスワードは現在のセッションのみに保持され、保存されません"
     },
+    "backup": {
+      "title": "データのバックアップと復元",
+      "subtitle": "バックアップは本機の data/backups に保存され、直近 10 件を保持します。セキュリティのため、認証トークンや鍵などの認証情報ファイルはバックアップに含まれません。",
+      "loading": "バックアップ一覧を読み込み中…",
+      "createNow": "今すぐバックアップ",
+      "creating": "バックアップ作成中…",
+      "createSuccess": "バックアップを作成しました",
+      "createFailed": "バックアップに失敗しました：{message}",
+      "empty": "バックアップはまだありません。「今すぐバックアップ」から作成してください。",
+      "restore": "復元",
+      "remove": "削除",
+      "confirmRestoreTitle": "このバックアップを復元しますか？",
+      "confirmRestoreMessage": "復元すると現在のすべてのデータ（会話・記憶・設定など）が上書きされ、元に戻せません。復元後は LuomiNest の再起動を推奨します（メモリキャッシュ更新のため）。",
+      "confirmRestore": "復元する",
+      "cancel": "キャンセル",
+      "restoring": "復元中…",
+      "restoreSuccess": "バックアップからデータを復元しました。なるべく早く LuomiNest を再起動してください。",
+      "restoreFailed": "復元に失敗しました：{message}",
+      "confirmDeleteTitle": "このバックアップを削除しますか？",
+      "confirmDeleteMessage": "削除すると元に戻せません：{name}",
+      "confirmDelete": "削除する",
+      "deleteSuccess": "バックアップを削除しました",
+      "deleteFailed": "削除に失敗しました：{message}",
+      "listFailed": "バックアップ一覧の読み込みに失敗しました",
+      "credentialNoteTitle": "復元後に確認が必要な認証情報",
+      "credentialHint": "バックアップには認証情報ファイルは含まれません。同一マシンでの復元はそのままで OK です。別マシンや OS 再インストール後の復元では、LLM プロバイダーの API キーなどの暗号化設定は復号できないため再入力が必要で、再ログインも必要になります。"
+    },
     "mainAgent": {
       "loading": "メインエージェント設定を読み込み中...",
       "personaTitle": "人格とシステムプロンプト",
@@ -997,6 +1024,7 @@
   "api": {
     "requestFailed": "リクエストに失敗しました ({status})",
     "streamReadFailed": "レスポンスストリームを読み取れません。バックエンドサービスをご確認ください",
+    "streamInterrupted": "接続が切断されました。応答が不完全な可能性があります。再試行してください",
     "http": {
       "400": "リクエストパラメータに誤りがあります。入力内容をご確認ください",
       "401": "未認証です。API Key の設定をご確認ください",
@@ -1042,7 +1070,8 @@
       "SCHEDULER_TASK_NOT_FOUND": "定期実行タスクが存在しません",
       "SCHEDULER_NOT_RUNNING": "スケジューラが起動していません。しばらくしてから再試行してください",
       "SCHEDULER_TASK_INVALID": "定期実行タスクの設定が無効です。式をご確認ください",
-      "SUBMARKET_NOT_FOUND": "サブマーケットが存在しません"
+      "SUBMARKET_NOT_FOUND": "サブマーケットが存在しません",
+      "CONVERSATION_STREAMING": "この会話は現在返信を生成中です。完了してからもう一度お試しください"
     },
     "cloudErrors": {
       "13005": "コイン残高が不足しています。洛米パスポートで交換するか、毎日チェックインしてから再試行してください",

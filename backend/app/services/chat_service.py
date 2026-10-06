@@ -19,7 +19,11 @@ from app.core.chat_mode import ChatMode, get_tool_config
 from app.core.config import settings
 from app.core.context import get_context_manager
 from app.core.domain_policy import resolve_domain_policy
-from app.core.exceptions import error_content_and_code
+from app.core.exceptions import (
+    BadRequestError,
+    ConflictError,
+    error_content_and_code,
+)
 from app.core.tools import tool_registry
 from app.core.tools.orchestrator import tool_orchestrator
 from app.core.utils import require_store, sse_data, sse_response, utc_now
@@ -138,6 +142,41 @@ chat_hook_registry.register(
 )
 
 
+# ──────────────────────────────────────────────────────────────
+# 历史版本（versions）字段归一（链路审查 P1-8）
+# ──────────────────────────────────────────────────────────────
+
+# 旧数据存在前端直传的 camelCase 版本条目（reasoningContent / suggestedQuestions），
+# 与后端自写的 snake_case 条目混存。统一归一为 snake_case 单一风格：
+# 写入端落库前归一，读取端（版本切换等）按别名兼容——读时归一，不批量改库。
+_VERSION_FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "reasoning_content": ("reasoningContent",),
+    "suggested_questions": ("suggestedQuestions",),
+}
+
+
+def normalize_message_version(version: dict) -> dict:
+    """单条历史版本记录归一为 snake_case：camelCase 别名键迁移为规范键。"""
+    if not isinstance(version, dict):
+        return version
+    normalized = dict(version)
+    for canonical, aliases in _VERSION_FIELD_ALIASES.items():
+        if canonical in normalized:
+            continue
+        for alias in aliases:
+            if alias in normalized:
+                normalized[canonical] = normalized.pop(alias)
+                break
+    return normalized
+
+
+def normalize_message_versions(versions: list[dict] | None) -> list[dict]:
+    """版本数组归一：非 dict 条目丢弃，其余逐条键名归一。"""
+    if not versions:
+        return []
+    return [normalize_message_version(v) for v in versions if isinstance(v, dict)]
+
+
 class ChatService:
     def __init__(self, context: ContextService, suggestions: SuggestionService):
         self._llm_semaphore = asyncio.Semaphore(settings.LLM_MAX_CONCURRENT_REQUESTS)
@@ -145,6 +184,31 @@ class ChatService:
         self._suggestions = suggestions
         # 后台任务引用集：防止任务被 GC 回收（与 platform_router 同模式）
         self._background_tasks: set[asyncio.Task] = set()
+        # 会话级进行中的生成流标记（conv_id → 流令牌，链路审查 P1-8 流互斥）：
+        # 同会话第二条生成流（重复点击重试/快速切换后重试）直接 409 拒绝
+        self._active_streams: dict[str, str] = {}
+
+    def begin_conv_stream(self, conv_id: str, replace: bool = False) -> str:
+        """登记会话级生成流并返回流令牌（P1-8 流互斥）。
+
+        - replace=False（regenerate 入口）：该会话已有流在跑时抛 ConflictError（409）；
+        - replace=True（发送新消息入口）：沿用前端 cancel-and-replace 契约强制登记
+          新令牌；被顶掉的旧流收尾时按令牌校验，不会误释放新流的标记。
+        asyncio 单线程事件循环内 check+write 原子，无需加锁。
+        """
+        if not replace and conv_id in self._active_streams:
+            raise ConflictError(
+                "当前会话正在生成回复，请等待完成后再试",
+                code="CONVERSATION_STREAMING",
+            )
+        token = uuid.uuid4().hex
+        self._active_streams[conv_id] = token
+        return token
+
+    def end_conv_stream(self, conv_id: str, token: str) -> None:
+        """按令牌释放会话流标记：令牌不匹配（已被新流替换）时忽略。"""
+        if self._active_streams.get(conv_id) == token:
+            self._active_streams.pop(conv_id, None)
 
     def _spawn_background_task(self, coro) -> asyncio.Task:
         """启动后台任务并保存引用，防止被 GC 回收。"""
@@ -165,10 +229,19 @@ class ChatService:
         file_content: str | None = None,
         file_name: str | None = None,
         file_type: str | None = None,
+        client_message_id: str | None = None,
     ) -> None:
+        """落库一条 user 消息（链路审查 P1-6）：与 assistant 消息同构，落库即带 uuid
+        持久 id——删除/引用/分页游标均按该 id 定位（消息行 mid 列与 data JSON 的 id 键）。
+
+        client_message_id：前端随请求携带的客户端消息标识（幂等去重键）。重试/平台
+        重推同一消息时，process_conversation_turn 按它跳过重复落库（会话内查重）。
+        """
         if not content and not file_content and not file_name:
             return
-        entry: dict = {"role": "user", "content": content}
+        entry: dict = {"role": "user", "content": content, "id": str(uuid.uuid4())}
+        if client_message_id:
+            entry["client_message_id"] = client_message_id
         if file_content:
             entry["file_content"] = file_content
         if file_name:
@@ -179,7 +252,7 @@ class ChatService:
             entry["files"] = [{"name": file_name, "type": file_type, "content": file_content}]
         last = conv["messages"][-1] if conv["messages"] else None
         if last and last.get("role") == "user":
-            for key in ("file_content", "file_name", "file_type", "files"):
+            for key in ("file_content", "file_name", "file_type", "files", "client_message_id"):
                 if key in entry:
                     last[key] = entry[key]
             if not last.get("content"):
@@ -207,7 +280,9 @@ class ChatService:
                 new_version["provider"] = state["provider"]
             if state.get("suggested_questions"):
                 new_version["suggested_questions"] = state["suggested_questions"]
-            all_versions = list(versions) + [new_version]
+            # 请求携带的历史版本（前端 MessageVersion 为 camelCase）先归一为
+            # snake_case 再落库，消除双风格混存（链路审查 P1-8）
+            all_versions = normalize_message_versions(versions) + [new_version]
             entry["versions"] = all_versions
             entry["current_version"] = len(all_versions) - 1
         last = conv["messages"][-1] if conv["messages"] else None
@@ -475,6 +550,7 @@ class ChatService:
         start_time: float,
         versions: list[dict] | None = None,
         notice: str = "",
+        stream_token: str | None = None,
     ):
         """主对话流式响应（/api/chat stream 模式）。
 
@@ -486,6 +562,7 @@ class ChatService:
         - 循环边界由 LoopGuardMiddleware 检测
 
         流式结束后执行：state 同步、推荐问题生成、消息持久化、done 事件、记忆更新、蒸馏。
+        stream_token：路由层登记的会话流互斥令牌（P1-8），生成器 finally 按令牌释放。
         """
         chat_id = str(uuid.uuid4())
 
@@ -604,23 +681,24 @@ class ChatService:
                 state["content"] = ctx.state.get("content", "")
                 state["reasoning"] = ctx.state.get("reasoning", "")
                 state["aborted"] = bool(state.get("aborted", False)) or bool(ctx.state.get("aborted", False))
+                state["usage"] = ctx.state.get("usage")
                 state["model"] = model
                 state["provider"] = provider
 
                 # 推荐问题生成 + 消息持久化
                 # 推荐问题改为 done 事件之后后台生成：前端 apiStream 收到 done chunk 即停止
-                # 读取 SSE，事后推送不可达；生成完成后写入最新 assistant version，
-                # 随对话加载返回（事件协议不变）
+                # 读取 SSE，事后推送不可达；生成完成后按消息 id 增量写回本条 assistant
+                # 消息行，随对话加载返回（事件协议不变）
+                # 落库行引用（done chunk 随块带出 uuid id，P1-6）：持久化异常时保持 None
+                assistant_entry: dict | None = None
+                user_entry: dict | None = None
                 try:
+                    # 生成用消息快照：save_assistant_message 追加本回合 assistant 消息前
+                    # 截取（生成输入语义与原实现一致）
                     if not state["aborted"] and state["content"]:
-                        self._spawn_background_task(self._generate_suggestions_after_done(
-                            conv_id=conv_id,
-                            conv=conv,
-                            messages=[dict(m) for m in conv["messages"]],
-                            agent_id=agent_id,
-                            provider=provider,
-                            model=model,
-                        ))
+                        suggestions_messages = [dict(m) for m in conv["messages"]]
+                    else:
+                        suggestions_messages = None
 
                     persist_state = dict(state)
                     if persist_state["aborted"] and persist_state["content"].startswith("[Error]"):
@@ -631,13 +709,42 @@ class ChatService:
                         # 热路径：增量追加 assistant 消息 + 同步元数据
                         if not await conversation_store.append_message_async(conv_id, conv["messages"][-1]):
                             await self.persist_conv(conv_id, conv)
+                        assistant_entry = conv["messages"][-1]
                         await conversation_store.update_meta_async(
                             conv_id, {"title": conv.get("title", "New Conversation")}
                         )
                     else:
                         await self.persist_conv(conv_id, conv)
+
+                    # 本回合 user 消息（done chunk 随块带出落库 id，前端用服务端 id
+                    # 替换本地占位 id——链路审查 P1-6）。user 消息先于 assistant 落库，
+                    # 回合内它恒为 conv 中最后一条 user 消息（regenerate 截断后同理）
+                    user_entry: dict | None = next(
+                        (m for m in reversed(conv["messages"]) if isinstance(m, dict) and m.get("role") == "user"),
+                        None,
+                    )
+
+                    # suggestions 后台任务在本回合 assistant 消息落库后 spawn（链路审查
+                    # P1-1）：携带其 uuid id 做单行增量回写（update_message_async），不再
+                    # 持 conv 快照做全量 set_async——LLM 生成期间（秒级窗口）其他端
+                    # append_message_async 追加的新消息不会被陈旧快照覆盖丢失
+                    if suggestions_messages is not None and assistant_entry is not None:
+                        self._spawn_background_task(self._generate_suggestions_after_done(
+                            conv_id=conv_id,
+                            assistant_message_id=str(assistant_entry.get("id") or ""),
+                            assistant_message=assistant_entry,
+                            messages=suggestions_messages,
+                            agent_id=agent_id,
+                            provider=provider,
+                            model=model,
+                        ))
                 except Exception as persist_err:
                     logger.error(f"[STREAM] Persist failed: conv={conv_id}, error={persist_err}")
+
+                # 会话流互斥标记释放（P1-8）：放在持久化之后、done yield 之前——
+                # 客户端断连时 done yield 抛 GeneratorExit 会跳过其后语句
+                if stream_token:
+                    self.end_conv_stream(conv_id, stream_token)
 
                 # done 事件
                 try:
@@ -651,11 +758,20 @@ class ChatService:
                         context_tokens = None
                         context_max_tokens = None
 
+                    # 本回合落库消息的持久 id（链路审查 P1-6）：前端收到后用服务端
+                    # uuid 替换本地占位 id，删除/重生成/引用此后均按落库 id 定位
+                    turn_message_id = str(assistant_entry.get("id") or "") if assistant_entry else ""
+                    turn_user_message_id = str(user_entry.get("id") or "") if user_entry else ""
                     done_chunk = ChatStreamChunk(
                         id=chat_id, content="", model=model, provider=provider,
                         done=True, suggested_questions=None,
                         context_tokens=context_tokens,
                         context_max_tokens=context_max_tokens,
+                        # 本回合真实 token 用量（AgentRunner 按次累加，done 时随块带出，
+                        # 修复前端 lastUsage 恒 null——链路审查 P2-1）
+                        usage=ctx.state.get("usage") or None,
+                        message_id=turn_message_id or None,
+                        user_message_id=turn_user_message_id or None,
                     )
                     yield sse_data(done_chunk)
                 except Exception as done_err:
@@ -729,17 +845,23 @@ class ChatService:
     async def _generate_suggestions_after_done(
         self,
         conv_id: str,
-        conv: dict,
+        assistant_message_id: str,
+        assistant_message: dict,
         messages: list[dict],
         agent_id: str | None,
         provider: str | None,
         model: str | None,
     ) -> None:
-        """done 事件后生成推荐问题并补写会话存储。
+        """done 事件后生成推荐问题并按消息 id 增量补写存储。
 
         前端 apiStream 收到 done chunk 即停止读取 SSE，事后推送不可达，
         只能写入最新 assistant version（与 save_assistant_message 的持久化形状一致），
         随对话加载返回。
+
+        持久化为单行增量更新（update_message_async，链路审查 P1-1）：原实现持回合
+        开始时的 conv 快照做全量 set_async 回写，LLM 生成期间（秒级窗口）其他端
+        append_message_async 追加的新消息会被陈旧快照覆盖丢失；单行更新只覆盖本条
+        assistant 消息行，并发追加不受影响。
         """
         try:
             questions = await self._suggestions.generate_suggestions_for_conv(
@@ -751,20 +873,28 @@ class ChatService:
             return
         if not questions:
             return
-        # 从尾部向前定位本轮 assistant 消息（期间用户可能已发出新消息）
-        for msg in reversed(conv.get("messages", [])):
-            if msg.get("role") != "assistant":
-                continue
-            version_list = msg.get("versions")
-            if version_list:
-                current = msg.get("current_version")
-                idx = current if isinstance(current, int) and 0 <= current < len(version_list) else len(version_list) - 1
-                version_list[idx]["suggested_questions"] = questions
-            else:
-                msg["suggested_questions"] = questions
-            break
+        if not assistant_message_id:
+            logger.warning(f"[STREAM] Suggestions skipped (assistant message has no id): conv={conv_id}")
+            return
+        # 写入当前 version（与 save_assistant_message 的持久化形状一致，前端随对话加载读取）
+        version_list = assistant_message.get("versions")
+        if version_list:
+            current = assistant_message.get("current_version")
+            idx = current if isinstance(current, int) and 0 <= current < len(version_list) else len(version_list) - 1
+            version_list[idx]["suggested_questions"] = questions
+        else:
+            assistant_message["suggested_questions"] = questions
         try:
-            await self.persist_conv(conv_id, conv)
+            updated = await conversation_store.update_message_async(
+                conv_id, assistant_message_id, assistant_message,
+            )
+            if not updated:
+                # 消息行不存在（如会话已被删除/全量重建）：丢弃 suggestions，绝不回退
+                # 全量回写——那会重新引入覆盖并发写入的竞态（P1-1）
+                logger.warning(
+                    f"[STREAM] Suggestions skipped (message row missing): "
+                    f"conv={conv_id}, mid={assistant_message_id}"
+                )
         except Exception as persist_err:
             logger.error(f"[STREAM] Suggestions persist failed: conv={conv_id}, error={persist_err}")
 
@@ -952,12 +1082,18 @@ class ChatService:
         conversation_store,
         *,
         regenerate: bool = False,
+        regenerate_message_id: str | None = None,
+        stream_token: str | None = None,
     ):
         """对话内发送消息 / 重新生成的统一业务主流程。
 
         收敛原 add_message / regenerate_message 两条路由：
-        - regenerate=True：先弹掉末尾 assistant 消息再重新生成（差异分支）
+        - regenerate=True：先按 message_id 原地截断重建（未携带或已不存在时兼容旧行为
+          弹掉末尾 assistant 消息），再重新生成（链路审查 P1-8：修复非尾重生成时
+          旧回答残留 + 新回答错位追加末尾）
         - regenerate=False：落库新用户消息后生成
+        stream_token：路由层登记的会话流互斥令牌（P1-8），随流生成器 finally 释放；
+        非流式 regenerate 无预登记令牌，此处直接查标记拒绝。
         stream=True 时返回 SSE StreamingResponse（记忆更新+蒸馏由
         stream_response 的 finally 统一执行，单触发）；
         非流式返回 dict {"content", "model", "provider"}。
@@ -965,10 +1101,41 @@ class ChatService:
         start_time = time.time()
         conv = await require_store(conversation_store, conv_id, "Conversation")
 
+        # 会话流互斥（P1-8）：流式 regenerate 由路由层先占位（冲突已 409）；
+        # 非流式 regenerate 此处补查，同样拒绝与进行中的流并发
+        if regenerate and stream_token is None and conv_id in self._active_streams:
+            raise ConflictError(
+                "当前会话正在生成回复，请等待完成后再试",
+                code="CONVERSATION_STREAMING",
+            )
+
         if regenerate:
-            # 重新生成：先弹掉末尾的 assistant 消息
-            while conv["messages"] and conv["messages"][-1].get("role") == "assistant":
-                conv["messages"].pop()
+            if regenerate_message_id:
+                target_idx = next(
+                    (i for i, m in enumerate(conv["messages"]) if m.get("id") == regenerate_message_id),
+                    None,
+                )
+                if target_idx is None:
+                    # 目标消息不在会话中：多为刚生成尚未刷新（前端本地占位 id 与落库
+                    # uuid 不一致）或已被并发删除——回退旧的尾条语义，保证可用性
+                    logger.info(
+                        f"[ChatService] Regenerate target {regenerate_message_id} not found "
+                        f"in conv={conv_id}, falling back to tail pop"
+                    )
+                    while conv["messages"] and conv["messages"][-1].get("role") == "assistant":
+                        conv["messages"].pop()
+                elif conv["messages"][target_idx].get("role") != "assistant":
+                    raise BadRequestError(
+                        f"Message {regenerate_message_id} is not an assistant message",
+                        code="REGENERATE_MESSAGE_INVALID",
+                    )
+                else:
+                    # 原地重建：目标消息及其后的消息随旧回答一并截断，新回答接在原位置
+                    conv["messages"] = conv["messages"][:target_idx]
+            else:
+                # 旧客户端兼容：未携带 message_id 时弹掉末尾的 assistant 消息
+                while conv["messages"] and conv["messages"][-1].get("role") == "assistant":
+                    conv["messages"].pop()
             await self.persist_conv(conv_id, conv)
         else:
             last_user_content = ""
@@ -976,20 +1143,32 @@ class ChatService:
                 if m.role == "user":
                     last_user_content = m.content
                     break
-            prev_len = len(conv["messages"])
-            self.save_user_message(
-                conv, last_user_content, request.file_content, request.file_name, request.file_type,
-            )
-            if len(conv["messages"]) > prev_len:
-                # 热路径：仅追加最后一条消息（O(1) INSERT + 增量 search_text）
-                if not await conversation_store.append_message_async(conv_id, conv["messages"][-1]):
-                    await self.persist_conv(conv_id, conv)
+            # 幂等去重（链路审查 P1-6）：前端/平台重试携带同一 client_message_id 时
+            # 不再重复落库 user 消息行，直接复用已落库消息进入生成
+            client_message_id = str(getattr(request, "client_message_id", "") or "").strip() or None
+            if client_message_id and any(
+                m.get("client_message_id") == client_message_id for m in conv["messages"]
+            ):
+                logger.info(
+                    f"[ChatService] Duplicate client_message_id={client_message_id} "
+                    f"in conv={conv_id}, skip user message append"
+                )
             else:
-                # 合并进最后一条 user 消息（如补充文件内容）→ 按 id 更新，失败回退全量
-                last = conv["messages"][-1]
-                mid = str(last.get("id", "") or "")
-                if not mid or not await conversation_store.update_message_async(conv_id, mid, last):
-                    await self.persist_conv(conv_id, conv)
+                prev_len = len(conv["messages"])
+                self.save_user_message(
+                    conv, last_user_content, request.file_content, request.file_name, request.file_type,
+                    client_message_id=client_message_id,
+                )
+                if len(conv["messages"]) > prev_len:
+                    # 热路径：仅追加最后一条消息（O(1) INSERT + 增量 search_text）
+                    if not await conversation_store.append_message_async(conv_id, conv["messages"][-1]):
+                        await self.persist_conv(conv_id, conv)
+                else:
+                    # 合并进最后一条 user 消息（如补充文件内容）→ 按 id 更新，失败回退全量
+                    last = conv["messages"][-1]
+                    mid = str(last.get("id", "") or "")
+                    if not mid or not await conversation_store.update_message_async(conv_id, mid, last):
+                        await self.persist_conv(conv_id, conv)
 
         # ── 模型解析（全局模型统一）──
         # 专业模式（standard）路由到推理模型（设置→模型设置→推理模型）；
@@ -1105,12 +1284,14 @@ class ChatService:
 
         if request.stream:
             # 流式路径：记忆更新 + 蒸馏由 stream_response 的 finally 转入后台任务执行（单触发，B3-2）
+            # stream_token 由路由层登记（P1-8 流互斥），随流生成器 finally 按令牌释放
             return await self.stream_response(
                 conv_id, conv, request, all_messages,
                 resolved_provider, resolved_model,
                 agent_id, gen_state, start_time,
                 versions=request.versions,
                 notice=model_notice,
+                stream_token=stream_token,
             )
 
         await self.non_stream_generate(
@@ -1127,15 +1308,24 @@ class ChatService:
 
         prev_len = len(conv["messages"])
         self.save_assistant_message(conv, persist_state, versions=request.versions)
+        turn_message_id = ""
+        turn_user_message_id = ""
         if len(conv["messages"]) > prev_len:
             # 热路径：增量追加 assistant 消息 + 同步元数据（标题可能被自动更新）
             if not await conversation_store.append_message_async(conv_id, conv["messages"][-1]):
                 await self.persist_conv(conv_id, conv)
+            turn_message_id = str(conv["messages"][-1].get("id") or "")
             await conversation_store.update_meta_async(
                 conv_id, {"title": conv.get("title", "New Conversation")}
             )
         else:
             await self.persist_conv(conv_id, conv)
+        # 本回合 user 消息持久 id（非流式响应随体返回，链路审查 P1-6）
+        nonstream_user_entry = next(
+            (m for m in reversed(conv["messages"]) if isinstance(m, dict) and m.get("role") == "user"),
+            None,
+        )
+        turn_user_message_id = str(nonstream_user_entry.get("id") or "") if nonstream_user_entry else ""
 
         # 非流式路径单触发：记忆更新 + 增量蒸馏（DomainPolicy 门控，B6/B7）
         # 后台执行：内部含 LLM/embedding 往返，不应阻塞响应返回；
@@ -1163,6 +1353,9 @@ class ChatService:
             "notice": model_notice or None,
             # 云链路业务错误码（非流式出错时携带；正常为 None）
             "errCode": gen_state.get("errCode"),
+            # 本回合落库消息持久 id（链路审查 P1-6，非流式响应随体返回）
+            "message_id": turn_message_id or None,
+            "user_message_id": turn_user_message_id or None,
         }
 
     async def compress_conversation(self, conv_id: str, conv: dict, adapter) -> dict:
@@ -1196,8 +1389,13 @@ class ChatService:
 
         tokens_after = ctx_mgr.token_counter.count_tokens(compressed_messages)
 
-        # 回写 conversation（去除 system 消息后存储），将摘要消息写回
+        # 回写 conversation（去除 system 消息后存储），将摘要消息写回。
+        # 透传的旧消息保留原 id；摘要等新生成消息补齐持久 uuid id（链路审查 P1-6：
+        # 落库行恒有稳定 mid，压缩后消息仍可被删除/引用定位）
         conv["messages"] = [m for m in compressed_messages if m.get("role") != "system"]
+        for m in conv["messages"]:
+            if isinstance(m, dict) and not m.get("id"):
+                m["id"] = str(uuid.uuid4())
         await self.persist_conv(conv_id, conv)
 
         return {"tokens_before": tokens_before, "tokens_after": tokens_after}

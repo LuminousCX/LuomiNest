@@ -15,6 +15,8 @@ def wechat_adapter():
         "api_url": "http://127.0.0.1:2531/v2/api",
         "token": "",
         "app_id": "test_wx_app",
+        "webhook_token": "test-webhook-secret",  # P0-2：webhook 鉴权（Fail-Closed）
+        "self_wxid": "wxid_bot",                 # P0-2：自身真实 wxid（自消息过滤）
         "mock_mode": True,  # 测试使用模拟沙盒模式
         "typing_delay_enabled": False,
         "rate_limit_per_minute": 10,
@@ -52,15 +54,17 @@ async def test_wechat_webhook_handling(wechat_adapter):
 
     wechat_adapter.set_message_handler(mock_handler)
 
-    # 模拟群消息回调
+    # 模拟群消息回调（携带 webhook 密钥且 @ 了机器人，P0-2 后的准入形态）
     mock_webhook_body = {
         "TypeName": "AddMsg",
+        "Token": "test-webhook-secret",
         "Data": {
             "FromUserName": {"string": "12345678@chatroom"},
             "ToUserName": {"string": "wxid_bot"},
-            "Content": {"string": "wxid_user123:\n大家好！"},
+            "Content": {"string": "wxid_user123:\n@机器人 大家好！"},
             "MsgType": 1,
             "NewMsgId": 88888,
+            "AtUserList": ["wxid_bot"],
         },
     }
 
@@ -69,7 +73,7 @@ async def test_wechat_webhook_handling(wechat_adapter):
     assert len(received_msgs) == 1
     assert received_msgs[0].is_group is True
     assert received_msgs[0].user_id == "wxid_user123"
-    assert received_msgs[0].content == "大家好！"
+    assert received_msgs[0].content == "@机器人 大家好！"
 
 
 @pytest.mark.asyncio

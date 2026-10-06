@@ -1,6 +1,8 @@
 import asyncio
 import json
 import random
+import re
+import secrets
 import time
 import uuid
 from typing import Any
@@ -13,6 +15,7 @@ from app.runtime.platform.base import (
     PlatformMessage,
     PlatformResponse,
 )
+from app.runtime.platform.group_config import safe_get_group_config
 
 
 class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
@@ -57,6 +60,11 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
         self._token: str = ""
         self._app_id: str = ""
         self._callback_url: str = ""
+        # P0-2：webhook 回调共享密钥（Fail-Closed，未配置则拒绝一切推送）
+        self._webhook_token: str = ""
+        # P0-2：机器人自身真实 wxid（自消息过滤依据；配置显式声明优先，
+        # 运行期由登录回执/群消息 ToUserName 被动学习补齐）
+        self._self_wxid: str = ""
         self._mock_mode: bool = False
 
         # 当前二维码状态
@@ -90,6 +98,10 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
         self._token = config.get("token", "")
         self._app_id = config.get("app_id", "") or f"wx_{uuid.uuid4().hex[:8]}"
         self._callback_url = config.get("callback_url", "")
+        # P0-2：webhook 共享密钥缺省强制要求（不配置则 handle_webhook 全拒绝）
+        self._webhook_token = str(config.get("webhook_token", "") or "").strip()
+        # 显式声明的自身 wxid 优先；为空时运行期被动学习（见 _learn_self_wxid）
+        self._self_wxid = str(config.get("self_wxid", "") or "").strip()
         self._mock_mode = bool(config.get("mock_mode", False))
 
         self._anti_ban_enabled = bool(config.get("anti_ban_enabled", True))
@@ -132,10 +144,12 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
                     ret_data = data.get("data", {})
                     qr_uuid = ret_data.get("uuid", "")
                     qr_data = ret_data.get("qrData", "")
-                    # 如果返回的是纯文本 URL，可保持纯文本供前端渲染成 QR
+                    if not qr_data:
+                        # P0-2：不再用演示二维码静默顶替真实返回（扫码必然无效且掩盖故障）
+                        self._log("warning", "qr_empty", "Gewechat 返回的二维码数据为空")
                     self._current_qr = {
                         "uuid": qr_uuid,
-                        "qr_data": qr_data or self._MOCK_QR_BASE64,
+                        "qr_data": qr_data,
                         "status": "waiting_scan",
                         "created_at": time.time(),
                         "expired_at": time.time() + 180,
@@ -148,6 +162,11 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
                     self._log("error", "qr_failed", f"获取二维码失败: {err_msg}")
                     return {"uuid": "", "qr_data": "", "status": "error", "message": err_msg}
         except Exception as e:
+            # P0-2：网络异常不再静默降级为演示二维码（会让用户扫一个必然无效的码），
+            # 仅显式开启 mock_mode 时允许模拟二维码
+            if not self._mock_mode:
+                self._log("error", "qr_failed", f"Gewechat 网络异常，获取二维码失败: {e}")
+                return {"uuid": "", "qr_data": "", "status": "error", "message": f"服务网络异常，获取二维码失败: {e}"}
             self._log("warning", "qr_failed", f"网络异常，回退到本地演示二维码: {e}")
             mock_uuid = f"qr_{uuid.uuid4().hex[:12]}"
             self._current_qr = {
@@ -208,6 +227,12 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
                         self._current_qr["status"] = "logged_in"
                         self._current_qr["message"] = "微信登录成功"
                         self.update_status(AdapterStatus.RUNNING)
+                        # P0-2：登录回执携带自身 wxid 时同步学习（自消息过滤依据）
+                        for key in ("wxid", "userName", "username", "alias"):
+                            wxid = str(ret_data.get(key, "") or "").strip()
+                            if wxid:
+                                self._learn_self_wxid(wxid)
+                                break
                         self._log("success", "login_ok", "个人微信登录成功，适配器已就绪")
                     elif status_code == 3:
                         self._current_qr["status"] = "expired"
@@ -362,8 +387,141 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
     # Webhook 回调处理
     # ------------------------------------------------------------------
 
+    def _verify_webhook_token(self, body: dict[str, Any]) -> bool:
+        """校验 webhook 回调共享密钥（P0-2，Fail-Closed）。
+
+        - 实例未配置 webhook_token：一律拒绝（缺省强制要求，杜绝零鉴权注入）；
+        - 已配置：在推送体中按 webhook_token / Token / token 顺序取凭据
+          （Gewechat 原生推送自带 Token 字段；经反代/网关推送时由该层注入
+          约定的密钥字段），与配置值做常量时间比较（防时序侧信道，
+          对齐 qq_onebot `_verify_handshake` 的实现方式）。
+
+        Returns:
+            True 表示允许处理该推送。
+        """
+        expected = self._webhook_token
+        if not expected:
+            return False
+
+        provided = ""
+        for key in ("webhook_token", "Token", "token"):
+            value = body.get(key)
+            if isinstance(value, str) and value.strip():
+                provided = value.strip()
+                break
+        if not provided:
+            return False
+        # 以字节比较避免非 ASCII 密钥触发 TypeError
+        return secrets.compare_digest(provided.encode("utf-8"), expected.encode("utf-8"))
+
+    def _learn_self_wxid(self, wxid: str) -> None:
+        """学习机器人自身真实 wxid（自消息过滤依据；仅在未知时写入）。
+
+        来源优先级：实例配置 self_wxid（显式声明，永不覆盖）>
+        登录回执（checkLogin / LoginEvent）> 群消息 ToUserName 被动学习
+        （群消息的 ToUserName 恒为自身 wxid，与发言人无关，最可靠）。
+        """
+        wxid = (wxid or "").strip()
+        if not wxid or self._self_wxid == wxid:
+            return
+        if self._self_wxid:
+            # 已有显式配置/先前学习值：不覆盖
+            logger.debug(f"[wechat_personal] self wxid 已存在，忽略学习值: {wxid}")
+            return
+        self._self_wxid = wxid
+        self._log("info", "self_wxid_learned", f"已识别机器人自身 wxid: {wxid}")
+
+    def _is_own_sent_message_id(self, msg_id: str) -> bool:
+        """判断消息 ID 是否为本适配器经 API 发出的消息（自消息回显检测）。"""
+        if not msg_id:
+            return False
+        for records in self._recent_sent.values():
+            for rec in records:
+                if msg_id in (rec.get("msg_id"), rec.get("client_id")):
+                    return True
+        return False
+
+    def _message_at_me(self, data: dict[str, Any], content: str) -> bool:
+        """判断群消息是否 @ 了机器人（含 @所有人）。
+
+        精确路径：AddMsg 的 AtUserList / MsgSource XML 的 atuserlist
+        命中自身 wxid；兜底路径（仅当网关剥离了全部结构化字段时）：
+        微信 UI 的 @ 提及在文本中固定以 U+2005 收尾，命中即视为有人被 @
+        （保守放行，可经 per-group respond_mode 收紧）。
+        """
+        candidates = {c for c in (self._self_wxid, self._app_id) if c}
+
+        at_list = data.get("AtUserList") or data.get("atUserList") or []
+        if isinstance(at_list, list):
+            for item in at_list:
+                if str(item) in candidates or str(item) == "all":
+                    return True
+
+        msg_source = str(data.get("MsgSource", "") or "")
+        if msg_source:
+            matched = re.search(r"<atuserlist>([^<]*)</atuserlist>", msg_source)
+            if matched:
+                for wxid in matched.group(1).split(","):
+                    wxid = wxid.strip()
+                    if wxid in candidates or wxid == "notify@all":
+                        return True
+
+        if not at_list and not msg_source:
+            content = content or ""
+            return ("@" in content and "\u2005" in content) or "@所有人" in content
+        return False
+
+    def _should_respond(self, data: dict[str, Any], msg: PlatformMessage) -> bool:
+        """群消息唤醒门槛（P0-2，对齐 qq_onebot `_should_respond`）。
+
+        私聊恒响应；群聊按 per-group 群配置（platform.groups.{inst}:{group}，
+        默认保守 respond_mode="at"）+ @ 提及判定，杜绝每条群消息都触发回复。
+        """
+        if not msg.is_group:
+            return True
+
+        group_cfg = safe_get_group_config(self._instance_id, msg.group_id)
+        if not group_cfg.get("enabled", True):
+            return False
+
+        if self._message_at_me(data, msg.content):
+            return True
+
+        mode = str(group_cfg.get("respond_mode", "at"))
+        if mode == "all":
+            return True
+        if mode == "at_or_reply" and int(data.get("MsgType", 1) or 1) == 49:
+            # 微信引用回复：MsgType 49 appmsg 的 refermsg.svrid 指向被引用消息的 NewMsgId
+            matched = re.search(r"<svrid>(\d+)</svrid>", msg.content or "")
+            if matched and self._is_own_sent_message_id(matched.group(1)):
+                return True
+        return False
+
     async def handle_webhook(self, body: dict[str, Any]) -> dict[str, Any]:
-        """处理来自 Gewechat / 微信反代网关的事件推送。"""
+        """处理来自 Gewechat / 微信反代网关的事件推送。
+
+        P0-2 三连修复：
+        1. 入口先做共享密钥校验（webhook_token，缺省强制要求，Fail-Closed）；
+        2. 群消息默认要求 @ 才响应（per-group 群配置 respond_mode 可放开；
+           私聊不受限）；
+        3. 自消息过滤改用登录返回/被动学习的真实 self wxid + 本机发出消息
+           newMsgId 回显检测——旧实现比对 from_user 与缺省随机 app_id，
+           且群消息的 from_user 是群 ID（真实发言人在 content 前缀里），
+           过滤必然失效 → bot 应答自己的消息，双 bot 同群死循环。
+
+        去重接线说明：MessageDeduplicator 不在本适配器接线——审查报告 P1-1
+        明确 message_id 去重统一收口在 platform_router 入口（由独立任务接线），
+        此处重复接线会造成双重判定与语义分叉；本适配器只保留"自消息回显"
+        过滤（死循环防护，不属于平台重推去重）。
+        """
+        # P0-2-1 webhook 共享密钥鉴权（Fail-Closed：未配置或校验失败一律拒绝）
+        if not self._verify_webhook_token(body):
+            self._log(
+                "warning", "auth_rejected",
+                "webhook 回调鉴权失败（未配置 webhook_token 或 Token 不匹配），已拒绝处理该推送",
+            )
+            return {"status": "unauthorized"}
+
         type_name = body.get("TypeName")
         data = body.get("Data", {})
 
@@ -373,6 +531,12 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
             if status == 2:
                 self.update_status(AdapterStatus.RUNNING)
                 self._current_qr["status"] = "logged_in"
+                # 登录回执携带自身 wxid 时同步学习（自消息过滤依据）
+                for key in ("wxid", "userName", "username", "alias"):
+                    wxid = str(data.get(key, "") or "").strip()
+                    if wxid:
+                        self._learn_self_wxid(wxid)
+                        break
                 self._log("success", "login_ok", "收到微信网关登录成功通知")
             return {"status": "ok"}
 
@@ -383,10 +547,6 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
             content = data.get("Content", {}).get("string", "")
             msg_type = data.get("MsgType", 1)
             msg_id = str(data.get("NewMsgId", ""))
-
-            # 过滤自己发出的消息
-            if from_user == self._app_id:
-                return {"status": "ignored"}
 
             is_group = "@chatroom" in from_user
             group_id = from_user if is_group else ""
@@ -399,6 +559,21 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
                 user_id = parts[0].strip()
                 content = parts[1]
                 sender_name = user_id
+
+            # P0-2-3a 群消息的 ToUserName 恒为自身 wxid（与发言人无关），
+            # 是最可靠的被动学习来源；先学习再过滤，首个回显即可被识别
+            if is_group and to_user and "@chatroom" not in to_user:
+                self._learn_self_wxid(to_user)
+
+            # P0-2-3b 自消息过滤（防双 bot 死循环）：
+            # - 群聊须比对 content 前缀解析出的真实发言人（from_user 是群 ID）；
+            # - NewMsgId 命中本机 API 发送记录 → 自己回复的回显（私聊兜底）。
+            if (
+                (self._self_wxid and (from_user == self._self_wxid or user_id == self._self_wxid))
+                or (self._app_id and (from_user == self._app_id or user_id == self._app_id))
+                or (msg_id and self._is_own_sent_message_id(msg_id))
+            ):
+                return {"status": "ignored"}
 
             # 多模态图片提取
             image_urls: list[str] = []
@@ -418,6 +593,15 @@ class LuomiNestWeChatPersonalAdapter(BasePlatformAdapter):
                 image_urls=image_urls,
                 raw=body,
             )
+
+            # P0-2-2 群消息 @ 唤醒门槛（私聊不受限）
+            if not self._should_respond(data, platform_msg):
+                self._log(
+                    "info", "message_filtered",
+                    f"群消息未 @ 机器人，按唤醒门槛忽略: {content[:50]}",
+                    details={"group_id": group_id, "user_id": user_id},
+                )
+                return {"status": "ignored"}
 
             self._log(
                 "info", "message_received",

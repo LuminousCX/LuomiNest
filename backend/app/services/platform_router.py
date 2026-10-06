@@ -1,8 +1,10 @@
 import asyncio
+import hashlib
 import json
 import time
 import traceback
 import uuid
+from dataclasses import replace
 from loguru import logger
 
 from app.core.utils import AsyncKeyLocks, extract_llm_text, utc_now
@@ -17,6 +19,8 @@ from app.runtime.platform.base import (
     filter_tools_by_risk,
     get_standard_tools_for_platform,
 )
+from app.runtime.platform.infrastructure.dedup import MessageDeduplicator
+from app.runtime.platform.infrastructure.message_batch import TextBatchAggregator
 from app.runtime.platform.briefings import get_platform_briefing
 from app.runtime.platform.session import (
     MAIN_AGENT_ID,
@@ -40,6 +44,12 @@ from app.core.context import get_context_manager
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
 
+# 批聚合并关（接线债：TextBatchAggregator，审查报告 03 §P1-1 / 接线债清单）。
+# 存放在 inst.config，与其他实例级开关（memory_write / platform_tools_risk_enabled）同风格。
+# 默认关闭：同步响应契约下开启会给所有文本消息引入一个窗口期的固定延迟，
+# 且拉长 qq_onebot 这类内联 emit 适配器的读循环阻塞时间（报告 P2-1 队头阻塞面）。
+MESSAGE_BATCH_ENABLED_KEY = "message_batch_enabled"
+
 
 class LuomiNestPlatformRouter:
     """平台消息路由器：将各平台消息路由到主 Agent，共享主 Agent 的记忆和供应商配置。
@@ -51,11 +61,21 @@ class LuomiNestPlatformRouter:
     - 支持多模态图片识别（根据模型能力自动判断）
     - 非流式响应（平台消息通常一次性返回）
     - 全链路日志：接收→解析→路由→LLM调用→响应发送，含性能统计
+    - 入口统一消息去重（P1-1：MessageDeduplicator，TTL+LRU 有界缓存），
+      拦截平台级重推（微信系 5s 无响应重推 / QQ 官方事件重发 /
+      Discord Resume 重放 / telegram 重启 offset 归零重拉 pending）
+    - 可选批聚合（TextBatchAggregator，inst.config["message_batch_enabled"]，默认关），
+      合并同一发送者窗口期内的连续短文本，防碎片消息各自触发独立回复
     """
 
     def __init__(self) -> None:
         self._processing_locks = AsyncKeyLocks()
         self._background_tasks: set[asyncio.Task] = set()
+        # 去重缓存有界：LRU 2000 条 + TTL 300s，超限淘汰最久未访问条目
+        # （微信系重推窗口 5s、QQ 官方重发分钟级，300s 覆盖；telegram
+        # 重启重拉 pending 也在同一进程内被此缓存兜住）
+        self._deduplicator = MessageDeduplicator(max_size=2000, ttl=300.0)
+        self._batch_aggregator = TextBatchAggregator(aggregation_window=1.5)
 
     def _spawn_background_task(self, coro) -> asyncio.Task:
         """启动后台任务并保存引用，防止被 GC 回收。"""
@@ -153,6 +173,32 @@ class LuomiNestPlatformRouter:
             },
         )
 
+        # ─── P1-1 平台级消息去重（审查报告 03-平台对接链路 §4 P1-1）───
+        # 按（实例 + 平台消息唯一键）判重，重复推送直接丢弃并记平台日志。
+        # 与 wechat_personal 适配器内的自消息回显过滤互补：那是双 bot 死循环
+        # 防护，这里收口平台 at-least-once 语义下的重复投递。
+        # message_id 为空的适配器不参与去重（无法构造可靠键，保持原语义）。
+        dedup_key = self._build_dedup_key(message, instance_id)
+        if dedup_key and self._deduplicator.check_and_mark(dedup_key):
+            platform_logger.log(
+                instance_id, "info", "duplicate_dropped",
+                f"重复消息已丢弃: {message.message_id}",
+                adapter_type=adapter_type,
+                details={
+                    "session": session_key,
+                    "message_id": message.message_id,
+                    "sender": message.sender_name or message.user_id,
+                },
+            )
+            return None
+
+        # ─── 批聚合（接线债：TextBatchAggregator，默认关闭）───
+        # 在会话锁之前执行：等待窗口期间不占锁，不影响其他会话/消息正常流转。
+        message = await self._maybe_aggregate(message, instance_id, adapter_type)
+        if message is None:
+            # 本条已并入其他并发调用的聚合批次，由窗口到期者统一回复一次
+            return None
+
         async with lock:
             main_config = load_luominest_main_agent_config()
             agent_name = str(main_config.get("name") or "主Agent").strip()
@@ -209,10 +255,92 @@ class LuomiNestPlatformRouter:
                         "elapsed": round(time.time() - receive_time, 3),
                     },
                 )
-                return PlatformResponse(
-                    content=f"[{agent_name}] 消息处理失败，请稍后重试",
-                    message_type="text",
-                )
+            return PlatformResponse(
+                content=f"[{agent_name}] 消息处理失败，请稍后重试",
+                message_type="text",
+            )
+
+    @staticmethod
+    def _build_dedup_key(message: PlatformMessage, instance_id: str) -> str:
+        """构造去重键：实例 + 消息唯一键 + 内容指纹。
+
+        - 主键为 instance_id + message_id：平台重推（微信 5s 无响应重推、
+          QQ 官方事件重发、Discord Resume 重放、telegram offset 归零重拉）
+          携带同一 message_id 与同一载荷，命中即去重。
+        - 附加 content + image_urls 指纹：个别适配器的 message_id 是弱回退值
+          （minecraft 截图 ss_{秒级时间戳}、home_assistant time_fired），
+          同秒两条不同消息会撞 id；载荷指纹保证只有「同 id 且同载荷」才判重，
+          真重推载荷必然一致，不受影响。
+        - message_id 为空返回空串，调用方跳过去重（保持原语义）。
+        """
+        message_id = (message.message_id or "").strip()
+        if not message_id:
+            return ""
+        payload = "\x00".join([message.content or "", *message.image_urls])
+        payload_fp = hashlib.sha1(payload.encode("utf-8", "ignore")).hexdigest()[:16]
+        return f"{instance_id}:{message_id}:{payload_fp}"
+
+    async def _maybe_aggregate(
+        self,
+        message: PlatformMessage,
+        instance_id: str,
+        adapter_type: str,
+    ) -> PlatformMessage | None:
+        """批聚合（接线债：TextBatchAggregator，默认关闭）。
+
+        将同一发送者在窗口期内的连续短文本合并为一条消息统一处理，
+        防止用户快速分段发送时各自触发独立回复。
+
+        返回值语义：
+        - PlatformMessage（content 已替换为聚合文本）：由本次调用负责路由，
+          走正常返回值路径由适配器 send_message 回包；
+        - None：本条已被并入其他并发调用正在处理的批次，本次不回复。
+
+        并发模型（同步响应契约下无需后台定时器）：
+        - 每个进入聚合的调用先 add_message 占位/追加，首个片段的调用方
+          sleep 一个窗口后 flush 统一处理；并发片段的调用方同样 sleep 后
+          flush 落空（缓冲已被取走）→ 返回 None 退出。一个批次恰好一次回复。
+        - 等待发生在会话锁之前，不占锁；聚合键按（实例+会话+发送者）隔离，
+          群里不同成员的消息不会互相合并，也不会与 /new 等命令冲突
+          （命令与图片消息不参与聚合）。
+
+        默认关闭（取舍见 MESSAGE_BATCH_ENABLED_KEY 注释）：同步响应契约下
+        开启会给所有文本消息增加约一个窗口期（1.5s）的固定延迟，并拉长
+        qq_onebot 这类内联 emit 适配器的读循环阻塞时间（报告 P2-1 队头
+        阻塞面），是否开启交由实例配置 message_batch_enabled 决定。
+        """
+        inst = get_instance(instance_id)
+        if not bool(self._get_instance_config(inst).get(MESSAGE_BATCH_ENABLED_KEY, False)):
+            return message
+
+        text = (message.content or "").strip()
+        # 命令与图片消息不参与聚合：命令需即时短路（/new），图片走多模态分支
+        if not text or text.startswith("/") or message.image_urls:
+            return message
+
+        agg_key = f"{instance_id}:{message.session_id or message.user_id}:{message.user_id}"
+        merged = self._batch_aggregator.add_message(agg_key, text)
+        if merged is None:
+            # 首个片段：等一个窗口让后续片段汇入，再统一取走缓冲
+            await asyncio.sleep(self._batch_aggregator.aggregation_window)
+            merged = self._batch_aggregator.flush(agg_key)
+        if not (merged or "").strip():
+            # 缓冲已被其他并发调用取走（或为空）：本条无需再回复
+            return None
+
+        if merged != text:
+            platform_logger.log(
+                instance_id, "info", "messages_aggregated",
+                f"窗口期内合并连续短消息（聚合后 {len(merged)} 字）",
+                adapter_type=adapter_type,
+                details={
+                    "session": f"{instance_id}:{message.session_id or message.user_id}",
+                    "sender": message.sender_name or message.user_id,
+                    "merged_length": len(merged),
+                },
+            )
+        # 不改传入对象：浅拷贝替换 content，原始 PlatformMessage 归适配器所有
+        return replace(message, content=merged)
 
     async def _route_to_main_agent(
         self,

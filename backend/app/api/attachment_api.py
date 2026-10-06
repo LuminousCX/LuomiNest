@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import logging
 
@@ -147,7 +148,9 @@ async def forward_file(request: Request, file: UploadFile = File(...)):
             })
 
         if ext == 'pdf':
-            text, error = _extract_pdf_text(file_bytes)
+            # CPU 密集解析放工作线程（09-11 调研遗留 P0）：PyMuPDF 同步解析大 PDF
+            # 会阻塞事件循环，拖慢所有并发请求
+            text, error = await asyncio.to_thread(_extract_pdf_text, file_bytes)
             if text:
                 return ok({
                     "content": text,
@@ -161,7 +164,8 @@ async def forward_file(request: Request, file: UploadFile = File(...)):
             )
 
         if ext in ('docx', 'doc'):
-            text, error = _extract_docx_text(file_bytes)
+            # 同 PDF：python-docx 解析大文档放工作线程，不阻塞事件循环
+            text, error = await asyncio.to_thread(_extract_docx_text, file_bytes)
             if text:
                 return ok({
                     "content": text,

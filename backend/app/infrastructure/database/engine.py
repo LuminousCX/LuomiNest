@@ -10,7 +10,9 @@
 """
 import asyncio
 import contextlib
+import json
 import os
+import uuid
 from pathlib import Path
 
 from loguru import logger
@@ -22,7 +24,7 @@ from app.infrastructure.database.base import Base
 
 # 列迁移 schema 版本：_migrate_columns_sync 内新增任何列/回填/索引逻辑时必须 +1，
 # 否则已达标旧库会跳过新迁移。旧库首次升级（user_version=0）会完整执行一遍并回写。
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 @contextlib.contextmanager
@@ -397,6 +399,57 @@ def _migrate_columns_sync(sync_conn) -> None:
                     f"ALTER TABLE skills ADD COLUMN {col_name} {col_def}",
                     f"skills table: added {col_name} column",
                 )
+
+    # SCHEMA v5（链路审查 P1-6 用户消息持久 id）：存量 mid='' 行回填 uuid——
+    # 旧版 user 消息落库无 id（mid=''/data 无 id 键），删除/引用/分页游标无法定位；
+    # 回填优先复用 data JSON 内已有 id（如有），否则生成 uuid4，并同步写回 data['id']
+    # 使读路径（_row_to_message 直接返回 data dict）带出同一 id。
+    # data 非法/非对象的脏行退化为仅回填 mid 列（读路径以 mid 兜底重建 id），
+    # 单行脏数据不阻塞整体迁移；WHERE mid='' 保证幂等（重跑零命中）。
+    if "conversation_messages" in inspector.get_table_names():
+        try:
+            idless_rows = sync_conn.execute(
+                text("SELECT seq, data FROM conversation_messages WHERE mid = ''")
+            ).fetchall()
+            backfilled = 0
+            for row_seq, row_data in idless_rows:
+                data_is_json_obj = False
+                existing_id = ""
+                if isinstance(row_data, dict):
+                    data_is_json_obj = True
+                    existing_id = str(row_data.get("id") or "")
+                elif isinstance(row_data, str):
+                    try:
+                        parsed = json.loads(row_data)
+                    except ValueError:
+                        parsed = None
+                    if isinstance(parsed, dict):
+                        data_is_json_obj = True
+                        existing_id = str(parsed.get("id") or "")
+                new_mid = existing_id if existing_id else str(uuid.uuid4())
+                if data_is_json_obj:
+                    sync_conn.execute(
+                        text(
+                            "UPDATE conversation_messages "
+                            "SET mid = :mid, data = json_set(data, '$.id', :mid) "
+                            "WHERE seq = :seq"
+                        ),
+                        {"mid": new_mid, "seq": row_seq},
+                    )
+                else:
+                    sync_conn.execute(
+                        text("UPDATE conversation_messages SET mid = :mid WHERE seq = :seq"),
+                        {"mid": new_mid, "seq": row_seq},
+                    )
+                backfilled += 1
+            if backfilled:
+                logger.info(
+                    f"[DB] Migrated conversation_messages: backfilled persistent ids "
+                    f"for {backfilled} message row(s)"
+                )
+        except Exception as e:
+            backfill_failed = True
+            logger.warning(f"[DB] conversation_messages persistent-id backfill skipped: {e}")
 
     # SCHEMA v4（P0-1 定时任务闭环）：scheduled_tasks 触发信息列 + 结果投递来源列
     _migrate_scheduled_tasks_sync(sync_conn, inspector)

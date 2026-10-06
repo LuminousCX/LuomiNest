@@ -15,7 +15,7 @@ from app.api.v1.router import api_router
 from app.core.config import settings
 from app.core.exceptions import LuomiNestError
 from app.core.hardware import get_hardware_profile
-from app.security.auth.local_token import load_auth_token
+from app.security.auth.local_token import ensure_boot_auth_token
 from app.security.auth.middleware import luomi_auth_middleware
 
 
@@ -233,6 +233,17 @@ async def lifespan(app: FastAPI):
             logger.success(f"[LuomiNest] Migrated {migrated_total} records from JSON to SQLite: {migration_results}")
     except Exception as e:
         logger.warning(f"[LuomiNest] JSON→SQLite migration skipped: {e}", exc_info=True)
+
+    # 平台凭据加密迁移（P1-6）：存量 platform_instances.config 明文凭据一次性
+    # 加密重写（幂等：已带 enc:v1: 前缀的值跳过；JSON→SQLite 迁移进来的明文行
+    # 也在此收口）。须在 JSON 迁移之后、实例加载之前执行。
+    try:
+        from app.infrastructure.database.repositories.platform_repository import PlatformRepository
+        migrated = PlatformRepository().migrate_plaintext_credentials()
+        if migrated:
+            logger.success(f"[LuomiNest] Encrypted {migrated} platform instance credential(s)")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Platform credential encryption migration skipped: {e}", exc_info=True)
 
     # 加载持久化平台实例到 registry（替代 platform.py 的 import-time 调用，须在 init_db 之后）
     try:
@@ -490,6 +501,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Platform router init skipped: {e}", exc_info=True)
 
+    # P1-2 重启自恢复：按持久化 enable 开关并发拉起平台实例。
+    # 必须在路由接线之后（实例可能随即收到消息），失败实例保留 ERROR 态。
+    try:
+        from app.runtime.platform.registry import auto_start_enabled_instances
+        auto_start_results = await auto_start_enabled_instances()
+        if auto_start_results:
+            logger.info(f"[LuomiNest] Platform instances auto-start results: {auto_start_results}")
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Platform instances auto-start skipped: {e}", exc_info=True)
+
     # 初始化 Avatar Manifest Manager（多模型清单系统，P0 基础）
     # 必须在 chat_service 调用 get_avatar_binding 之前完成（chat_service 使用同步回退）
     try:
@@ -723,16 +744,11 @@ def create_app() -> FastAPI:
 
     no_auth = os.environ.get("LUOMINEST_NO_AUTH", "").strip().lower() in ("1", "true", "yes")
 
-    # 始终确保有认证 token — 即使在 NOAUTH / dev 模式下也自动生成，
-    # 防止 API 完全无认证暴露到网络上
-    auth_token = load_auth_token()
-    if not auth_token:
-        from app.security.auth.local_token import generate_and_save_token
-        auth_token = generate_and_save_token(settings.DATA_DIR)
-        if no_auth:
-            logger.info("[AppFactory] LUOMINEST_NO_AUTH 模式: 已自动生成认证 token（不再完全无认证）")
-        else:
-            logger.info("[AppFactory] 未找到 auth token，已自动生成（dev mode）")
+    # P0-4（链路 E 容器化）：启动期凭据就绪，逻辑收敛在 local_token.ensure_boot_auth_token：
+    # - headless：凭据来源三选一强校验（不满足拒绝启动），且不落盘生成 token
+    # - desktop：保持历史行为——env > 已有文件 > 自动生成落盘
+    # 认证在任何形态下都强制开启（LUOMINEST_NO_AUTH 不豁免）
+    auth_token = ensure_boot_auth_token(no_auth=no_auth)
 
     if no_auth:
         logger.warning("[AppFactory] LUOMINEST_NO_AUTH 已设置 — 仍启用认证中间件以保障安全")

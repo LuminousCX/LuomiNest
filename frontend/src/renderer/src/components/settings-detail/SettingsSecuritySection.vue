@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SettingsGenericSection from './SettingsGenericSection.vue'
 import SettingsCommandSecuritySection from './SettingsCommandSecuritySection.vue'
+import SettingsBackupSection from './SettingsBackupSection.vue'
 import { useSectionSettings } from '../../composables/useSectionSettings'
 import { useToast } from '../../composables/useToast'
 import type { SectionItem, SectionValue } from './types'
@@ -61,6 +62,7 @@ function handleChange(key: string, value: SectionValue) {
   <div class="settings-panel animate-slide-up settings-security-wrap">
     <SettingsGenericSection section="privacy" :items="items" class="settings-panel--nested" @change="handleChange" />
     <SettingsCommandSecuritySection class="settings-panel--nested" />
+    <SettingsBackupSection class="settings-panel--nested" />
   </div>
 </template>
 

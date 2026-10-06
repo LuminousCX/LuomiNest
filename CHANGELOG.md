@@ -5,6 +5,55 @@ All notable changes to LuomiNest will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+> 本轮为「2026-10-05 链路审查修复包」（审查报告见 文档/2026年10月5日链路审查/，五链路 11 个跨链路 P0 与 10 个 P1 精选全部处置）：
+> 平台对接安全止血（QQ 官方验签、微信个人版三连、WS 网关鉴权、Telegram/rest_api 入站死路打通）、
+> 对话链路可靠性（workflow 落库、SSE 契约对齐、suggestions 竞态、regenerate 三重缺陷、消息持久 id）、
+> 存储链路产品化（备份排除凭据 + 恢复上线、记忆 fail-loud、平台凭据加密入库）、
+> 无头部署基线（DEPLOYMENT_MODE 双形态开关、SECRET_KEY 口令恢复包、Docker 单容器资产），以及一批接线债清偿与单测补强。
+>
+> This round is the "2026-10-05 chain-audit fix package" (all 11 cross-chain P0s and 10 selected P1s addressed):
+> platform-ingress security hardening (QQ official webhook signature, wechat_personal triple fix, WS-gateway auth, Telegram/rest_api inbound paths),
+> conversation reliability (workflow persistence, SSE contract alignment, suggestions race, regenerate triple defect, message persistent ids),
+> storage productization (credential-free backups + restore shipped, memory fail-loud, platform credentials encrypted at rest),
+> and the headless-deployment baseline (DEPLOYMENT_MODE switch, SECRET_KEY recovery package, single-container Docker assets).
+
+### Added（新增）
+
+- 备份/恢复产品化：`GET/POST /api/v1/backup/{list,create,restore,delete}` 四端点 + 设置→隐私与安全页「数据备份与恢复」卡片（强确认对话框、恢复后凭据重配清单）；备份包排除全部凭据文件（auth_token/secret_key*/jwt_secret_key*）并写入 `_backup_manifest.json` 指引；恢复优先经 sqlite3 backup API 按页写回现库（运行中热恢复），损坏库回退整文件替换 — Backup/restore productization: four API endpoints + settings-page card with confirm dialog and credential re-setup checklist; backups exclude all credential files and embed a manifest; restore prefers paged write-back via the sqlite3 backup API (hot restore while running)
+- SECRET_KEY 口令恢复包：`python -m app.security.crypto.secret_key_manager create-recovery|recover`（PBKDF2-HMAC-SHA256 600k 迭代加密密钥副本，口令不落盘）；换机/容器重建后凭恢复包找回全部加密数据，无包时报错给出三条出路指引 — SECRET_KEY recovery package CLI (passphrase-encrypted key copy, passphrase never stored); recover all encrypted data after machine migration, with actionable guidance when absent
+- `DEPLOYMENT_MODE=desktop|headless` 双形态开关 + `LUOMINEST_HOST/PORT` 配置化：desktop 默认行为逐字不变；headless 下凭据三选一强校验（env 注入 token / 卷内 token 文件 / jwt+密钥），不满足拒绝启动；`LUOMINEST_AUTH_TOKEN` 注入后不落盘 — DEPLOYMENT_MODE switch + configurable HOST/PORT: desktop defaults unchanged; headless enforces one-of-three credential sources at boot or refuses to start; env-injected auth token never touches disk
+- Docker 无头部署资产：`docker/{Dockerfile,docker-compose.yml,README.md}` + 根 `.dockerignore`——多阶段构建、非 root、HEALTHCHECK、compose 缺 token 拒启、数据/插件/技能三 named volume；本机已实测 build + compose 全链路（healthy/401/200/fail-closed） — Docker headless assets: multi-stage build, non-root, HEALTHCHECK, compose refuses without token, three named volumes; locally verified end-to-end (build + compose run healthy/auth 401/200)
+- 平台消息去重接线：`MessageDeduplicator` 接入 `platform_router.handle_platform_message` 入口（键=`instance:message_id:载荷指纹`，LRU 2000 条 + TTL 300s，原子 check_and_mark），微信系 5s 重推/QQ 事件重发/telegram 重启重拉不再重复回复；`TextBatchAggregator` 以锁前等待模式接线、默认关闭（`message_batch_enabled` 逐实例开启） — Platform dedup wired into the router entry (bounded LRU+TTL, atomic check-and-mark) killing duplicate replies from re-push/replay; optional per-instance message batching (off by default)
+- 适配器七态可观测：`/instances` 全部实例端点合并 `adapterStatus/healthy/uptimeSeconds/adapterError/errorCount`（只读内存快照，不做网络探测）；`LogSanitizer` 接入 `PlatformLogger` 唯一日志出口（message+details 递归脱敏，补充 bot token URL 形态规则） — Adapter seven-state observability merged into every /instances response (in-memory snapshot only); LogSanitizer wired at the single platform-logger sink (recursive details masking + bot-token URL rule)
+- 平台实例凭据加密入库：`enc:v1:` 前缀字段级加密（复用 SECRET_KEY 派生 AES，与 provider_credentials 同密钥体系），启动时幂等迁移存量明文；`/instances` 响应凭据一律 `"******"` 掩码、PATCH 哨兵剔除防前端回传清空 — Platform instance credentials encrypted at rest (`enc:v1:` field-level, idempotent boot migration); /instances responses mask credentials and PATCH strips mask sentinels
+- 用户消息持久 id：`conversation_messages` 全部行落库即有 uuid（SCHEMA v5 幂等回填存量行）；请求支持 `client_message_id` 幂等去重，done chunk/响应带出 `message_id`/`user_message_id`，前端以服务端 id 替换本地占位——删除/引用/重生成定位全面修通 — Persistent message ids for every row (SCHEMA v5 idempotent backfill); `client_message_id` dedup; done chunk carries server ids that replace frontend placeholders
+- QQ 官方 op=13 回调地址校验应答（`plain_token`+`event_ts` 按 AppSecret 派生 Ed25519 签名回包，端点对 dict 应答裸 JSON 透传），控制台回调校验可过 — QQ official op=13 callback-URL verification reply (Ed25519 signature from AppSecret; endpoint passes dict replies through verbatim)
+- Telegram 入站闭环：长轮询（offset 推进/退避/allowed_updates）+ 可选 webhook 模式，消息→Agent→sendMessage 回写全链路；rest_api 入站闭环：`POST/GET /platforms/instances/{id}/rest/messages`（X-API-Key 常量时间校验，回答回调推送或轮询拉取） — Telegram inbound loop (long-polling + optional webhook, full Agent round-trip); rest_api inbound loop with two endpoints (constant-time API key, callback push or poll reply)
+- 平台实例重启自恢复：lifespan 启动钩子按 `enable=True` 并发自动拉起全部实例，失败实例置 ERROR + `start_failed` 事件（UI 可见） — Auto-restart of enabled platform instances on app boot; failures land in ERROR + instance events
+
+### Changed（变更）
+
+- WS 网关（minecraft/game_websocket）默认绑定 0.0.0.0 → 127.0.0.1，新增握手 token 鉴权：配了 token 一律校验，未配 token 仅回环匿名可入（非回环连接 close 1008），共享 `ws_gateway_auth` 工具 — WS gateways default to loopback with handshake-token auth (token set ⇒ always verified; no token ⇒ loopback-anonymous only, close 1008 otherwise)
+- wechat_personal 群聊默认 @ 门槛（复用 per-group 群配置，私聊不受限）、webhook 共享 token 强制鉴权（Fail-Closed）、自消息过滤三重修复（真实 self_wxid 学习 + 群消息发言人字段错位修正 + 发送记录兜底），双 bot 死循环根除；Gewechat 网络异常不再静默回退 mock 二维码 — wechat_personal: group @-gate via per-group config, mandatory webhook token, triple self-echo filter (real self_wxid learning + group sender-field fix + sent-record fallback); mock QR fallback removed on network errors
+- 取消语义统一：subagent_executor 结构化取消 re-raise（协作式取消保持返回文案契约），全仓核查 py3.12 下无其他吞 CancelledError 点；attachment PDF/DOCX 解析移出事件循环（asyncio.to_thread） — Unified cancellation: subagent_executor re-raises structured cancellation (cooperative cancel keeps contract); PDF/DOCX parsing moved off the event loop
+- usage 累加修正：多轮工具调用的流式/非流式 usage 由覆盖改按次累加，done chunk 新增真实 `usage` 字段（与 `context_tokens` 估算双口径分名） — Usage now accumulates across tool rounds; done chunk carries real `usage` alongside the `context_tokens` estimate
+
+### Fixed（修复）
+
+- workflow 最终回复永不落库（P0）：engine.py 两处 `ChatService` 未导入 NameError 被 except 吞掉——改为既有延迟导入入口，落库失败升级 `logger.exception` — Workflow final replies were never persisted (unimported ChatService NameError swallowed); now uses the existing lazy-import entry with full-stack logging
+- SSE 契约漂移三连（P1）：前端映射表补 `notice/usage/context_tokens`（降级提示全入口 toast）；EOF 未收到 done 视为断流走 onError（半截回答标「已中断」+ 重新生成入口） — SSE contract drift: notice/usage/context_tokens now mapped (degradation toast on all entries); EOF-without-done treated as broken stream (interrupted badge + retry)
+- suggestions 后台任务全量回写丢消息（P1）：「读-改-写全量回写」改按消息 id 单行增量回写，spawn 移至 assistant 消息落库之后（顺带消除写错上一轮消息的窗口） — Suggestions background task no longer does full-conversation rewrite (per-message incremental update, spawned after the assistant message lands)
+- regenerate 三重缺陷（P1）：非尾重生成按 message_id 原地截断重建、per-conv 流互斥（409 `CONVERSATION_STREAMING` + 前端「正在生成中」）、versions 归一 snake_case（读时兼容迁移）；顺带修复 regenerate 路由因 `RegenerateRequest` 缺 `skill_ids` 在 HEAD 上必 500 的存量 bug — Regenerate triple defect fixed (in-place truncate-by-message_id, per-conv stream mutex with 409, versions normalized snake_case); also fixes a pre-existing 500 (missing `skill_ids` field)
+- 备份 zip 含明文凭据（P0）：见 Added 备份排除项 — Backup zip bundled plaintext credentials (see credential exclusion under Added)
+- 记忆 load 失败缓存空数据 → 任意写入清空整轨（P0）：load 失败置 `_load_failed` 不缓存空数据，`mutate/save` 入口守卫拒绝覆盖式写入，恢复后自动解锁 — Memory store no longer caches empty data on load failure nor allows track-wiping writes in that state (fail-loud guard, auto-unlock on success)
+- qq_official webhook 零验签（P0）：Ed25519 验签（X-Signature-Ed25519/Timestamp，AppSecret 派生密钥，官方算法），未配 secret/缺头/验签失败一律 401 — QQ official webhook now verifies Ed25519 signatures (fail-closed 401 on missing/mismatched material)
+- minecraft RCON 命令注入面：target_player 白名单（`[A-Za-z0-9_]{1,16}`）+ say 文本控制字符中和，非法即拒发不降级广播 — Minecraft RCON command-injection surface closed (player-name whitelist + control-char neutralization)
+- HA start() 永不返回（P1）：改为后台连接任务（首连失败进 ReconnectMixin 退避重连），停止时不再幽灵重连 — Home Assistant start() returns immediately (background connect + backoff reconnect, no ghost reconnect after stop)
+- 注册元数据与实现漂移（P1）：websocket/rest_api/telegram/discord/xiaomi_iot 五个适配器 config_template 按实现实际读取键对齐（死键 `endpoint`/`webhook_url`/`command_register`/`guild_id`/`mi_user` 清除），新增「模板默认值可实例化」护栏测试 — Adapter config templates aligned with implementations for five adapters (dead keys removed) + instantiation guard test against future drift
+- 守卫与回归测试补强：全轮共新增约 260 个单测（验签/WS 鉴权/去重/备份恢复/消息 id/迁移回填/取消传播/凭据加密等），全量套件 487 → 749 全绿 — ~260 new unit tests across the fixes; full suite 487 → 749 green
+
 ## [0.8.3] - 2026-09-27
 
 > 本轮为「P0 硬伤修复包」（修改书见本地 文档/规划/20260926）：定时任务陪伴闭环、上下文压缩会话隔离与持久化、

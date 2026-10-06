@@ -64,6 +64,42 @@ class MessageDeduplicator:
 
             return False
 
+    def check_and_mark(self, message_id: str) -> bool:
+        """原子地判定并标记消息（推荐入口）。
+
+        is_duplicate + mark_seen 两步调用之间存在竞态窗口（两条并发推送
+        可能都先判 False 再各自 mark）；本方法在同一把锁内完成
+        「查重 → 淘汰 → 记录」，保证同一键并发调用恰有一条判为新消息。
+
+        Args:
+            message_id: 消息唯一标识。
+
+        Returns:
+            True 表示重复消息（已见过且未过期，调用方应丢弃）；
+            False 表示新消息（已同时标记为已见）。
+        """
+        if not message_id:
+            return False
+
+        now = time.monotonic()
+        with self._lock:
+            seen_at = self._cache.get(message_id)
+            if seen_at is not None:
+                if now - seen_at < self.ttl:
+                    # 移到最近访问位置
+                    self._cache.move_to_end(message_id)
+                    return True
+                # 已过期，删除旧条目后按新消息重新记录
+                del self._cache[message_id]
+
+            # 淘汰过期条目与最久未访问条目，保证缓存有界
+            self._evict_expired(now)
+            while len(self._cache) >= self.max_size:
+                self._cache.popitem(last=False)
+
+            self._cache[message_id] = now
+            return False
+
     def mark_seen(self, message_id: str) -> None:
         """标记消息为已见。
 

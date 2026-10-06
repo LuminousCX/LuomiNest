@@ -409,10 +409,15 @@ class WorkflowEngine:
                                 "reasoning": "",
                                 "aborted": session.phase == WorkflowPhase.FAILED,
                             })
-                            await ChatService.persist_conv(session.conversation_id, conv)
+                            # P0-1（链路审查 2026-10-05）：必须经 _get_chat_service_cls()
+                            # 取类再调 persist_conv；原写法直接引用未导入的 ChatService，
+                            # NameError 被下方 except 吞掉，最终回复从不落库。
+                            # 本模块顶层禁止导入 app.services（防循环导入），故走注入/延迟导入入口。
+                            await _get_chat_service_cls().persist_conv(session.conversation_id, conv)
                             logger.debug(f"[WorkflowEngine][DEBUG] Session {session.session_id} assistant message saved to conversation {session.conversation_id}")
                     except Exception as save_err:
-                        logger.warning(f"[WorkflowEngine] Save assistant message failed: {save_err}")
+                        # 落库失败≠回答失败（不中断工作流主流程），但必须留完整堆栈可观测
+                        logger.exception(f"[WorkflowEngine] Save assistant message failed: {save_err}")
 
                 # 工作流完成后，结束 emitter
                 await emitter.finish()
@@ -438,9 +443,11 @@ class WorkflowEngine:
                                 "reasoning": "",
                                 "aborted": True,
                             })
-                            await ChatService.persist_conv(session.conversation_id, conv)
+                            # P0-1：同上，走 _get_chat_service_cls() 入口，避免 NameError 静默丢消息
+                            await _get_chat_service_cls().persist_conv(session.conversation_id, conv)
                     except Exception as save_err:
-                        logger.warning(f"[WorkflowEngine] Save error assistant message failed: {save_err}")
+                        # 落库失败不改变错误处理流程，但必须留完整堆栈可观测
+                        logger.exception(f"[WorkflowEngine] Save error assistant message failed: {save_err}")
                 await event_queue.put({
                     "type": "error",
                     "data": {"message": str(e)},

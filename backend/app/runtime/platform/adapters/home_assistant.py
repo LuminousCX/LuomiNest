@@ -14,6 +14,7 @@ import httpx
 from loguru import logger
 
 from app.runtime.platform.base import (
+    AdapterStatus,
     BasePlatformAdapter,
     PlatformMessage,
     PlatformResponse,
@@ -130,7 +131,13 @@ class HomeAssistantAdapter(ReconnectMixin, BasePlatformAdapter):
             raise ValueError("ha_token 为必填项")
 
     async def start(self) -> None:
-        """启动适配器：创建 HTTP 客户端并连接 HA WebSocket。"""
+        """启动适配器：创建 HTTP 客户端，连接/认证/监听放入后台任务后立即返回。
+
+        P1-4：此前 start() 内联 await 连接与监听循环，直到连接断开才返回，
+        导致 registry.start_instance 挂死（启动 API 卡住到断线为止）。
+        现对齐其他适配器（如 websocket）的生命周期语义：连接循环放后台任务，
+        start() 立即返回；首连失败与断线共用同一重连链路。
+        """
         self._http_client = httpx.AsyncClient(
             base_url=self._ha_url,
             headers={
@@ -147,10 +154,30 @@ class HomeAssistantAdapter(ReconnectMixin, BasePlatformAdapter):
             details={"ha_url": self._ha_url, "listen_events": self._listen_events},
         )
 
-        await self._connect_websocket()
+        self._ws_task = asyncio.create_task(self._connect_and_listen())
+
+    async def _connect_and_listen(self) -> None:
+        """后台任务：建立 WebSocket 连接并进入监听循环。
+
+        首连失败不向调用方抛出（start() 已返回），改为调度 ReconnectMixin
+        重连，由 _do_reconnect 按退避策略重试，成功回调里重启监听循环——
+        HA 稍后恢复可用时实例可自行拉起。
+        """
+        try:
+            await self._connect_websocket()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # 主动停止引起的失败不重连；其余由 _connect_websocket 内部记录
+            # ws_connect_failed 并置 ERROR 态，这里补上后台重连调度。
+            if self._status not in (AdapterStatus.STOPPING, AdapterStatus.STOPPED):
+                self._schedule_reconnect()
 
     async def stop(self) -> None:
         """停止适配器：关闭 WebSocket、心跳和 HTTP 客户端。"""
+        # 先置 STOPPING：监听循环/首连任务据此区分"主动停止"与"意外断线"，
+        # 主动停止不触发重连调度。
+        self.update_status(AdapterStatus.STOPPING)
         await self._cancel_reconnect()
 
         # 停止心跳
@@ -187,6 +214,7 @@ class HomeAssistantAdapter(ReconnectMixin, BasePlatformAdapter):
             self._http_client = None
 
         self._authenticated = False
+        self.update_status(AdapterStatus.STOPPED)
         self._log("info", "connection_lost", "适配器已停止，所有连接已关闭")
 
     # ------------------------------------------------------------------
@@ -213,7 +241,7 @@ class HomeAssistantAdapter(ReconnectMixin, BasePlatformAdapter):
 
             # 更新状态
             self._authenticated = True
-            self.update_status(self._status.__class__.RUNNING)
+            self.update_status(AdapterStatus.RUNNING)
             self._log("success", "handshake_ok", "Home Assistant 连接已就绪")
 
             # 开始监听消息
@@ -328,8 +356,9 @@ class HomeAssistantAdapter(ReconnectMixin, BasePlatformAdapter):
         except Exception as e:
             self._log("warning", "ws_disconnected", f"WebSocket 连接断开: {e}", details={"error": str(e)})
             self._authenticated = False
-            # 触发重连
-            self._schedule_reconnect()
+            # 触发重连（主动停止引起的断开除外，stop() 已置 STOPPING/STOPPED）
+            if self._status not in (AdapterStatus.STOPPING, AdapterStatus.STOPPED):
+                self._schedule_reconnect()
 
     async def _handle_ws_message(self, msg: dict[str, Any]) -> None:
         """处理 WebSocket 消息。"""
@@ -752,7 +781,7 @@ class HomeAssistantAdapter(ReconnectMixin, BasePlatformAdapter):
     def _on_reconnect_success(self) -> None:
         """重连成功回调。"""
         super()._on_reconnect_success()
-        self.update_status(self._status.__class__.RUNNING)
+        self.update_status(AdapterStatus.RUNNING)
         self._log("success", "reconnect_success", "HA WebSocket 重连成功")
 
         # 重连后需要重新启动监听循环

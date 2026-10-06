@@ -349,6 +349,7 @@
     "workflowDone": "Workflow completed",
     "workflowFailed": "Workflow failed: {msg}",
     "regenerateFailed": "Failed to regenerate: {msg}",
+    "streamInProgress": "A reply is still being generated. Please wait for it to finish",
     "loadHistoryFailed": "Failed to load history: {msg}",
     "compressSuccess": "Context compressed: {before} → {after} tokens",
     "compressFailed": "Failed to compress context: {msg}",

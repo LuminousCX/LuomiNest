@@ -1,0 +1,68 @@
+# =============================================================================
+# LuomiNest Docker 构建上下文排除清单（上下文根 = 仓库根，见 docker-compose.yml build.context）
+# 目标：镜像只含 backend 运行所需（main.py + app/ + plugins/ + skills/ + pyproject.toml），
+# 上下文体量控制在数十 MB 内（frontend/.git/模型/文档合计可能数 GB）
+# =============================================================================
+
+# ── 版本控制 / IDE / AI 助手工作目录 ──
+.git
+.github
+.idea
+.vscode
+.zcode
+.codebuddy
+.qoder
+.trae
+.workbuddy
+.coderabbit.yaml
+.zcodeignore
+
+# ── 前端 / 桌面端（Electron）与文档、演示 ──
+frontend/
+docs/
+文档/
+Demo/
+templates/
+# 仅排除根目录层的说明文档（*.md 不跨目录层级，backend/skills 的 SKILL.md 不受影响）
+*.md
+
+# ── 其他部署资产 / 固件 / 集成 / 根级脚本（live2d-server 为独立镜像）──
+deploy/
+firmware/
+integrations/
+scripts/
+tools/
+build-all.ps1
+Makefile
+log.log
+
+# ── 仓库根下的桌面版插件/技能与数据（backend/ 内置的那份由 Dockerfile COPY）──
+plugins/
+skills/
+data/
+dist/
+
+# ── Python 产物与虚拟环境 ──
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+
+# ── backend 本地产物：运行数据、打包产物、模型、测试、构建脚本（均不进镜像）──
+backend/data/
+backend/dist/
+backend/build/
+backend/models/
+backend/scripts/
+backend/tests/
+backend/luominest-backend.spec
+backend/config/
+backend/.env.example
+
+# ── 密钥/凭据类文件绝不进入构建上下文 ──
+.env
+**/.env
+docker/.env
+*.recovery

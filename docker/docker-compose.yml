@@ -1,0 +1,107 @@
+# =============================================================================
+# LuomiNest 无头部署单容器编排（链路 E / 05 报告 阶段 1：单容器、单副本、SQLite 卷）
+#
+# 用法：
+#   1. 在本文件同目录创建 .env（compose 自动加载，用于 ${...} 插值），
+#      至少设置 LUOMINEST_AUTH_TOKEN（headless 强校验三选一，缺凭据拒绝启动）；
+#      可从模板复制：cp docker/.env.example docker/.env（若未提供模板，照下方注释手写）
+#   2. docker compose -f docker/docker-compose.yml up -d --build
+#   3. 验证：curl http://127.0.0.1:18000/health
+#
+# 安全红线：.env 内含真实凭据，已被仓库根 .gitignore 的 `.env` 规则忽略，
+# 不要提交、不要在群里粘贴；docker/.env 也已列入根 .dockerignore。
+# =============================================================================
+
+name: luominest
+
+services:
+  backend:
+    build:
+      # 构建上下文 = 仓库根（Dockerfile 里 COPY backend/... 的路径基准）；
+      # 上下文体量由仓库根 .dockerignore 控制（排除 frontend/文档/模型/产物等）
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: luominest/backend-headless:latest
+    container_name: luominest-backend
+    # tini 作为 PID 1 兜底收僵尸进程（TTS/语音子进程可能留孤儿）
+    init: true
+    # 崩溃/宿主机重启后自动拉起（不选 always：手动 stop 后不骚扰）
+    restart: unless-stopped
+    # 优雅退出宽限：uvicorn 未设 timeout_graceful_shutdown（源码级缺口，见 README 已知限制），
+    # 在途 SSE/LLM 流可能拖住退出——给足 45s 后由 Docker SIGKILL 兜底
+    stop_grace_period: 45s
+
+    environment:
+      # ── 部署形态（镜像内已烧 headless，此处显式声明防镜像更换后行为漂移）──
+      DEPLOYMENT_MODE: headless
+      LUOMINEST_HOST: 0.0.0.0
+      LUOMINEST_PORT: ${LUOMINEST_PORT:-18000}
+
+      # ── 认证凭据（headless 启动强校验三选一，见 local_token.validate_headless_auth_ready）──
+      # 方式一（推荐）：env 注入 token，不落盘。
+      # 生成：python -c "import secrets; print(secrets.token_urlsafe(32))"
+      #   或  openssl rand -base64 32 | tr '+/' '-_'
+      # 客户端调用 /api/* 时带 Authorization: Bearer <token>
+      # 留空/未设置时 compose 直接报错退出（:? 语法），防止带病启动
+      LUOMINEST_AUTH_TOKEN: ${LUOMINEST_AUTH_TOKEN:?请在 docker/.env 中设置 LUOMINEST_AUTH_TOKEN（python -c "import secrets; print(secrets.token_urlsafe(32))"）}
+
+      # 方式二（可选）：JWT 多用户模式。需要同时给 JWT_SECRET_KEY 显式值。
+      #   AUTH_MODE: jwt
+      #   ALLOW_REGISTRATION: "false"   # 远程暴露时建议关闭注册
+      # JWT_SECRET_KEY 生成：python -c "import secrets; print(secrets.token_urlsafe(48))"
+
+      # ── 加密主密钥（P0-3：显式注入跳过机器指纹绑定）──
+      # 留空时走卷内指纹绑定存储：容器重建（换节点/镜像升级）后指纹变化，
+      # 已加密数据（LLM API Key 等）将无法解密且进程拒绝启动，只能靠恢复包救回。
+      # 生成：python -c "import secrets; print(secrets.token_urlsafe(48))"
+      #   或  openssl rand -hex 32（任意非空非 change-me 字符串均可，派生为 Fernet 密钥）
+      # 设定后请妥善保管：更换该值 = 卷内已加密数据全部不可解密
+      SECRET_KEY: ${SECRET_KEY:-}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-}
+      AUTH_MODE: ${AUTH_MODE:-local}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+
+      # ── 可选：LLM 供应商密钥（也可启动后在网页设置里录入，入库走 SECRET_KEY 加密）──
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+
+    ports:
+      # 默认只绑宿主机 loopback（安全默认：外网不可达）。远程访问时改
+      # LUOMINEST_BIND=0.0.0.0（务必确认 LUOMINEST_AUTH_TOKEN 足够强）或前置 Nginx/Caddy 终结 TLS。
+      # 容器内端口与 env LUOMINEST_PORT 联动（改端口两侧同步生效）。
+      # 注意：8080-8082（QQ/MC/通用游戏适配器 WS）与 1883（内嵌 MQTT）刻意不发布——
+      # 需要接入时再显式加映射并配好实例 access_token（05 报告 P1-1）
+      - "${LUOMINEST_BIND:-127.0.0.1}:${LUOMINEST_PORT:-18000}:${LUOMINEST_PORT:-18000}"
+
+    volumes:
+      # 主数据卷（必须用 named volume，禁止绑挂 NTFS 目录——SQLite WAL 依赖本地锁语义）：
+      #   /app/data/luominest.db(+ -wal/-shm)   主库（SQLite WAL）
+      #   /app/data/config/auth_token           本地认证 token（env 注入时不生成）
+      #   /app/data/config/secret_key(+ .kdf-salt/.recovery)  加密主密钥（指纹绑定密文）
+      #   /app/data/config/jwt_secret_key(+ .kdf-salt)        JWT 签名密钥
+      #   /app/data/uploads  /app/data/avatars  上传与头像
+      #   /app/data/logs/backend.log            后端日志（5MB x 5 轮转）
+      # 换机迁移：整卷导出（含 config/ 三件套 secret_key/*.kdf-salt/auth_token）
+      - luominest-data:/app/data
+      # 插件/技能卷（可选）：named volume 首挂时从镜像播种内置内容，之后运行期安装
+      # 的插件/技能随卷持久化。代价：镜像升级新增的内置插件不会自动出现在旧卷里
+      # （旧卷遮蔽镜像层）。不需要持久化可删掉这两行（安装内容随容器重建丢失）
+      - luominest-plugins:/app/plugins
+      - luominest-skills:/app/skills
+
+    # 与镜像内 HEALTHCHECK 一致（此处显式声明便于在 compose 层调参；
+    # /health 免鉴权，start-period 放宽给首启 DB 迁移/记忆引擎初始化）
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import os, urllib.request; urllib.request.urlopen(\"http://127.0.0.1:%s/health\" % os.environ.get(\"LUOMINEST_PORT\", \"18000\"), timeout=4)'"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 5
+
+# 硬性单副本约束（05 报告 P2）：平台实例 registry、APScheduler、工作流会话、
+# slowapi 计数、token 缓存均为进程内单例，且 SQLite 双写会损坏——
+# 严禁 docker compose --scale backend=N 或多容器共用同一数据卷
+volumes:
+  luominest-data:
+  luominest-plugins:
+  luominest-skills:

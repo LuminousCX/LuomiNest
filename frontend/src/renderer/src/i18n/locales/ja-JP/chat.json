@@ -349,6 +349,7 @@
     "workflowDone": "ワークフローが完了しました",
     "workflowFailed": "ワークフローの実行に失敗しました：{msg}",
     "regenerateFailed": "再生成に失敗しました：{msg}",
+    "streamInProgress": "返信を生成中です。完了してからもう一度お試しください",
     "loadHistoryFailed": "履歴の読み込みに失敗しました：{msg}",
     "compressSuccess": "コンテキストを圧縮しました：{before} → {after} tokens",
     "compressFailed": "コンテキストの圧縮に失敗しました：{msg}",

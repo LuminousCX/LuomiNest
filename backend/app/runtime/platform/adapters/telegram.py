@@ -5,7 +5,10 @@
 - 将 PlatformResponse 发送到 Telegram
 - 提供配置模板和元数据
 
-轮询/Webhook 调度由外部服务负责，适配器仅提供 handle_update() 入口。
+入站通路（对齐 qq_onebot 标杆「转换→过滤→路由 Agent→回写」闭环）：
+- 长轮询（默认）：start() 内启动 getUpdates 长轮询任务（offset 确认 + 服务端挂起）
+- Webhook（use_webhook=True）：start() 注册 setWebhook，外部推送经 handle_webhook()
+  进入同一条处理通路
 """
 
 from __future__ import annotations
@@ -28,6 +31,9 @@ from app.runtime.platform.infrastructure.truncation import MessageTruncator, Tru
 # Telegram Bot API 限制：单条消息最大 4096 个 UTF-16 编码单元
 TELEGRAM_MAX_MESSAGE_LENGTH = 4096
 
+# getUpdates 长轮询服务端挂起时长（秒）；请求侧超时需大于该值
+TELEGRAM_LONG_POLL_TIMEOUT = 25
+
 
 class TelegramAdapter(BasePlatformAdapter):
     """Telegram Bot 适配器。
@@ -35,12 +41,11 @@ class TelegramAdapter(BasePlatformAdapter):
     职责边界：
     - 消息协议转换（Telegram Update ↔ PlatformMessage / PlatformResponse）
     - 通过 Telegram Bot API 发送消息
-    - 提供 handle_update() 供外部调度器传入 Update 对象
+    - 入站调度：默认内置 getUpdates 长轮询循环；use_webhook=True 时注册
+      setWebhook，由外部 HTTPS 推送触发 handle_webhook()
 
-    不包含：
-    - Long Polling 循环
-    - Webhook 服务器
-    这些由外部服务负责。
+    两条入站路径最终都走 _route_and_reply() 闭环：
+    转换+过滤（handle_update）→ 路由到主 Agent（_emit_message）→ 回写 Telegram。
     """
 
     platform_name = "telegram"
@@ -97,6 +102,14 @@ class TelegramAdapter(BasePlatformAdapter):
         self._allowed_users: set[str] = set()
         self._http_client: httpx.AsyncClient | None = None
         self._truncator = MessageTruncator()
+        # 入站调度状态
+        self._polling_interval: float = 1.0
+        self._use_webhook: bool = False
+        self._webhook_url: str = ""
+        self._webhook_registered: bool = False
+        self._poll_task: asyncio.Task | None = None
+        self._stop_polling = asyncio.Event()
+        self._update_offset: int = 0
 
     def initialize(self, config: dict[str, Any]) -> None:
         """解析配置并初始化资源。"""
@@ -111,8 +124,13 @@ class TelegramAdapter(BasePlatformAdapter):
                 u.strip() for u in allowed_raw.split(",") if u.strip()
             }
 
+        # 入站调度模式
+        self._polling_interval = max(float(config.get("polling_interval", 1) or 1), 1.0)
+        self._use_webhook = bool(config.get("use_webhook", False))
+        self._webhook_url = str(config.get("webhook_url", "") or "")
+
     async def start(self) -> None:
-        """启动适配器，创建 HTTP 客户端并验证 Bot Token。"""
+        """启动适配器，创建 HTTP 客户端、验证 Bot Token 并启动入站调度。"""
         await super().start()
         self.update_status(AdapterStatus.STARTING)
 
@@ -131,15 +149,49 @@ class TelegramAdapter(BasePlatformAdapter):
                 f"Telegram Bot 已连接: @{self._bot_username} (ID: {self._bot_id})",
                 details={"bot_id": self._bot_id, "username": self._bot_username},
             )
-            self.update_status(AdapterStatus.RUNNING)
         except Exception as e:
             self._log("error", "connection_failed", f"Telegram Bot 连接失败: {e}", details={"error": str(e)})
             self.record_error(str(e))
             raise
 
+        if self._use_webhook and self._webhook_url:
+            # Webhook 模式：注册后由 Telegram 官方推送 Update 到 handle_webhook
+            await self._register_webhook()
+        else:
+            # 长轮询模式：清掉可能残留的 Webhook（否则 getUpdates 报 409 Conflict）
+            try:
+                await self._api_request("deleteWebhook")
+            except Exception as e:
+                self._log(
+                    "warning",
+                    "webhook_delete_failed",
+                    f"清理残留 Webhook 失败（长轮询仍将继续）: {e}",
+                    details={"error": str(e)},
+                )
+            self._stop_polling.clear()
+            self._poll_task = asyncio.create_task(self._polling_loop())
+
+        self.update_status(AdapterStatus.RUNNING)
+
     async def stop(self) -> None:
-        """停止适配器，关闭 HTTP 客户端。"""
+        """停止适配器，终止入站调度并关闭 HTTP 客户端。"""
         await super().stop()
+        if self._poll_task:
+            self._stop_polling.set()
+            self._poll_task.cancel()
+            try:
+                await self._poll_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                self._log("warning", "poll_task_failed", f"轮询任务异常退出: {e}", details={"error": str(e)})
+            self._poll_task = None
+        if self._webhook_registered:
+            try:
+                await self._api_request("deleteWebhook")
+            except Exception as e:
+                self._log("warning", "webhook_delete_failed", f"注销 Webhook 失败: {e}", details={"error": str(e)})
+            self._webhook_registered = False
         if self._http_client:
             await self._http_client.aclose()
             self._http_client = None
@@ -149,7 +201,9 @@ class TelegramAdapter(BasePlatformAdapter):
     # ─── 消息接收 ──────────────────────────────────────────────
 
     async def handle_update(self, data: dict[str, Any]) -> PlatformMessage | None:
-        """处理来自外部调度器的 Telegram Update 对象。
+        """处理一条 Telegram Update 对象（长轮询/Webhook 共用入口）。
+
+        仅做转换与过滤，不路由；完整闭环见 _process_update / handle_webhook。
 
         Args:
             data: Telegram Update 对象（JSON dict）。
@@ -420,17 +474,109 @@ class TelegramAdapter(BasePlatformAdapter):
             self._log("error", "message_failed", f"图片发送失败: {e}", details={"error": str(e), "chat_id": chat_id})
             return False
 
+    # ─── 入站通路（长轮询 / Webhook 共用闭环）──────────────────
+
+    async def _route_and_reply(self, platform_msg: PlatformMessage, update: dict[str, Any]) -> None:
+        """将 PlatformMessage 路由到主 Agent，并把响应回写 Telegram。
+
+        对齐 qq_onebot 标杆的「内联 await emit → send_message 回写」闭环。
+        """
+        response = await self._emit_message(platform_msg)
+        if response and (response.content or response.image_urls):
+            target = self.get_target(update)
+            await self.send_message(response, target)
+
+    async def _process_update(self, update: dict[str, Any]) -> None:
+        """处理单条 Update：转换+过滤（handle_update）→ 路由 Agent → 回写。"""
+        platform_msg = await self.handle_update(update)
+        if not platform_msg:
+            return
+        await self._route_and_reply(platform_msg, update)
+
+    async def _polling_loop(self) -> None:
+        """getUpdates 长轮询循环（官方 Bot API）。
+
+        - offset 确认：每条 Update 处理前即推进 offset，避免异常导致重复消费
+        - 服务端挂起 TELEGRAM_LONG_POLL_TIMEOUT 秒，请求侧超时留余量
+        - 单条 Update 处理失败只记日志不断路；网络异常按 polling_interval 退避重试
+        """
+        self._log("info", "polling_started", "Telegram 长轮询已启动")
+        while not self._stop_polling.is_set():
+            try:
+                updates = await self._api_request(
+                    "getUpdates",
+                    {
+                        "offset": self._update_offset,
+                        "timeout": TELEGRAM_LONG_POLL_TIMEOUT,
+                        "allowed_updates": ["message"],
+                    },
+                    timeout=TELEGRAM_LONG_POLL_TIMEOUT + 10.0,
+                )
+            except Exception as e:
+                if self._stop_polling.is_set():
+                    break
+                self._log(
+                    "error",
+                    "polling_failed",
+                    f"getUpdates 轮询失败，{self._polling_interval}s 后重试: {e}",
+                    details={"error": str(e)},
+                )
+                await asyncio.sleep(self._polling_interval)
+                continue
+
+            for update in updates:
+                update_id = int(update.get("update_id", 0) or 0)
+                if update_id:
+                    # 确认本条：下次只拉取 update_id 更大的更新
+                    self._update_offset = update_id + 1
+                try:
+                    await self._process_update(update)
+                except Exception as e:
+                    self._log(
+                        "error",
+                        "update_process_failed",
+                        f"处理 Update 失败: {e}",
+                        details={"error": str(e), "update_id": update_id},
+                    )
+        self._log("info", "polling_stopped", "Telegram 长轮询已停止")
+
+    async def _register_webhook(self) -> None:
+        """向 Telegram 注册 Webhook（use_webhook=True 时由 start() 调用）。"""
+        try:
+            await self._api_request(
+                "setWebhook",
+                {"url": self._webhook_url, "allowed_updates": ["message"]},
+            )
+            self._webhook_registered = True
+            self._log(
+                "success",
+                "webhook_registered",
+                f"Telegram Webhook 已注册: {self._webhook_url}",
+                details={"webhook_url": self._webhook_url},
+            )
+        except Exception as e:
+            self._log("error", "webhook_register_failed", f"Webhook 注册失败: {e}", details={"error": str(e)})
+            raise
+
     # ─── Webhook 入口 ──────────────────────────────────────────
 
-    async def handle_webhook(self, data: dict[str, Any]) -> None:
-        """处理 Webhook 传入的 Update（供外部 Webhook 服务器调用）。
+    async def handle_webhook(self, data: dict[str, Any]) -> bool:
+        """处理外部 Webhook 服务器推送的 Update，走完整入站闭环。
 
-        与 handle_update 行为一致。
+        转换+过滤（handle_update）→ 路由到主 Agent（_emit_message）→
+        将 Agent 响应回写 Telegram（send_message）。
 
         Args:
             data: Telegram Update 对象。
+
+        Returns:
+            Update 被接受处理返回 True；被过滤（白名单/@门槛/空消息）返回 False。
         """
-        await self.handle_update(data)
+        platform_msg = await self.handle_update(data)
+        if not platform_msg:
+            return False
+        await self._route_and_reply(platform_msg, data)
+        return True
 
     # ─── 工具方法 ──────────────────────────────────────────────
 
@@ -438,7 +584,7 @@ class TelegramAdapter(BasePlatformAdapter):
     def get_target(data: dict[str, Any]) -> str:
         """从 Telegram Update 对象中提取回复目标标识。
 
-        外部调度器在收到 handle_update 返回的 PlatformMessage 后，
+        收到 handle_update 返回的 PlatformMessage 后，
         调用此方法获取 send_message 所需的 target 参数。
 
         Args:
@@ -489,12 +635,15 @@ class TelegramAdapter(BasePlatformAdapter):
         self,
         method: str,
         params: dict[str, Any] | None = None,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         """调用 Telegram Bot API。
 
         Args:
             method: API 方法名（如 sendMessage）。
             params: 请求参数。
+            timeout: 单次请求超时（秒），None 用客户端默认值。
+                getUpdates 长轮询需传大于服务端挂起时长的值。
 
         Returns:
             API 响应中的 result 字段。
@@ -507,7 +656,7 @@ class TelegramAdapter(BasePlatformAdapter):
             raise RuntimeError("HTTP 客户端未初始化")
 
         try:
-            resp = await self._http_client.post(method, json=params or {})
+            resp = await self._http_client.post(method, json=params or {}, timeout=timeout)
             resp.raise_for_status()
             data = resp.json()
         except httpx.HTTPStatusError as e:
@@ -527,7 +676,7 @@ class TelegramAdapter(BasePlatformAdapter):
                 )
                 await asyncio.sleep(retry_after)
                 # 重试一次
-                resp = await self._http_client.post(method, json=params or {})
+                resp = await self._http_client.post(method, json=params or {}, timeout=timeout)
                 resp.raise_for_status()
                 data = resp.json()
                 if not data.get("ok"):
@@ -629,19 +778,19 @@ class TelegramAdapter(BasePlatformAdapter):
             if tool_name == "telegram.send_message":
                 chat_id = str(arguments.get("chat_id", ""))
                 text = str(arguments.get("text", ""))
-                res = await self._call_api("sendMessage", {"chat_id": chat_id, "text": text})
+                await self._api_request("sendMessage", {"chat_id": chat_id, "text": text})
                 return {"success": True, "output": f"消息已发送至 {chat_id}", "error": ""}
 
             elif tool_name == "telegram.delete_message":
                 chat_id = str(arguments.get("chat_id", ""))
                 message_id = int(arguments.get("message_id", 0))
-                res = await self._call_api("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
+                await self._api_request("deleteMessage", {"chat_id": chat_id, "message_id": message_id})
                 return {"success": True, "output": f"已删除消息 {message_id}", "error": ""}
 
             elif tool_name == "telegram.pin_message":
                 chat_id = str(arguments.get("chat_id", ""))
                 message_id = int(arguments.get("message_id", 0))
-                res = await self._call_api("pinChatMessage", {"chat_id": chat_id, "message_id": message_id})
+                await self._api_request("pinChatMessage", {"chat_id": chat_id, "message_id": message_id})
                 return {"success": True, "output": f"已置顶消息 {message_id}", "error": ""}
         except Exception as e:
             return {"success": False, "output": "", "error": f"Telegram 工具执行失败: {e}"}
