@@ -129,8 +129,8 @@ const snippetHtml = (snippet: string): string =>
             @click="emit('select-conversation', result.id, searchQuery.trim())"
           >
             <MessageSquare :size="14" class="conv-item-icon" />
-            <div class="conv-item-content">
-              <span class="conv-item-title">{{ result.title }}</span>
+            <div class="conv-item-content lumi-item-info">
+              <span class="conv-item-title lumi-clip-base-500">{{ result.title }}</span>
               <span class="conv-item-snippet" v-html="snippetHtml(result.snippet)"></span>
             </div>
           </div>
@@ -160,7 +160,7 @@ const snippetHtml = (snippet: string): string =>
                 </div>
               </div>
               <MessageSquare :size="14" class="conv-item-icon" />
-              <div class="conv-item-content">
+              <div class="conv-item-content lumi-item-info">
                 <template v-if="renamingConvId === conv.id">
                   <input
                     v-model="renamingTitleModel"
@@ -173,7 +173,7 @@ const snippetHtml = (snippet: string): string =>
                   />
                 </template>
                 <template v-else>
-                  <span class="conv-item-title">{{ conv.title }}</span>
+                  <span class="conv-item-title lumi-clip-base-500">{{ conv.title }}</span>
                   <span class="conv-item-time">{{ formatConvTime(conv.updated_at) }}</span>
                 </template>
               </div>
@@ -198,23 +198,9 @@ const snippetHtml = (snippet: string): string =>
   </div>
 </template>
 
+<style scoped src="./workspace-shared.css"></style>
 <style scoped>
-.agent-history-panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.left-panel-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 10px var(--space-3);
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--workspace-border);
-}
-
+/* back-btn 整块留本地：三份 hover 色不同（--lumi-brand-light vs --workspace-hover），待拍板（报告 §4/§7.1） */
 .back-btn {
   width: 26px;
   height: 26px;
@@ -235,14 +221,7 @@ const snippetHtml = (snippet: string): string =>
   color: var(--lumi-brand);
 }
 
-.left-panel-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  flex: 1;
-}
-
+/* left-panel-avatar 30px/radius-xs（含 overflow）与 CloudGroupPanel 28px 变体不同，留本地（报告 §7.1） */
 .left-panel-avatar {
   width: 30px;
   height: 30px;
@@ -259,15 +238,6 @@ const snippetHtml = (snippet: string): string =>
   height: 100%;
   border-radius: inherit;
   object-fit: cover;
-}
-
-.left-panel-name {
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .sidebar-header {
@@ -452,23 +422,6 @@ const snippetHtml = (snippet: string): string =>
   flex-shrink: 0;
 }
 
-.conv-item-content {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.conv-item-title {
-  font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .conv-item-time {
   font-size: var(--text-2xs);
   color: var(--text-muted);
@@ -532,20 +485,4 @@ const snippetHtml = (snippet: string): string =>
   background: var(--lumi-danger-light);
   color: var(--lumi-danger);
 }
-
-.conv-empty {
-  padding: var(--space-7) var(--space-4);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--text-muted);
-}
-
-.conv-empty span {
-  font-size: var(--text-sm);
-}
-
-
-
 </style>

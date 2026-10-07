@@ -8,7 +8,6 @@
  * - 接口签名与现有 useLuomiNestLive2D 返回值完全兼容（async/Promise）
  * - 不支持的能力调用应静默忽略（no-op），不抛异常
  * - 渲染器实例与 canvas 1:1 绑定，切换模型时销毁旧实例
- * - Live2D 不修改原 useLuomiNestLive2D，通过 Live2DRendererAdapter 适配
  */
 import type { AvatarCapability, AvatarRendererType } from '@/types/avatar'
 

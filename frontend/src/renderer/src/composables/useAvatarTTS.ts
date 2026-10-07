@@ -1,6 +1,6 @@
 import { ref, onBeforeUnmount } from 'vue'
 import { useModelStore } from '../stores/model'
-import { API_ENDPOINTS } from '../config/api'
+import { synthesizeTts } from '@/utils/ttsApi'
 import { stripEmotionTags } from '../utils/emotionTagInterceptor'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import {
@@ -84,23 +84,10 @@ export const useAvatarTTS = (options: AvatarTTSOptions = {}) => {
     error.value = null
 
     try {
-      const token = await window.api.auth.getToken()
-      const response = await fetch(API_ENDPOINTS.TTS_SYNTHESIZE, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ text: cleanedText.trim(), voice }),
-        signal: controller.signal,
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.error || `TTS request failed (${response.status})`)
-      }
-
-      const audioBlob = await response.blob()
+      const audioBlob = await synthesizeTts(
+        { text: cleanedText.trim(), voice },
+        { signal: controller.signal, fallbackMessage: 'TTS request failed ({status})' },
+      )
       if (controller.signal.aborted) return
 
       engine.isSynthesizing.value = false

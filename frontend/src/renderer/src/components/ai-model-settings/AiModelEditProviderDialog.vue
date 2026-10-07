@@ -277,33 +277,10 @@ watch(() => props.providerId, (providerId) => {
   </LumiModal>
 </template>
 
+<style scoped src="./ai-model-shared.css"></style>
 <style scoped>
 .form-hint {
   margin-top: calc(var(--space-1) * -1);
-}
-
-.form-select-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.form-select {
-  width: 100%;
-  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  cursor: pointer;
-  appearance: none;
-  transition: all var(--transition-normal);
-}
-
-.form-select:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 var(--space-1) var(--lumi-primary-glow);
 }
 
 .select-icon {

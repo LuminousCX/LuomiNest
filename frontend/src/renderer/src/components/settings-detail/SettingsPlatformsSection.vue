@@ -408,7 +408,7 @@ onMounted(() => {
           <div v-if="Object.keys(selectedAdapterType.configMetadata).length > 0" class="platform-form-group">
             <label class="platform-form-label">{{ t('settingsEx.platforms.connectionConfig') }}</label>
             <div class="platform-config-fields">
-              <div v-for="(meta, key) in selectedAdapterType.configMetadata" :key="key" class="platform-config-field">
+              <div v-for="(meta, key) in selectedAdapterType.configMetadata" :key="key" class="platform-config-field lumi-stack-1">
                 <label class="platform-config-label">{{ meta.label || key }}</label>
                 <input
                   v-model="newPlatformConfig[key]"
@@ -443,7 +443,7 @@ onMounted(() => {
           <div v-if="Object.keys(editConfig).length > 0" class="platform-form-group">
             <label class="platform-form-label">{{ t('settingsEx.platforms.connectionConfig') }}</label>
             <div class="platform-config-fields">
-              <div v-for="(_val, key) in editConfig" :key="key" class="platform-config-field">
+              <div v-for="(_val, key) in editConfig" :key="key" class="platform-config-field lumi-stack-1">
                 <label class="platform-config-label">{{ key }}</label>
                 <input v-model="editConfig[key]" type="text" class="platform-form-input" />
               </div>
@@ -1080,11 +1080,7 @@ onMounted(() => {
   gap: var(--space-2);
 }
 
-.platform-config-field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
+/* .platform-config-field 布局由全局工具类 .lumi-stack-1 提供（components.css §16） */
 
 .platform-config-label {
   font-size: var(--text-xs);

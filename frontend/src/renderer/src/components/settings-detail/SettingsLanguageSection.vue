@@ -22,7 +22,7 @@ const localeStore = useLocaleStore()
         <Languages :size="18" />
         <span class="settings-card__title">{{ t('settings.languageSection') }}</span>
       </div>
-      <div class="settings-card__body">
+      <div class="settings-card__body lumi-stack-4 lumi-stack-4">
         <div class="lang-options">
           <button
             v-for="item in SUPPORTED_LOCALES"

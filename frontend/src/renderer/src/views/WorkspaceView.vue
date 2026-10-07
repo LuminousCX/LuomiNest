@@ -158,7 +158,7 @@ const sendCloudMessage = async (): Promise<void> => {
   const okSent = await socialStore.sendCloudMessage(groupId, content)
   if (okSent) {
     await nextTick()
-    cloudGroupChatRef.value?.scrollToBottom()
+    cloudGroupChatRef.value?.scrollToBottom(true)
   } else if (socialStore.cloudState !== 'unavailable') {
     toast.error(t('workspace.cloud.sendFailed'))
   }
@@ -555,7 +555,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   box-shadow: 0 0 60px var(--lumi-brand-glow);
-  animation: lumi-pulse 3s var(--ease-in-out) infinite;
+  animation: lumi-pulse-breathe 3s var(--ease-in-out) infinite;
 }
 
 .chat-empty-state h3 {
@@ -571,7 +571,7 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 
-@keyframes lumi-pulse {
+@keyframes lumi-pulse-breathe {
   0%, 100% { transform: scale(1); opacity: 0.9; }
   50% { transform: scale(1.05); opacity: 1; }
 }

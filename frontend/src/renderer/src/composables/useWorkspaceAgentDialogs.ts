@@ -12,6 +12,7 @@ import type { AgentProfile } from '../types'
 import { i18n } from '../i18n'
 import { useAgentStore } from '../stores/agent'
 import { useToast } from './useToast'
+import { toHttpErrorMessage } from '@/utils/error'
 
 /** Agent 配色盘（创建/编辑对话框使用） */
 const AGENT_COLORS: string[] = [
@@ -41,12 +42,6 @@ export const PRESET_AGENT_AVATARS: PresetAvatar[] = [
   { id: 'pa7', name: '学习帮手', url: 'luominest-avatar://png/agents/learning-helper.png' },
   { id: 'pa8', name: '日常助手', url: 'luominest-avatar://png/agents/daily-assistant.png' },
 ]
-
-/** 从 unknown 错误中提取友好信息 */
-const extractErrorMessage = (e: unknown, fallback: string): string => {
-  const err = e as { response?: { data?: { detail?: string } }; message?: string }
-  return err.response?.data?.detail || err.message || fallback
-}
 
 export interface AgentFormState {
   name: string
@@ -126,7 +121,7 @@ export const useWorkspaceAgentDialogs = (options: UseWorkspaceAgentDialogsOption
       showCreateDialog.value = false
       newAgentForm.value = createEmptyForm()
     } catch (e: unknown) {
-      createDialogError.value = extractErrorMessage(e, i18n.global.t('workspace.createAgentFailed'))
+      createDialogError.value = toHttpErrorMessage(e, i18n.global.t('workspace.createAgentFailed'))
     }
   }
 
@@ -162,7 +157,7 @@ export const useWorkspaceAgentDialogs = (options: UseWorkspaceAgentDialogsOption
       showEditDialog.value = false
       editingAgentId.value = null
     } catch (e: unknown) {
-      toast.error(extractErrorMessage(e, i18n.global.t('workspace.updateAgentFailed')))
+      toast.error(toHttpErrorMessage(e, i18n.global.t('workspace.updateAgentFailed')))
     }
   }
 
@@ -175,7 +170,7 @@ export const useWorkspaceAgentDialogs = (options: UseWorkspaceAgentDialogsOption
       editingAgentId.value = null
       options.onAgentDeleted(deletedId)
     } catch (e: unknown) {
-      toast.error(extractErrorMessage(e, i18n.global.t('workspace.deleteAgentFailed')))
+      toast.error(toHttpErrorMessage(e, i18n.global.t('workspace.deleteAgentFailed')))
     }
   }
 

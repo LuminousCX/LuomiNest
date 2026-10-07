@@ -386,10 +386,10 @@ watch(period, () => { loadData() })
   <div class="data-stats-view">
     <div class="stats-header animate-fade-in">
       <div class="stats-header__text">
-        <h1 class="stats-title">{{ t('stats.title') }}</h1>
-        <p class="stats-desc">{{ greeting }}，LuminousChenXi · {{ formattedDate }}</p>
+        <h1 class="stats-title lumi-page-title">{{ t('stats.title') }}</h1>
+        <p class="stats-desc lumi-page-desc">{{ greeting }}，LuminousChenXi · {{ formattedDate }}</p>
       </div>
-      <div class="stats-header__actions">
+      <div class="stats-header__actions lumi-row-3">
         <div class="period-tabs">
           <button :class="['period-btn', { active: period === 7 }]" @click="period = 7">{{ t('stats.days', { n: 7 }) }}</button>
           <button :class="['period-btn', { active: period === 30 }]" @click="period = 30">{{ t('stats.days', { n: 30 }) }}</button>
@@ -599,7 +599,7 @@ watch(period, () => { loadData() })
               v-for="m in miniGridMetrics"
               :key="m.label"
               class="usage-mini-item"
-              :style="{ '--umi-accent': m.color }"
+              :style="{ '--data-stats-accent': m.color }"
             >
               <div class="umi-top">
                 <span class="umi-label">{{ m.label }}</span>
@@ -634,7 +634,7 @@ watch(period, () => { loadData() })
               <span :class="['provider-rank', { 'provider-rank--first': idx === 0 }]">{{ idx + 1 }}</span>
               <div class="provider-name-wrap">
                 <Server :size="14" class="provider-icon" />
-                <span class="provider-name">{{ p.name }}</span>
+                <span class="provider-name lumi-clip-sm">{{ p.name }}</span>
               </div>
               <div class="provider-bar-bg">
                 <div class="provider-bar-fill" :style="{ width: p.pct + '%' }"></div>
@@ -712,7 +712,7 @@ watch(period, () => { loadData() })
                 />
               </svg>
               <div class="donut-center">
-                <span class="dc-value">{{ memoryLineCount }}</span>
+                <span class="dc-value lumi-title-2xl">{{ memoryLineCount }}</span>
                 <span class="dc-label">{{ t('stats.card.memory.label') }}</span>
               </div>
             </div>
@@ -726,7 +726,7 @@ watch(period, () => { loadData() })
           </div>
 
           <div class="health-section">
-            <div class="health-header">
+            <div class="health-header lumi-row-between">
               <span class="health-label">{{ t('stats.memory.healthLabel') }}</span>
               <span class="health-value">{{ Math.min(100, Math.round((memoryLineCount / 50) * 100)) }}%</span>
             </div>
@@ -828,25 +828,6 @@ watch(period, () => { loadData() })
 .stats-header__text {
   display: flex;
   flex-direction: column;
-}
-
-.stats-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  line-height: 1.2;
-}
-
-.stats-desc {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-}
-
-.stats-header__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
 }
 
 .period-tabs {
@@ -1314,8 +1295,8 @@ watch(period, () => { loadData() })
 
 .usage-mini-item:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--umi-accent, var(--lumi-brand)) 40%, var(--border-light));
-  box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--umi-accent, var(--lumi-brand)) 15%, transparent);
+  border-color: color-mix(in srgb, var(--data-stats-accent, var(--lumi-brand)) 40%, var(--border-light));
+  box-shadow: 0 6px 16px -4px color-mix(in srgb, var(--data-stats-accent, var(--lumi-brand)) 15%, transparent);
 }
 
 .umi-top {
@@ -1444,12 +1425,7 @@ watch(period, () => { loadData() })
 }
 
 .provider-name {
-  font-size: var(--text-sm);
   font-weight: var(--font-medium);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .provider-bar-bg {
@@ -1583,12 +1559,6 @@ watch(period, () => { loadData() })
   align-items: center;
 }
 
-.dc-value {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-}
-
 .dc-label {
   font-size: var(--text-2xs);
   color: var(--text-muted);
@@ -1630,12 +1600,6 @@ watch(period, () => { loadData() })
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-}
-
-.health-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .health-label {

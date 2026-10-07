@@ -183,8 +183,8 @@ onMounted(() => {
               <div class="device-icon-wrap">
                 <Cpu :size="18" />
               </div>
-              <div class="device-info">
-                <span class="device-name">{{ d.name }}</span>
+              <div class="device-info lumi-item-info">
+                <span class="device-name lumi-title-base">{{ d.name }}</span>
                 <div class="device-meta">
                   <span class="device-protocol">{{ d.protocol }}</span>
                   <span class="device-time">{{ d.lastActive }}</span>
@@ -219,8 +219,8 @@ onMounted(() => {
                 <Users v-if="g.type === 'hybrid'" :size="18" />
                 <Home v-else :size="18" />
               </div>
-              <div class="group-info">
-                <span class="group-name">{{ g.name }}</span>
+              <div class="group-info lumi-item-info">
+                <span class="group-name lumi-title-base">{{ g.name }}</span>
                 <span class="group-members">{{ g.members.join(', ') }}</span>
               </div>
               <div class="group-right">
@@ -269,7 +269,7 @@ onMounted(() => {
               <MessageSquare :size="12" class="recent-icon" />
               <div class="recent-info">
                 <span class="recent-target">{{ rc.target }}</span>
-                <span class="recent-msg">{{ rc.message }}</span>
+                <span class="recent-msg lumi-clip-xs-muted">{{ rc.message }}</span>
               </div>
               <span class="recent-time">{{ rc.time }}</span>
             </div>
@@ -376,22 +376,6 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-.device-info,
-.group-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.device-name,
-.group-name {
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
 }
 
 .device-meta {
@@ -541,14 +525,6 @@ onMounted(() => {
   font-size: var(--text-sm);
   font-weight: var(--font-medium);
   color: var(--text-primary);
-}
-
-.recent-msg {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .recent-time {

@@ -61,23 +61,9 @@ const roleLabel = computed(() => {
   </div>
 </template>
 
+<style scoped src="./workspace-shared.css"></style>
 <style scoped>
-.cloud-group-panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.left-panel-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 10px var(--space-3);
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--workspace-border);
-}
-
+/* back-btn 整块留本地：本份 hover 用 --workspace-hover（另两份用 --lumi-brand-light），待拍板（报告 §4/§7.1） */
 .back-btn {
   width: 26px;
   height: 26px;
@@ -97,13 +83,16 @@ const roleLabel = computed(() => {
   background: var(--workspace-hover);
 }
 
+/* gap:10px 无 flex:1 变体留本地；flex: initial 抵消共享 .left-panel-title 的 flex:1（报告 §7.1） */
 .left-panel-title {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
+  flex: initial;
 }
 
+/* avatar var(--space-7)/radius-sm 变体与 AgentHistory 30px/radius-xs 不同，留本地（报告 §7.1） */
 .left-panel-avatar {
   width: var(--space-7);
   height: var(--space-7);
@@ -123,15 +112,6 @@ const roleLabel = computed(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-}
-
-.left-panel-name {
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .left-panel-sub {

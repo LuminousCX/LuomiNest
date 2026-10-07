@@ -16,6 +16,8 @@ interface Props {
   showMask?: boolean
   maskClosable?: boolean
   zIndex?: number
+  /** plain：无头无脚灯箱模式——面板不带底色/边框/内边距，内容尺寸完全由插槽决定 */
+  plain?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -27,7 +29,8 @@ const props = withDefaults(defineProps<Props>(), {
   closable: true,
   showMask: true,
   maskClosable: true,
-  zIndex: undefined
+  zIndex: undefined,
+  plain: false
 })
 
 const emit = defineEmits<{
@@ -39,7 +42,8 @@ const emit = defineEmits<{
 
 const classes = computed(() => {
   const list = ['lumi-modal']
-  list.push(`lumi-modal--${props.size}`)
+  if (!props.plain) list.push(`lumi-modal--${props.size}`)
+  if (props.plain) list.push('lumi-modal--plain')
   if (props.shake) list.push('lumi-modal--shake')
   return list
 })
@@ -89,7 +93,7 @@ const handleKeydown = (e: KeyboardEvent) => {
         @keydown="handleKeydown"
       >
         <div :class="classes" :style="modalStyle" role="dialog" aria-modal="true">
-          <div class="lumi-modal__header">
+          <div v-if="!plain" class="lumi-modal__header">
             <h3 class="lumi-modal__title">
               <slot name="title">{{ title }}</slot>
             </h3>
@@ -106,7 +110,7 @@ const handleKeydown = (e: KeyboardEvent) => {
           <div class="lumi-modal__body">
             <slot />
           </div>
-          <div v-if="$slots.footer" class="lumi-modal__footer">
+          <div v-if="$slots.footer && !plain" class="lumi-modal__footer">
             <slot name="footer" />
           </div>
         </div>
@@ -145,5 +149,19 @@ const handleKeydown = (e: KeyboardEvent) => {
   0%, 100% { transform: translateX(0); }
   20%, 60% { transform: translateX(-6px); }
   40%, 80% { transform: translateX(6px); }
+}
+
+/* plain 灯箱模式：面板退化成透明容器，内容（图片/导航钮）完全由插槽决定 */
+.lumi-modal--plain {
+  width: auto;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+  animation: none;
 }
 </style>

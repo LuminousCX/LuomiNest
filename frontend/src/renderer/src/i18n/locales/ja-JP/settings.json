@@ -438,7 +438,6 @@
       "confirmRestoreMessage": "復元すると現在のすべてのデータ（会話・記憶・設定など）が上書きされ、元に戻せません。復元後は LuomiNest の再起動を推奨します（メモリキャッシュ更新のため）。",
       "confirmRestore": "復元する",
       "cancel": "キャンセル",
-      "restoring": "復元中…",
       "restoreSuccess": "バックアップからデータを復元しました。なるべく早く LuomiNest を再起動してください。",
       "restoreFailed": "復元に失敗しました：{message}",
       "confirmDeleteTitle": "このバックアップを削除しますか？",
@@ -828,7 +827,6 @@
       "contact": "お問い合わせ"
     },
     "contact": {
-      "title": "お問い合わせ",
       "desc": "本プライバシーポリシーについてご質問・ご提案・ご苦情がある場合は、以下の方法でお問い合わせください：",
       "githubLabel": "GitHub Issues：",
       "homepageLabel": "プロジェクトホームページ："

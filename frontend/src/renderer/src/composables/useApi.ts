@@ -4,6 +4,7 @@ import { API_ENDPOINTS } from '../config/api'
 import { i18n } from '../i18n'
 import { whenBackendReady } from './useBackendGate'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('Api')
 
@@ -193,7 +194,7 @@ export const useApi = () => {
       }
       return parsed as T
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : String(e)
+      error.value = toErrorMessage(e)
       throw e
     } finally {
       loading.value = false
@@ -323,7 +324,7 @@ export const useApi = () => {
       if (e instanceof Error && e.name === 'AbortError') {
         return
       }
-      handlers.onError(e instanceof Error ? e.message : String(e))
+      handlers.onError(toErrorMessage(e))
     } finally {
       abortController.value = null
     }

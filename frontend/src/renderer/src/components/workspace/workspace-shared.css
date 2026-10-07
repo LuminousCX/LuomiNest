@@ -1,0 +1,65 @@
+/* -------------------------------------------------------
+   workspace 左栏面板家族共享样式（scoped src 复用，非全局）
+   来源：文档/2026年10月8日前端清理调查/重复样式聚类报告.md §7.1 / §11.4
+   用法（放在组件本地 <style scoped> 之前，本地同名规则按层叠顺序覆盖）：
+     <style scoped src="./workspace-shared.css"></style>
+     style scoped 块（差异留本地：back-btn hover 色、avatar 30/28px、gap 变体等）
+   ------------------------------------------------------- */
+
+/* ── 面板根：flex column + 撑满 + 裁切（×4 逐字） ── */
+.agent-history-panel,
+.cloud-group-panel,
+.contact-panel,
+.group-info-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── 左栏头部（×3 逐字：AgentHistory / CloudGroupPanel / GroupInfo） ── */
+.left-panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 10px var(--space-3);
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--workspace-border);
+}
+
+/* ── 左栏标题容器（×2 逐字：AgentHistory / GroupInfo）。
+      CloudGroupPanel 的 gap:10px 无 flex:1 变体留本地，并在本地以 flex: initial 抵消本条。 ── */
+.left-panel-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1;
+}
+
+/* ── 左栏名称（×3 逐字） ── */
+.left-panel-name {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 左栏空状态容器（×3 逐字：conv-empty ×2 + contact-empty ×1） ── */
+.conv-empty,
+.contact-empty {
+  padding: var(--space-7) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+}
+
+/* ── 左栏空状态文案（span 版 ×2 逐字；contact-empty 的 p 版含 margin，留 ContactPanel 本地） ── */
+.conv-empty span {
+  font-size: var(--text-sm);
+}
+

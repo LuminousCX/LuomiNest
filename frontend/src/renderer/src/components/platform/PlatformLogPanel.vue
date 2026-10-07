@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { formatTime } from '@/utils/format'
 import { useI18n } from 'vue-i18n'
 import {
   FileText, AlertCircle, Timer, Layers,
@@ -12,15 +13,7 @@ const { t } = useI18n()
 
 const expandedLogIds = ref<Set<string>>(new Set())
 
-const formatLogTime = (ts: string) => {
-  if (!ts) return ''
-  try {
-    const d = new Date(ts)
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  } catch {
-    return ts
-  }
-}
+const formatLogTime = (ts: string): string => (ts ? formatTime(ts, { seconds: true }) : '')
 
 const formatLogDate = (ts: string) => {
   if (!ts) return ''

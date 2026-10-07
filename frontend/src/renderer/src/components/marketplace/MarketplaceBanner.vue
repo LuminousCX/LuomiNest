@@ -28,7 +28,7 @@ function navigateToList() {
 
 <template>
   <div class="market-banner">
-    <div class="banner-header">
+    <div class="banner-header lumi-row-between">
       <div class="banner-title-row">
         <PackageCheck :size="16" class="installed-icon" />
         <h2 class="banner-title">{{ title }}</h2>
@@ -83,12 +83,6 @@ function navigateToList() {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-}
-
-.banner-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
 .banner-title-row {

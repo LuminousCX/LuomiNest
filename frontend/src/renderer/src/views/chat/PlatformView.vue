@@ -102,21 +102,21 @@ onMounted(() => {
       <LumiCard class="stat-card" :style="{ animationDelay: '0.05s' }" padding="md">
         <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--brand"><Server :size="18" /></div>
         <div class="stat-info">
-          <span class="stat-value">{{ store.stats.totalPlatforms }}</span>
+          <span class="stat-value lumi-title-2xl">{{ store.stats.totalPlatforms }}</span>
           <span class="stat-label">{{ t('platform.stat.platforms') }}</span>
         </div>
       </LumiCard>
       <LumiCard class="stat-card" :style="{ animationDelay: '0.10s' }" padding="md">
         <div class="lumi-icon-wrap lumi-icon-wrap--md stat-active"><Zap :size="18" /></div>
         <div class="stat-info">
-          <span class="stat-value">{{ store.stats.activeConnections }}</span>
+          <span class="stat-value lumi-title-2xl">{{ store.stats.activeConnections }}</span>
           <span class="stat-label">{{ t('platform.stat.active') }}</span>
         </div>
       </LumiCard>
       <LumiCard class="stat-card" :style="{ animationDelay: '0.15s' }" padding="md">
         <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--brand"><Shield :size="18" /></div>
         <div class="stat-info">
-          <span class="stat-value">{{ store.stats.totalMessages }}</span>
+          <span class="stat-value lumi-title-2xl">{{ store.stats.totalMessages }}</span>
           <span class="stat-label">{{ t('platform.stat.messages') }}</span>
         </div>
       </LumiCard>
@@ -230,16 +230,16 @@ onMounted(() => {
                 :class="['conv-item', { active: store.selectedConversationId === c.id }]"
                 @click="handleSelectConversation(c.id)"
               >
-                <div class="conv-item-header">
+                <div class="conv-item-header lumi-row-between">
                   <span class="conv-item-platform">
                     <MessageCircle :size="11" />
                     {{ c.platformName }}
                   </span>
                   <span class="conv-item-time">{{ formatMessageTime(c.time) }}</span>
                 </div>
-                <span class="conv-item-title">{{ c.title || t('platform.unnamedConversation') }}</span>
+                <span class="conv-item-title lumi-clip-sm">{{ c.title || t('platform.unnamedConversation') }}</span>
                 <div class="conv-item-footer">
-                  <span class="conv-item-preview">{{ c.preview || t('platform.noMessages') }}</span>
+                  <span class="conv-item-preview lumi-clip-xs-muted">{{ c.preview || t('platform.noMessages') }}</span>
                   <span class="conv-item-count">{{ t('platform.messageCount', { n: c.messageCount }) }}</span>
                 </div>
               </div>
@@ -432,12 +432,6 @@ onMounted(() => {
   padding-left: calc(var(--space-3) - 2px);
 }
 
-.conv-item-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
 .conv-item-platform {
   font-size: var(--text-2xs);
   color: var(--lumi-brand);
@@ -453,12 +447,7 @@ onMounted(() => {
 }
 
 .conv-item-title {
-  font-size: var(--text-sm);
   font-weight: var(--font-medium);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .conv-item-footer {
@@ -466,14 +455,6 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   gap: var(--space-2);
-}
-
-.conv-item-preview {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .conv-item-count {

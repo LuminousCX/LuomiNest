@@ -347,13 +347,4 @@ onUnmounted(() => {
   border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
   padding-top: 12px;
 }
-
-.spin-animation {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 </style>

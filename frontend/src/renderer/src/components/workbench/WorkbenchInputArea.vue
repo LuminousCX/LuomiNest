@@ -93,7 +93,7 @@ defineExpose({
         @input="autoResize"
       ></textarea>
       <div class="input-toolbar">
-        <div class="toolbar-left">
+        <div class="toolbar-left lumi-row-2">
           <!-- 2026-08 全局模型统一：工作台不提供模型切换，展示全局主模型；
                点击徽章跳转到 设置 → 模型设置 -->
           <div
@@ -133,7 +133,7 @@ defineExpose({
             </LumiButton>
           </div>
         </div>
-        <div class="toolbar-right">
+        <div class="toolbar-right lumi-row-2">
           <LumiButton
             v-if="isStreaming"
             variant="danger"
@@ -229,12 +229,6 @@ button:focus-visible {
   align-items: center;
   justify-content: space-between;
   margin-top: var(--space-2);
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .workflow-toggle {
@@ -337,12 +331,6 @@ button:focus-visible {
 .provider-svg-mini :deep(svg) {
   width: var(--space-4);
   height: var(--space-4);
-}
-
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .send-btn.lumi-btn {

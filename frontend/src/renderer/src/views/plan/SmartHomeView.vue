@@ -85,8 +85,8 @@ const toggleScene = (sceneId: string) => {
   <div class="smart-home-view">
     <div class="sh-header animate-fade-in">
       <div class="sh-header__info">
-        <h1 class="sh-title">{{ t('smartHome.title') }}</h1>
-        <p class="sh-desc">{{ t('smartHome.desc') }}</p>
+        <h1 class="sh-title lumi-page-title">{{ t('smartHome.title') }}</h1>
+        <p class="sh-desc lumi-page-desc">{{ t('smartHome.desc') }}</p>
       </div>
       <div class="sh-header__actions">
         <LumiButton variant="secondary" size="sm">
@@ -104,14 +104,14 @@ const toggleScene = (sceneId: string) => {
       <div class="left-col">
         <LumiCard class="section-card" padding="md">
           <div class="section-header">
-            <span class="section-title">{{ t('smartHome.rooms') }}</span>
+            <span class="section-title lumi-section-title">{{ t('smartHome.rooms') }}</span>
           </div>
           <div class="room-grid">
             <div v-for="r in rooms" :key="r.id" class="room-card">
               <div class="room-icon-wrap">
                 <component :is="r.icon" :size="18" />
               </div>
-              <span class="room-name">{{ r.name }}</span>
+              <span class="room-name lumi-title-base">{{ r.name }}</span>
               <span class="room-count">{{ t('smartHome.onlineCount', { active: r.active, devices: r.devices }) }}</span>
             </div>
           </div>
@@ -119,7 +119,7 @@ const toggleScene = (sceneId: string) => {
 
         <LumiCard class="section-card" padding="md">
           <div class="section-header">
-            <span class="section-title">{{ t('smartHome.scenes') }}</span>
+            <span class="section-title lumi-section-title">{{ t('smartHome.scenes') }}</span>
           </div>
           <div class="scene-list">
             <div
@@ -146,7 +146,7 @@ const toggleScene = (sceneId: string) => {
       <div class="center-col">
         <LumiCard class="section-card full" padding="md">
           <div class="section-header">
-            <span class="section-title">{{ t('smartHome.deviceControl') }}</span>
+            <span class="section-title lumi-section-title">{{ t('smartHome.deviceControl') }}</span>
             <Wifi :size="14" class="section-icon" />
           </div>
           <div class="device-grid">
@@ -173,12 +173,12 @@ const toggleScene = (sceneId: string) => {
       <div class="right-col">
         <LumiCard class="section-card" padding="md">
           <div class="section-header">
-            <span class="section-title">{{ t('smartHome.automations') }}</span>
+            <span class="section-title lumi-section-title">{{ t('smartHome.automations') }}</span>
             <Activity :size="14" class="section-icon" />
           </div>
           <div class="automation-list">
             <div v-for="a in automations" :key="a.id" :class="['automation-item', { disabled: !a.enabled }]">
-              <div class="auto-info">
+              <div class="auto-info lumi-item-info">
                 <span class="auto-name">{{ a.name }}</span>
                 <span class="auto-detail">{{ a.trigger }} → {{ a.action }}</span>
               </div>
@@ -214,19 +214,6 @@ const toggleScene = (sceneId: string) => {
 .sh-header__info {
   display: flex;
   flex-direction: column;
-}
-
-.sh-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  line-height: 1.2;
-}
-
-.sh-desc {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
 }
 
 .sh-header__actions {
@@ -283,7 +270,6 @@ const toggleScene = (sceneId: string) => {
 .section-title {
   font-size: var(--text-md);
   font-weight: var(--font-semibold);
-  color: var(--text-primary);
 }
 
 .section-icon {
@@ -321,12 +307,6 @@ const toggleScene = (sceneId: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.room-name {
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
 }
 
 .room-count {
@@ -512,14 +492,6 @@ const toggleScene = (sceneId: string) => {
 
 .automation-item.disabled {
   opacity: 0.5;
-}
-
-.auto-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .auto-name {

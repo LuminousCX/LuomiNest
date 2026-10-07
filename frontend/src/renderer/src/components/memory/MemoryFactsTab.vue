@@ -231,30 +231,8 @@ function formatExpiresAt(iso: string): string {
   gap: var(--space-2);
 }
 
-.h-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  border-radius: var(--radius-xs);
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-slow);
-  white-space: nowrap;
-}
-
-.h-btn:hover { background: var(--surface-hover); color: var(--text); }
-
-.h-btn.primary {
-  color: var(--text);
-  background: var(--task-sky-soft);
-  border: 1px solid var(--task-sky-border);
-}
-
-.h-btn.primary:hover { background: var(--task-sky-soft); }
-.h-btn:disabled { opacity: 0.5; cursor: default; }
-
+/* .h-btn / .h-btn:hover / .h-btn.primary / .h-btn.primary:hover
+   与全局 components.css「13. 辅助按钮」逐字相同，删除本地重复份（全局类已生效） */
 
 .empty-hint { font-size: var(--text-sm) !important; opacity: 0.7; }
 

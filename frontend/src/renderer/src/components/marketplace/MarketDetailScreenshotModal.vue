@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { X, ChevronDown } from 'lucide-vue-next'
+import { ChevronDown, X } from 'lucide-vue-next'
+import LumiModal from '../common/LumiModal.vue'
 import type { MarketplaceScreenshot } from '../../types/marketplace'
 
 const props = defineProps<{
@@ -15,44 +16,41 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="modal">
-      <div v-if="currentIndex !== null && screenshots[currentIndex]" class="screenshot-modal" @click="emit('close')">
-        <div class="modal-content" @click.stop>
-          <button class="modal-close" @click="emit('close')">
-            <X :size="20" />
-          </button>
-          <img :src="screenshots[currentIndex].url" :alt="screenshots[currentIndex].caption" />
-          <div class="modal-caption">
-            {{ screenshots[currentIndex].caption || `截图 ${currentIndex + 1}` }}
-            <span class="modal-counter">{{ currentIndex + 1 }} / {{ screenshots.length }}</span>
-          </div>
-          <div class="modal-nav">
-            <button v-if="currentIndex > 0" class="nav-btn prev" @click.stop="emit('prev')">
-              <ChevronDown :size="20" style="transform: rotate(90deg)" />
-            </button>
-            <button v-if="currentIndex < screenshots.length - 1" class="nav-btn next" @click.stop="emit('next')">
-              <ChevronDown :size="20" style="transform: rotate(-90deg)" />
-            </button>
-          </div>
-        </div>
+  <LumiModal
+    plain
+    :visible="currentIndex !== null && !!screenshots[currentIndex]"
+    @close="emit('close')"
+  >
+    <div class="modal-content" @click.stop>
+      <button class="modal-close" @click="emit('close')">
+        <X :size="20" />
+      </button>
+      <img
+        v-if="currentIndex !== null && screenshots[currentIndex]"
+        :src="screenshots[currentIndex].url"
+        :alt="screenshots[currentIndex].caption"
+      />
+      <div v-if="currentIndex !== null" class="modal-caption">
+        {{ screenshots[currentIndex]?.caption || `截图 ${currentIndex + 1}` }}
+        <span class="modal-counter">{{ currentIndex + 1 }} / {{ screenshots.length }}</span>
       </div>
-    </Transition>
-  </Teleport>
+      <div v-if="currentIndex !== null" class="modal-nav">
+        <button v-if="currentIndex > 0" class="nav-btn prev" @click.stop="emit('prev')">
+          <ChevronDown :size="20" style="transform: rotate(90deg)" />
+        </button>
+        <button
+          v-if="currentIndex < screenshots.length - 1"
+          class="nav-btn next"
+          @click.stop="emit('next')"
+        >
+          <ChevronDown :size="20" style="transform: rotate(-90deg)" />
+        </button>
+      </div>
+    </div>
+  </LumiModal>
 </template>
 
 <style scoped>
-.screenshot-modal {
-  position: fixed;
-  inset: 0;
-  z-index: var(--z-modal);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--overlay-backdrop);
-  animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo);
-}
-
 .modal-content {
   position: relative;
   max-width: 90vw;
@@ -127,13 +125,5 @@ const emit = defineEmits<{
 
 .nav-btn:hover {
   background: color-mix(in srgb, var(--text-inverse) 30%, transparent);
-}
-
-.modal-enter-active {
-  animation: lumi-fade-in var(--duration-normal) var(--ease-out-expo);
-}
-
-.modal-leave-active {
-  animation: lumi-fade-in var(--duration-fast) var(--ease-out-expo) reverse;
 }
 </style>

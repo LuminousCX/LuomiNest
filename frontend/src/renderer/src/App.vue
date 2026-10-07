@@ -2,7 +2,7 @@
 import { computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TitleBar from './components/TitleBar.vue'
-import LumiSidebar from './components/LumiSidebar.vue'
+import SidebarNav from './components/SidebarNav.vue'
 import ToastContainer from './components/common/ToastContainer.vue'
 import AppBackgroundOverlay from '@/components/AppBackgroundOverlay.vue'
 import { useDesktopPetChatBridge } from './composables/useDesktopPetChatBridge'
@@ -53,7 +53,7 @@ if (!isDesktopSurface.value && !isWelcomePage.value && !isLoginPage.value && !is
     <AppBackgroundOverlay />
     <TitleBar v-if="!isMinimalLayout" title="LuomiNest" />
     <div class="lumi-body" v-if="!isMinimalLayout">
-      <LumiSidebar />
+      <SidebarNav />
       <main class="lumi-main" :class="{ 'lumi-main--glass': hasBackground }">
         <router-view v-slot="{ Component }">
           <Transition name="page-switch" mode="out-in">

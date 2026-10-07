@@ -698,8 +698,8 @@ window.addEventListener('click', closeMenu)
   <div class="memory-view">
     <div class="memory-header animate-fade-in">
       <div class="memory-header__left">
-        <h1 class="memory-title">{{ t('memory.title') }}</h1>
-        <p class="memory-desc">{{ t('memory.desc') }}</p>
+        <h1 class="memory-title lumi-page-title">{{ t('memory.title') }}</h1>
+        <p class="memory-desc lumi-page-desc">{{ t('memory.desc') }}</p>
 
         <!-- 3-Track switcher tabs: Owner / Users (Fans) / Groups -->
         <div class="memory-track-nav">
@@ -759,7 +759,7 @@ window.addEventListener('click', closeMenu)
           </button>
         </div>
       </div>
-      <div class="memory-header__actions">
+      <div class="memory-header__actions lumi-row-1">
         <LumiButton variant="ghost" size="sm" icon-only @click="exportMemory" :title="t('memory.exportTitle')">
           <template #icon><Download :size="15" /></template>
         </LumiButton>
@@ -1288,23 +1288,7 @@ window.addEventListener('click', closeMenu)
 }
 
 .memory-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
   letter-spacing: -0.01em;
-  line-height: 1.2;
-}
-
-.memory-desc {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-}
-
-.memory-header__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
 }
 
 .memory-body {

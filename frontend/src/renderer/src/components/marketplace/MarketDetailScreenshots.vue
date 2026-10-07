@@ -13,7 +13,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="detail-screenshots animate-slide-up">
-    <h3 class="section-title">截图预览</h3>
+    <h3 class="section-title lumi-section-title">截图预览</h3>
     <div class="screenshots-grid">
       <div
         v-for="(shot, idx) in screenshots"
@@ -36,9 +36,6 @@ const emit = defineEmits<{
 }
 
 .section-title {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
   margin-bottom: var(--space-3);
 }
 

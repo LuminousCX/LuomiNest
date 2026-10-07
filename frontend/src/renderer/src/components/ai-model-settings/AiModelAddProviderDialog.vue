@@ -19,6 +19,7 @@ import LumiModal from '../common/LumiModal.vue'
 import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
 import type { NewProviderForm, TestResult } from './types'
+import { toErrorMessage } from '@/utils/error'
 
 const props = defineProps<{
   visible: boolean
@@ -168,7 +169,7 @@ const handleTestProvider = async () => {
       toast.error(t('aiModel.addDialog.testFailedToast', { message: result.error || t('aiModel.common.unknownError') }))
     }
   } catch (e: unknown) {
-    const errMsg = (e instanceof Error ? e.message : String(e)) || t('aiModel.addDialog.networkError')
+    const errMsg = toErrorMessage(e) || t('aiModel.addDialog.networkError')
     testResult.value = {
       success: false,
       modelCount: 0,
@@ -201,8 +202,8 @@ const handleAddProvider = async () => {
     close()
     toast.success(t('aiModel.addDialog.addSuccessToast', { name: newProvider.value.name.trim() || newProvider.value.id.trim() }))
   } catch (e: unknown) {
-    addProviderError.value = (e instanceof Error ? e.message : String(e)) || t('aiModel.addDialog.addFailed')
-    toast.error(t('aiModel.addDialog.addFailedToast', { message: (e instanceof Error ? e.message : String(e)) || t('aiModel.common.unknownError') }))
+    addProviderError.value = toErrorMessage(e) || t('aiModel.addDialog.addFailed')
+    toast.error(t('aiModel.addDialog.addFailedToast', { message: toErrorMessage(e) || t('aiModel.common.unknownError') }))
   } finally {
     addProviderLoading.value = false
   }
@@ -236,7 +237,7 @@ watch(() => props.visible, (visible) => {
           <span>{{ addProviderError }}</span>
         </div>
 
-        <div v-if="addDialogStep === 'select'" class="add-step">
+        <div v-if="addDialogStep === 'select'" class="add-step lumi-stack-4">
           <div class="step-hint">{{ t('aiModel.addDialog.stepHint') }}</div>
 
           <div class="category-tabs">
@@ -262,16 +263,16 @@ watch(() => props.visible, (visible) => {
                 <div v-if="tmpl.svgIcon" class="template-svg-icon" v-html="tmpl.svgIcon"></div>
                 <span v-else class="template-initials">{{ tmpl.initials || tmpl.name.slice(0, 2).toUpperCase() }}</span>
               </div>
-              <div class="template-card-info">
-                <span class="template-card-name">{{ tmpl.name }}</span>
-                <span class="template-card-desc">{{ tmpl.description }}</span>
+              <div class="template-card-info lumi-item-head">
+                <span class="template-card-name lumi-title-base">{{ tmpl.name }}</span>
+                <span class="template-card-desc lumi-clip-xs-muted">{{ tmpl.description }}</span>
               </div>
               <ChevronRight :size="14" class="template-card-arrow" />
             </button>
           </div>
         </div>
 
-        <div v-if="addDialogStep === 'configure'" class="add-step">
+        <div v-if="addDialogStep === 'configure'" class="add-step lumi-stack-4">
           <button class="back-to-select" @click="addDialogStep = 'select'">
             <ArrowLeft :size="14" />
             <span>{{ t('aiModel.addDialog.backToTemplates') }}</span>
@@ -285,7 +286,7 @@ watch(() => props.visible, (visible) => {
             <span class="selected-template-name">{{ selectedTmpl?.name || 'Custom' }}</span>
           </div>
 
-          <div class="config-form-compact">
+          <div class="config-form-compact lumi-stack-3">
             <div class="form-group">
               <label class="form-label">
                 {{ t('aiModel.addDialog.idLabel') }}
@@ -319,7 +320,7 @@ watch(() => props.visible, (visible) => {
             </div>
             <div class="form-group">
               <label class="form-label">{{ t('aiModel.addDialog.apiKeyLabel') }}</label>
-              <div class="api-key-row">
+              <div class="api-key-row lumi-row-2">
                 <input v-model="newProvider.apiKey" :type="showApiKey ? 'text' : 'password'" class="form-input" :class="{ 'input-error': newProvider.vendor !== 'ollama' && !newProvider.apiKey.trim() && addProviderError }" placeholder="sk-..." />
                 <button class="eye-btn" @click="showApiKey = !showApiKey">
                   <Eye v-if="!showApiKey" :size="14" />
@@ -378,6 +379,7 @@ watch(() => props.visible, (visible) => {
   </LumiModal>
 </template>
 
+<style scoped src="./ai-model-shared.css"></style>
 <style scoped>
 .dialog-title {
   display: flex;
@@ -484,28 +486,6 @@ watch(() => props.visible, (visible) => {
   font-size: var(--text-2xs);
 }
 
-.template-card-info {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  flex: 1;
-  min-width: 0;
-}
-
-.template-card-name {
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.template-card-desc {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .template-card-arrow {
   color: var(--text-muted);
   flex-shrink: 0;
@@ -551,18 +531,6 @@ watch(() => props.visible, (visible) => {
   color: var(--lumi-primary);
 }
 
-.config-form-compact {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.api-key-row {
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-}
-
 .api-key-row .form-input {
   flex: 1;
 }
@@ -586,30 +554,6 @@ watch(() => props.visible, (visible) => {
 
 .form-hint {
   margin-top: calc(var(--space-1) * -1);
-}
-
-.form-select-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.form-select {
-  width: 100%;
-  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  cursor: pointer;
-  appearance: none;
-  transition: all var(--transition-normal);
-}
-
-.form-select:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 var(--space-1) var(--lumi-primary-glow);
 }
 
 .select-icon {

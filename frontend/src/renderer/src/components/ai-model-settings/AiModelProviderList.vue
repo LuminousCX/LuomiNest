@@ -16,6 +16,7 @@ import {
 import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
 import { createLuomiNestRendererLogger } from '../../utils/logger'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('AiModel')
 
@@ -78,7 +79,7 @@ const saveSelectedModels = async (providerId: string) => {
     toast.success(t('aiModel.providerList.savedModelsToast', { count: selected.length }))
     expandedModelPicker.value = ''
   } catch (e: unknown) {
-    toast.error(t('aiModel.providerList.saveFailedToast', { message: (e instanceof Error ? e.message : String(e)) || t('aiModel.common.unknownError') }))
+    toast.error(t('aiModel.providerList.saveFailedToast', { message: toErrorMessage(e) || t('aiModel.common.unknownError') }))
   } finally {
     savingSelectedModels.value = ''
   }
@@ -90,7 +91,7 @@ const handleFetchModels = async (providerId: string) => {
     toast.info(t('aiModel.providerList.refreshedToast'))
   } catch (e: unknown) {
     logger.error('Failed to fetch models:', e)
-    toast.error(t('aiModel.providerList.fetchFailedToast', { message: (e instanceof Error ? e.message : String(e)) || t('aiModel.common.unknownError') }))
+    toast.error(t('aiModel.providerList.fetchFailedToast', { message: toErrorMessage(e) || t('aiModel.common.unknownError') }))
   }
 }
 
@@ -101,7 +102,7 @@ const handleRemoveProvider = async (providerId: string) => {
     toast.success(t('aiModel.providerList.removedToast', { name: p?.name || providerId }))
   } catch (e: unknown) {
     logger.error('Failed to remove provider:', e)
-    toast.error(t('aiModel.providerList.removeFailedToast', { message: (e instanceof Error ? e.message : String(e)) || t('aiModel.common.unknownError') }))
+    toast.error(t('aiModel.providerList.removeFailedToast', { message: toErrorMessage(e) || t('aiModel.common.unknownError') }))
   }
 }
 </script>
@@ -119,22 +120,22 @@ const handleRemoveProvider = async (providerId: string) => {
     <Transition name="expand">
       <div v-if="showProviderList" class="provider-list">
         <div v-for="provider in providers" :key="provider.id" class="provider-item">
-          <div class="provider-item-info">
+          <div class="provider-item-info lumi-item-head">
             <div class="provider-item-header">
               <div v-if="getProviderIcon(provider.id)" class="provider-svg-icon" v-html="getProviderIcon(provider.id)"></div>
               <Server v-else :size="14" class="provider-item-icon" />
-              <span class="provider-item-name">{{ provider.name }}</span>
+              <span class="provider-item-name lumi-title-base">{{ provider.name }}</span>
               <span v-if="provider.isDefault" class="default-badge">{{ t('aiModel.providerList.defaultBadge') }}</span>
               <span class="protocol-badge">{{ protocolLabel(provider.protocol) }}</span>
               <span v-if="provider.selectedModels.length > 0" class="selected-count-badge">{{ t('aiModel.providerList.modelsBadge', { count: provider.selectedModels.length }) }}</span>
             </div>
             <div class="provider-item-detail">
-              <span class="detail-text">{{ provider.baseUrl }}</span>
+              <span class="detail-text lumi-clip">{{ provider.baseUrl }}</span>
               <span class="detail-sep">|</span>
-              <span class="detail-text">{{ provider.defaultModel || t('aiModel.providerList.notSet') }}</span>
+              <span class="detail-text lumi-clip">{{ provider.defaultModel || t('aiModel.providerList.notSet') }}</span>
               <template v-if="provider.apiKeyPrefix">
                 <span class="detail-sep">|</span>
-                <span class="detail-text key-prefix-text">{{ provider.apiKeyPrefix }}</span>
+                <span class="detail-text key-prefix-text lumi-clip">{{ provider.apiKeyPrefix }}</span>
               </template>
             </div>
           </div>
@@ -271,14 +272,6 @@ const handleRemoveProvider = async (providerId: string) => {
   box-shadow: 0 1px var(--space-1) var(--lumi-primary-glow);
 }
 
-.provider-item-info {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-  flex: 1;
-}
-
 .provider-item-header {
   display: flex;
   align-items: center;
@@ -288,12 +281,6 @@ const handleRemoveProvider = async (providerId: string) => {
 .provider-item-icon {
   color: var(--lumi-primary);
   flex-shrink: 0;
-}
-
-.provider-item-name {
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--text-primary);
 }
 
 .default-badge {
@@ -427,12 +414,6 @@ const handleRemoveProvider = async (providerId: string) => {
   font-size: var(--text-xs);
   color: var(--text-muted);
   padding-left: var(--space-5);
-}
-
-.detail-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .detail-sep {

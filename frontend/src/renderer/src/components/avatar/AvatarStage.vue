@@ -108,7 +108,11 @@ const stageBgStyle = computed(() =>
   </div>
 </template>
 
+<style scoped src="./stage-shared.css"></style>
+
 <style scoped>
+/* 本块只保留 AvatarStage 相对 stage-shared.css 的差异（报告 §10.2-B） */
+
 .stage-canvas {
   flex: 1;
   position: relative;
@@ -136,135 +140,12 @@ const stageBgStyle = computed(() =>
   z-index: 1;
 }
 
-.desktop-mode-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-5);
-  padding: var(--space-8);
-  z-index: 5;
-  text-align: center;
-  animation: hint-fade-in var(--duration-slow) var(--ease-in-out);
-}
-
-@keyframes hint-fade-in {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.hint-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
-  animation: hint-icon-pulse 3s var(--ease-in-out) infinite;
-}
-
-@keyframes hint-icon-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-brand-glow); }
-  50% { box-shadow: 0 0 0 12px transparent; }
-}
-
-.hint-content h3 {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-semibold);
-  color: var(--text);
-  margin-bottom: var(--space-2);
-}
-
-.hint-content p {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  line-height: var(--leading-relaxed);
-  max-width: 360px;
-}
-
-.hint-sub {
-  font-size: var(--text-sm) !important;
-  opacity: 0.7;
-  margin-top: var(--space-1);
-}
-
-.stage-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
-  z-index: 10;
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
-  backdrop-filter: blur(4px);
-}
-
-[data-theme="dark"] .stage-loading {
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
-}
-
-.loading-spinner {
-  color: var(--lumi-brand);
-  animation: spin 1s linear infinite;
-}
-
-.loading-text {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  font-weight: var(--font-medium);
-}
-
-.stage-error {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  z-index: 10;
-  color: var(--lumi-accent);
-}
-
-.error-text {
-  font-size: var(--text-base);
-  font-weight: var(--font-medium);
-  color: var(--text);
-}
-
-.error-hint {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.subtitle-overlay {
-  position: absolute;
-  bottom: var(--space-6);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 15;
-  max-width: 80%;
-  padding: var(--space-2) var(--space-5);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface) 85%, transparent);
-  backdrop-filter: blur(8px);
-  box-shadow: var(--shadow-sm);
-  pointer-events: none;
-}
-
+/* .subtitle-text 比共享版多 letter-spacing */
 .subtitle-text {
-  font-size: var(--text-md);
-  line-height: var(--leading-relaxed);
-  color: var(--text);
-  text-align: center;
-  font-weight: var(--font-medium);
   letter-spacing: 0.02em;
 }
 
+/* subtitle-fade：带 translateY 位移版（Pixel/Png 为纯 opacity 版） */
 .subtitle-fade-enter-active {
   transition: opacity var(--duration-normal) var(--ease-in-out), transform var(--duration-normal) var(--ease-in-out);
 }
@@ -289,58 +170,41 @@ const stageBgStyle = computed(() =>
   transform: translateX(-50%) translateY(0);
 }
 
+/* .hint-icon 比共享版多脉冲动画（brand 色系） */
+.hint-icon {
+  animation: hint-icon-pulse 3s var(--ease-in-out) infinite;
+}
+
+@keyframes hint-icon-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--lumi-brand-glow); }
+  50% { box-shadow: 0 0 0 12px transparent; }
+}
+
+/* .stage-error：不带共享版的模糊底，且 gap 更小（space-2） */
+.stage-error {
+  gap: var(--space-2);
+  background: transparent;
+  backdrop-filter: none;
+}
+
+[data-theme="dark"] .stage-loading {
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+}
+
+/* .avatar-placeholder 比共享版多渐变底/内阴影/过渡 */
 .avatar-placeholder {
-  position: relative;
-  width: 260px;
-  height: 340px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-xl);
   background: linear-gradient(145deg, color-mix(in srgb, var(--surface) 6%, transparent), color-mix(in srgb, var(--surface) 2%, transparent));
-  border: 1px solid var(--border-light);
   box-shadow: var(--shadow-inset);
   transition: all var(--duration-slow) var(--ease-in-out);
-  z-index: 2;
 }
 
+/* primary 色系覆盖（共享版不含颜色） */
 .avatar-ring {
-  position: absolute;
-  width: 200px;
-  height: 200px;
-  border-radius: var(--radius-full);
   border: 1.5px dashed var(--lumi-primary-border);
-  animation: ring-spin 12s linear infinite;
-}
-
-@keyframes ring-spin {
-  to { transform: rotate(360deg); }
-}
-
-.avatar-core {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
-  z-index: 1;
 }
 
 .avatar-sparkle {
   color: var(--lumi-primary);
-  opacity: 0.6;
-  animation: sparkle-pulse 2s ease-in-out infinite;
-}
-
-@keyframes sparkle-pulse {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.9; transform: scale(1.1); }
-}
-
-.avatar-label {
-  font-size: var(--text-base);
-  font-weight: 600;
-  letter-spacing: 3px;
-  color: var(--text-muted);
 }
 
 .avatar-particles {
@@ -366,29 +230,7 @@ const stageBgStyle = computed(() =>
   100% { opacity: 0; transform: translateY(-120px) scale(1); }
 }
 
-.stage-overlay {
-  position: absolute;
-  top: var(--space-4);
-  left: var(--space-4);
-  display: flex;
-  gap: var(--space-2);
-  z-index: 20;
-}
-
-.overlay-tag {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-xl);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  backdrop-filter: blur(8px);
-  background: var(--overlay-subtle);
-  border: 1px solid var(--border-light);
-  color: var(--text-inverse);
-}
-
+/* emotion-tag：动态情绪色（模板注入 --emo-color，保持本地） */
 .emotion-tag {
   border-color: var(--emo-color, var(--lumi-primary));
   color: var(--emo-color, var(--lumi-primary));
@@ -402,18 +244,5 @@ const stageBgStyle = computed(() =>
 .status-tag {
   border-color: var(--task-green-border);
   color: var(--lumi-success);
-}
-
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--lumi-success);
-  animation: dot-pulse 2s ease-in-out infinite;
-}
-
-@keyframes dot-pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
 }
 </style>

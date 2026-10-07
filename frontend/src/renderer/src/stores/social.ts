@@ -20,6 +20,7 @@ import type {
 import { useApi } from '../composables/useApi'
 import { generateId } from '../utils/id'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('Social')
 
@@ -305,7 +306,7 @@ export const useSocialStore = defineStore('social', () => {
       }
       collaborationActive.value = false
       collaborationPhase.value = 'failed'
-      const message = e instanceof Error ? e.message : String(e)
+      const message = toErrorMessage(e)
       onError(message)
     }
   }

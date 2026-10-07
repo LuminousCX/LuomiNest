@@ -8,6 +8,8 @@
  * 分页渲染（每页 200 条）避免 1000 条裸渲染卡顿；尾随模式固定展示最新一页。
  */
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { formatTime as formatClockTime } from '@/utils/format'
+import { debounce } from '@/utils/debounce'
 import { useI18n } from 'vue-i18n'
 import {
   Search, Trash2, Download, Upload, FolderOpen, Files, X,
@@ -149,16 +151,11 @@ const jumpToLatest = (): void => {
 
 /* ── 筛选变更 ───────────────────────────────────────────────────────────── */
 
-let searchDebounce: ReturnType<typeof setTimeout> | null = null
-
-const onSearchInput = (): void => {
-  if (searchDebounce) clearTimeout(searchDebounce)
-  searchDebounce = setTimeout(() => {
-    search.value = searchInput.value.trim()
-    page.value = 1
-    void load()
-  }, SEARCH_DEBOUNCE_MS)
-}
+const onSearchInput = debounce((): void => {
+  search.value = searchInput.value.trim()
+  page.value = 1
+  void load()
+}, SEARCH_DEBOUNCE_MS)
 
 const onFilterChange = (): void => {
   page.value = 1
@@ -264,8 +261,7 @@ const openSegmentFolder = async (): Promise<void> => {
 const formatTime = (ts: string): string => {
   const date = new Date(ts)
   if (Number.isNaN(date.getTime())) return ts
-  const pad = (n: number, len = 2): string => String(n).padStart(len, '0')
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  return formatClockTime(ts, { seconds: true })
 }
 
 const formatFullTime = (ts: string): string => ts.replace('T', ' ').replace('Z', '')
@@ -329,7 +325,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   unsubscribe?.()
   unsubscribeCloudStatus?.()
-  if (searchDebounce) clearTimeout(searchDebounce)
+  onSearchInput.cancel()
   if (statusTimer) clearTimeout(statusTimer)
 })
 </script>
@@ -519,7 +515,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--space-1, 4px);
   padding: var(--space-1, 4px) var(--space-2, 8px);
-  border: 1px solid var(--border-light, rgba(128, 128, 128, 0.25));
+  border: 1px solid var(--border-light);
   background: var(--surface-hover, transparent);
   border-radius: var(--radius-md, 8px);
   color: var(--text-secondary, inherit);
@@ -529,7 +525,7 @@ onBeforeUnmount(() => {
 }
 
 .action-btn:hover:not(:disabled) {
-  background: var(--surface-active, rgba(128, 128, 128, 0.15));
+  background: var(--surface-active);
   color: var(--text-primary, inherit);
 }
 
@@ -539,8 +535,8 @@ onBeforeUnmount(() => {
 }
 
 .action-btn.danger:hover:not(:disabled) {
-  color: var(--lumi-danger, #e5484d);
-  border-color: var(--lumi-danger, #e5484d);
+  color: var(--lumi-danger);
+  border-color: var(--lumi-danger);
 }
 
 .toolbar {
@@ -553,7 +549,7 @@ onBeforeUnmount(() => {
 
 .source-tabs {
   display: inline-flex;
-  border: 1px solid var(--border-light, rgba(128, 128, 128, 0.25));
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-md, 8px);
   overflow: hidden;
 }
@@ -569,18 +565,18 @@ onBeforeUnmount(() => {
 }
 
 .source-tab:hover {
-  background: var(--surface-hover, rgba(128, 128, 128, 0.1));
+  background: var(--surface-hover);
 }
 
 .source-tab.active {
-  background: var(--nav-item-active-bg, var(--lumi-brand, #6c5ce7));
-  color: var(--nav-item-active-color, var(--text-primary, #fff));
+  background: var(--nav-item-active-bg, var(--lumi-brand));
+  color: var(--nav-item-active-color, var(--text-primary));
   font-weight: var(--font-semibold, 600);
 }
 
 .level-select {
   height: 28px;
-  border: 1px solid var(--border-light, rgba(128, 128, 128, 0.25));
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-md, 8px);
   background: var(--surface, transparent);
   color: var(--text-primary, inherit);
@@ -609,7 +605,7 @@ onBeforeUnmount(() => {
 .search-input {
   width: 100%;
   height: 28px;
-  border: 1px solid var(--border-light, rgba(128, 128, 128, 0.25));
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-md, 8px);
   background: var(--surface, transparent);
   color: var(--text-primary, inherit);
@@ -619,13 +615,13 @@ onBeforeUnmount(() => {
 }
 
 .search-input:focus {
-  border-color: var(--lumi-brand, #6c5ce7);
+  border-color: var(--lumi-brand);
 }
 
 .log-list {
   flex: 1;
   overflow-y: auto;
-  border: 1px solid var(--border-light, rgba(128, 128, 128, 0.2));
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-lg, 10px);
   background: var(--surface, transparent);
   font-family: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
@@ -652,11 +648,11 @@ onBeforeUnmount(() => {
 }
 
 .log-row:hover {
-  background: var(--surface-hover, rgba(128, 128, 128, 0.08));
+  background: var(--surface-hover);
 }
 
 .log-time {
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
@@ -671,10 +667,10 @@ onBeforeUnmount(() => {
   opacity: 0.85;
 }
 
-.src-renderer { color: #4a9eff; }
-.src-main { color: #9d7bff; }
-.src-backend { color: #2fbf71; }
-.src-platform { color: #e6a23c; }
+.src-renderer { color: var(--lumi-sky); }
+.src-main { color: var(--lumi-indigo); }
+.src-backend { color: var(--lumi-emerald); }
+.src-platform { color: var(--lumi-amber); }
 
 .log-level {
   flex-shrink: 0;
@@ -682,16 +678,16 @@ onBeforeUnmount(() => {
   font-weight: 600;
 }
 
-.level-debug .log-level { color: #8a8f98; }
-.level-info .log-level { color: var(--lumi-brand, #4a9eff); }
-.level-warn .log-level { color: var(--lumi-accent, #e6a23c); }
-.level-error .log-level { color: var(--lumi-danger, #e5484d); }
+.level-debug .log-level { color: var(--text-muted); }
+.level-info .log-level { color: var(--lumi-brand); }
+.level-warn .log-level { color: var(--lumi-accent); }
+.level-error .log-level { color: var(--lumi-danger); }
 
-.level-error .log-message { color: var(--lumi-danger, #e5484d); }
-.level-warn .log-message { color: var(--lumi-accent, #e6a23c); }
+.level-error .log-message { color: var(--lumi-danger); }
+.level-warn .log-message { color: var(--lumi-accent); }
 
 .log-scope {
-  color: var(--text-secondary, #aaa);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
@@ -722,14 +718,14 @@ onBeforeUnmount(() => {
 .status-label {
   flex: 1;
   text-align: center;
-  color: var(--lumi-brand, #4a9eff);
+  color: var(--lumi-brand);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .status-label.error {
-  color: var(--lumi-danger, #e5484d);
+  color: var(--lumi-danger);
 }
 
 .pagination {
@@ -744,7 +740,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  border: 1px solid var(--border-light, rgba(128, 128, 128, 0.25));
+  border: 1px solid var(--border-light);
   background: transparent;
   color: var(--text-secondary, inherit);
   border-radius: var(--radius-sm, 6px);
@@ -755,7 +751,7 @@ onBeforeUnmount(() => {
 
 .page-btn:hover:not(:disabled),
 .jump-latest:hover {
-  background: var(--surface-hover, rgba(128, 128, 128, 0.1));
+  background: var(--surface-hover);
 }
 
 .page-btn:disabled {
@@ -775,8 +771,8 @@ onBeforeUnmount(() => {
   right: 0;
   bottom: 0;
   width: 320px;
-  background: var(--surface, #fff);
-  border-left: 1px solid var(--border-light, rgba(128, 128, 128, 0.25));
+  background: var(--surface);
+  border-left: 1px solid var(--border-light);
   box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12);
   display: flex;
   flex-direction: column;
@@ -788,7 +784,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   padding: var(--space-3, 12px);
-  border-bottom: 1px solid var(--divider-horizontal, rgba(128, 128, 128, 0.2));
+  border-bottom: 1px solid var(--divider-horizontal);
   flex-shrink: 0;
 }
 
@@ -807,7 +803,7 @@ onBeforeUnmount(() => {
 }
 
 .drawer-close:hover {
-  background: var(--surface-hover, rgba(128, 128, 128, 0.1));
+  background: var(--surface-hover);
 }
 
 .drawer-body {
@@ -833,7 +829,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: var(--space-2, 8px);
   padding: var(--space-2, 8px);
-  border: 1px solid var(--border-light, rgba(128, 128, 128, 0.2));
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-md, 8px);
 }
 
@@ -861,7 +857,7 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 1px solid var(--border-light, rgba(128, 128, 128, 0.25));
+  border: 1px solid var(--border-light);
   background: transparent;
   color: var(--text-secondary, inherit);
   border-radius: var(--radius-sm, 6px);
@@ -872,7 +868,7 @@ onBeforeUnmount(() => {
 }
 
 .segment-open:hover {
-  background: var(--surface-hover, rgba(128, 128, 128, 0.1));
+  background: var(--surface-hover);
 }
 
 .drawer-enter-active,

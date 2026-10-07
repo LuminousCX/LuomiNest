@@ -31,7 +31,8 @@ import {
   LUOMINEST_IDLE_ANIMATION_PROGRESS,
   LUOMINEST_IMPORT_SUCCESS_TTL_MS,
 } from '@/constants'
-import { createCodeBlockFilter } from '@/utils/codeBlockFilter'
+import { createCodeBlockFilter } from '@/utils/ttsTextFilter'
+import { toErrorMessage } from '@/utils/error'
 
 // ===========================================================================
 // 基础 stores & composables
@@ -616,7 +617,7 @@ async function switchToDesktopMode() {
     // 4. IPC 成功后再切换 displayMode（确保状态一致）
     await workshop.switchDisplayMode('desktop')
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMessage(err)
     toast.error(t('avatar.view.switchDesktopModeFailed', { message: msg }))
     // 回滚：确保 displayMode 与实际窗口状态一致
     await workshop.switchDisplayMode('inline')
@@ -649,7 +650,7 @@ async function switchToInlineMode() {
     // 3. 重新加载内联模型
     await safeLoadCurrentModel()
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = toErrorMessage(err)
     toast.error(t('avatar.view.switchInlineModeFailed', { message: msg }))
   } finally {
     isSwitchingDisplayMode.value = false
@@ -705,7 +706,7 @@ async function handleChatSend() {
         isChatStreaming.value = false
         return
       }
-      const filteredContent = codeBlockFilter.filter(chunk.content || '')
+      const filteredContent = codeBlockFilter.filterCodeForTts(chunk.content || '')
       if (filteredContent || chunk.emotion) {
         feedChunk({
           ...chunk,
@@ -715,12 +716,12 @@ async function handleChatSend() {
     },
   }
 
-  codeBlockFilter.reset()
+  codeBlockFilter.resetCodeBlockFilter()
 
   try {
     await chatStore.sendMessage(text, options)
   } catch (e: unknown) {
-    const errMsg = e instanceof Error ? e.message : String(e)
+    const errMsg = toErrorMessage(e)
     toast.error(t('avatar.view.sendMessageFailed', { message: errMsg }))
   } finally {
     isChatStreaming.value = false

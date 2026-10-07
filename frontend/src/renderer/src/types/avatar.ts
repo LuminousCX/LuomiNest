@@ -185,10 +185,10 @@ export interface ModelTypeInfo {
 }
 
 /**
- * 所有支持的模型类型清单（与 createAvatarRenderer 工厂一致）
+ * 所有支持的模型类型清单
  *
- * implemented 字段必须与 createAvatarRenderer.ts 中的 case 分支保持同步：
- * - live2d: true（Live2DRendererAdapter 已实现）
+ * implemented 字段与各渲染实现保持同步：
+ * - live2d: true（useLuomiNestLive2D 已实现）
  * - pixel: true（usePixelPet 已实现）
  * - png: true（usePngTuber 已实现，参照 Codex Pet spritesheet 格式）
  * - vrm: false（P1 阶段）

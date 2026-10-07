@@ -17,6 +17,7 @@ import {
 import { useI18n } from 'vue-i18n'
 import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
+import { synthesizeTts, type TtsSynthesizeError } from '@/utils/ttsApi'
 import { API_ENDPOINTS } from '../../config/api'
 import LumiButton from '../common/LumiButton.vue'
 import type { TtsEngineInfo, TtsDeviceInfo, TtsBindingInfo } from './types'
@@ -293,26 +294,12 @@ const saveTtsConfig = async () => {
   }
 }
 
-/** 信封错误解析（统一 error 对象/旧字符串兼容） */
-const parseEnvelopeError = (errJson: unknown, status: number): string => {
-  const ej = errJson as { error?: string | { code?: string; message?: string }; message?: string } | null
-  if (!ej) return t('settingsEx.tts.requestFailed', { status })
-  if (typeof ej.error === 'string') return ej.error
-  return ej.error?.message || ej.message || t('settingsEx.tts.requestFailed', { status })
-}
-
 const testTtsSynthesize = async () => {
   ttsConfigTesting.value = true
   ttsTestResult.value = null
   try {
-    const token = await window.api.auth.getToken()
-    const resp = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
+    const blob = await synthesizeTts(
+      {
         text: ttsTestText.value,
         voice: ttsConfigForm.value.voice || 'default',
         engine: ttsConfigForm.value.engine,
@@ -321,21 +308,18 @@ const testTtsSynthesize = async () => {
         apiKey: ttsConfigForm.value.apiKey,
         baseUrl: ttsConfigForm.value.baseUrl,
         lang: ttsConfigForm.value.lang,
-      }),
-    })
-    if (!resp.ok) {
-      const errJson = await resp.json().catch(() => null)
-      const errMsg = parseEnvelopeError(errJson, resp.status)
+      },
+      { fallbackMessage: t('settingsEx.tts.requestFailed', { status: '{status}' }) },
+    ).catch((e: unknown) => {
       // LANG_NOT_SUPPORTED → 行动建议通知（§11.3）
-      const errCode = (errJson as { error?: { code?: string } } | null)?.error?.code
-      if (errCode === 'LANG_NOT_SUPPORTED') {
-        toast.warning(t('settingsEx.tts.langNotSupportedAction', { message: errMsg }))
+      const err = e as TtsSynthesizeError
+      if (err.code === 'LANG_NOT_SUPPORTED') {
+        toast.warning(t('settingsEx.tts.langNotSupportedAction', { message: err.message }))
       } else {
-        toast.error(errMsg)
+        toast.error(err.message)
       }
-      throw new Error(errMsg)
-    }
-    const blob = await resp.blob()
+      throw err
+    })
     if (blob.size === 0) {
       throw new Error(t('settingsEx.tts.emptyAudio'))
     }
@@ -361,14 +345,14 @@ onMounted(() => {
   <div :class="['settings-panel', 'animate-slide-up', { 'is-embedded': embedded }]">
     <!-- 加载 / 错误状态 -->
     <div v-if="ttsLoading" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact settings-state">
+      <div class="settings-card__body lumi-stack-4 settings-card__body--compact settings-state">
         <Loader2 :size="20" class="spin-animation" />
         <span>{{ t('settingsEx.tts.loading') }}</span>
       </div>
     </div>
 
     <div v-else-if="ttsError" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact settings-state settings-state--error">
+      <div class="settings-card__body lumi-stack-4 settings-card__body--compact settings-state settings-state--error">
         <AlertCircle :size="18" />
         <span>{{ ttsError }}</span>
         <LumiButton size="sm" @click="fetchTtsInfo">{{ t('settingsEx.tts.retry') }}</LumiButton>
@@ -382,8 +366,8 @@ onMounted(() => {
           <Settings :size="18" />
           <span class="settings-card__title">{{ t('settingsEx.tts.engineConfig') }}</span>
         </div>
-        <div class="settings-card__body">
-          <div class="settings-form-row">
+        <div class="settings-card__body lumi-stack-4">
+          <div class="settings-form-row lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.tts.engineLabel') }}</label>
             <select
               v-model="ttsConfigForm.engine"
@@ -400,7 +384,7 @@ onMounted(() => {
             </select>
           </div>
 
-          <div class="settings-form-row">
+          <div class="settings-form-row lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.tts.languageLabel') }}</label>
             <select
               v-model="ttsConfigForm.lang"
@@ -417,7 +401,7 @@ onMounted(() => {
             </select>
           </div>
 
-          <div v-if="ttsNeedsApiKey" class="settings-form-row">
+          <div v-if="ttsNeedsApiKey" class="settings-form-row lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.tts.apiKeyLabel') }}</label>
             <input
               v-model="ttsConfigForm.apiKey"
@@ -427,7 +411,7 @@ onMounted(() => {
             />
           </div>
 
-          <div v-if="ttsVoiceOptions.length > 0" class="settings-form-row">
+          <div v-if="ttsVoiceOptions.length > 0" class="settings-form-row lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.tts.voiceLabel') }}</label>
             <select v-model="ttsConfigForm.voice" class="settings-form-select">
               <option
@@ -442,7 +426,7 @@ onMounted(() => {
 
           <div
             v-else-if="ttsVoiceMode === 'input' || ttsVoiceMode === 'dynamic'"
-            class="settings-form-row"
+            class="settings-form-row lumi-stack-2"
           >
             <label class="settings-form-label">
               {{ ttsConfigForm.engine === 'fish-audio' ? t('settingsEx.tts.voiceRefLabel') : t('settingsEx.tts.voiceIdLabel') }}
@@ -455,7 +439,7 @@ onMounted(() => {
             />
           </div>
 
-          <div v-if="ttsShowModel" class="settings-form-row">
+          <div v-if="ttsShowModel" class="settings-form-row lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.tts.modelLabel') }}</label>
             <input
               v-model="ttsConfigForm.model"
@@ -465,7 +449,7 @@ onMounted(() => {
             />
           </div>
 
-          <div v-if="ttsShowSpeed" class="settings-form-row">
+          <div v-if="ttsShowSpeed" class="settings-form-row lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.tts.speedLabel', { speed: ttsConfigForm.speed.toFixed(1) }) }}</label>
             <input
               v-model.number="ttsConfigForm.speed"
@@ -477,7 +461,7 @@ onMounted(() => {
             />
           </div>
 
-          <div v-if="ttsShowBaseUrl" class="settings-form-row">
+          <div v-if="ttsShowBaseUrl" class="settings-form-row lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.tts.baseUrlLabel') }}</label>
             <input
               v-model="ttsConfigForm.baseUrl"
@@ -488,7 +472,7 @@ onMounted(() => {
           </div>
 
           <!-- 翻译管线开关（v0.5：默认关闭，语言不匹配时通知引导开启） -->
-          <div class="settings-form-row tts-translation-row">
+          <div class="settings-form-row lumi-stack-2 tts-translation-row">
             <div class="tts-translation-row__info">
               <label class="settings-form-label">
                 <Languages :size="14" />
@@ -547,7 +531,7 @@ onMounted(() => {
           <Cpu :size="18" />
           <span class="settings-card__title">{{ t('settingsEx.tts.deviceDetection') }}</span>
         </div>
-        <div class="settings-card__body settings-card__body--compact">
+        <div class="settings-card__body lumi-stack-4 settings-card__body--compact">
           <div class="settings-data-row">
             <span class="settings-data-row__label">{{ t('settingsEx.tts.computeDevice') }}</span>
             <span :class="['settings-badge', ttsDevice?.type === 'gpu' ? 'settings-badge--success' : 'settings-badge--primary']">
@@ -578,7 +562,7 @@ onMounted(() => {
           <Volume2 :size="18" />
           <span class="settings-card__title">{{ t('settingsEx.tts.availableEngines') }}</span>
         </div>
-        <div class="settings-card__body settings-card__body--compact">
+        <div class="settings-card__body lumi-stack-4 settings-card__body--compact">
           <div
             v-for="engine in ttsEngines"
             :key="engine.id"
@@ -612,7 +596,7 @@ onMounted(() => {
           <Palette :size="18" />
           <span class="settings-card__title">{{ t('settingsEx.tts.voiceBinding') }}</span>
         </div>
-        <div class="settings-card__body settings-card__body--compact">
+        <div class="settings-card__body lumi-stack-4 settings-card__body--compact">
           <div
             v-for="(binding, modelId) in ttsBindings"
             :key="modelId"

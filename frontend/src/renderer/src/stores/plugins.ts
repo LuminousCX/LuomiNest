@@ -32,6 +32,7 @@ import type {
 } from '../plugins/types'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import { i18n } from '../i18n'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('PluginsStore')
 
@@ -113,7 +114,7 @@ export const usePluginsStore = defineStore('plugins', () => {
       backendPlugins.value = Array.isArray(pluginsResp) ? pluginsResp : []
       backendStats.value = statsResp ?? { total: 0, active: 0, disabled: 0, disabled_ids: [] }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = toErrorMessage(e)
       logger.warn('Failed to load backend plugins:', msg)
       toast.error(i18n.global.t('settingsEx.pluginsStore.loadBackendFail', { message: msg }))
     } finally {
@@ -130,7 +131,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.enableBackendOk', { id: pluginId }))
         return true
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.enableBackendFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.enableBackendFail', { message: toErrorMessage(e) }))
         return false
       }
     })
@@ -143,7 +144,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.disableBackendOk', { id: pluginId }))
         return true
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.disableBackendFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.disableBackendFail', { message: toErrorMessage(e) }))
         return false
       }
     })
@@ -156,7 +157,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.reloadBackendOk', { id: pluginId }))
         return true
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadBackendFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadBackendFail', { message: toErrorMessage(e) }))
         return false
       }
     })
@@ -169,7 +170,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.reloadAllBackendOk', { count: result?.loaded_count ?? 0 }))
         return true
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadAllBackendFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadAllBackendFail', { message: toErrorMessage(e) }))
         return false
       }
     })
@@ -187,7 +188,7 @@ export const usePluginsStore = defineStore('plugins', () => {
       skills.value = Array.isArray(skillsResp) ? skillsResp : []
       skillStats.value = statsResp ?? { total: 0, active: 0, disabled: 0, disabled_ids: [] }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = toErrorMessage(e)
       logger.warn('Failed to load skills:', msg)
       toast.error(i18n.global.t('settingsEx.pluginsStore.loadSkillsFail', { message: msg }))
     } finally {
@@ -203,7 +204,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.enableSkillOk', { id: skillId }))
         return true
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.enableSkillFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.enableSkillFail', { message: toErrorMessage(e) }))
         return false
       }
     })
@@ -216,7 +217,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.disableSkillOk', { id: skillId }))
         return true
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.disableSkillFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.disableSkillFail', { message: toErrorMessage(e) }))
         return false
       }
     })
@@ -229,7 +230,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.reloadSkillOk', { id: skillId }))
         return true
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadSkillFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadSkillFail', { message: toErrorMessage(e) }))
         return false
       }
     })
@@ -242,7 +243,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.reloadAllSkillsOk', { count: result?.loaded_count ?? 0 }))
         return true
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadAllSkillsFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.reloadAllSkillsFail', { message: toErrorMessage(e) }))
         return false
       }
     })
@@ -257,7 +258,7 @@ export const usePluginsStore = defineStore('plugins', () => {
       )
       return result?.content ?? ''
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = toErrorMessage(e)
       toast.error(i18n.global.t('settingsEx.pluginsStore.readSkillRawFail', { message: msg }))
       return null
     }
@@ -274,7 +275,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         { skill_id: skillId, content, overwrite: true },
       )
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = toErrorMessage(e)
       toast.error(i18n.global.t('settingsEx.pluginsStore.validateSkillFail', { message: msg }))
       return null
     }
@@ -297,7 +298,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.writeSkillOk', { id: skillId }))
         return result
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.writeSkillFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.writeSkillFail', { message: toErrorMessage(e) }))
         return null
       }
     })
@@ -313,7 +314,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.deleteSkillOk', { id: skillId }))
         return true
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.deleteSkillFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.deleteSkillFail', { message: toErrorMessage(e) }))
         return false
       }
     })
@@ -329,7 +330,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         `/plugins/assistant/config/${pluginId}`,
       )
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = toErrorMessage(e)
       toast.error(i18n.global.t('settingsEx.pluginsStore.readPluginConfigFail', { message: msg }))
       return null
     }
@@ -348,7 +349,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.resetPluginConfigOk', { id: pluginId }))
         return result
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.resetPluginConfigFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.resetPluginConfigFail', { message: toErrorMessage(e) }))
         return null
       }
     })
@@ -365,7 +366,7 @@ export const usePluginsStore = defineStore('plugins', () => {
           { plugin_id: pluginId, user_request: userRequest },
         )
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.suggestFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.suggestFail', { message: toErrorMessage(e) }))
         return null
       }
     })
@@ -395,7 +396,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.applyOk', { count: result?.applied ?? 0 }))
         return result
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.applyFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.applyFail', { message: toErrorMessage(e) }))
         return null
       }
     })
@@ -411,7 +412,7 @@ export const usePluginsStore = defineStore('plugins', () => {
           { plugin_id: pluginId },
         )
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.explainFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.explainFail', { message: toErrorMessage(e) }))
         return null
       }
     })
@@ -445,7 +446,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.scaffoldOk', { id: payload.pluginId }))
         return result
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.scaffoldFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.scaffoldFail', { message: toErrorMessage(e) }))
         return null
       }
     })
@@ -465,7 +466,7 @@ export const usePluginsStore = defineStore('plugins', () => {
         toast.success(i18n.global.t('settingsEx.pluginsStore.scaffoldWriteOk', { id: pluginId }))
         return result
       } catch (e) {
-        toast.error(i18n.global.t('settingsEx.pluginsStore.scaffoldWriteFail', { message: e instanceof Error ? e.message : String(e) }))
+        toast.error(i18n.global.t('settingsEx.pluginsStore.scaffoldWriteFail', { message: toErrorMessage(e) }))
         return null
       }
     })
@@ -476,7 +477,7 @@ export const usePluginsStore = defineStore('plugins', () => {
       const result = await apiGet<CxPluginScaffold[]>('/plugins/assistant/scaffolds')
       return Array.isArray(result) ? result : []
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = toErrorMessage(e)
       logger.warn('Failed to list plugin scaffolds:', msg)
       return []
     }

@@ -16,6 +16,7 @@ import { copyToClipboard } from '../../utils/clipboard'
 import type { CommandRecord, SystemLogEntry, ExecuteCommandResponse } from '../../types'
 import { formatTime, formatDuration } from '../../utils/format'
 import LumiPageHeader from '../../components/common/LumiPageHeader.vue'
+import { toErrorMessage } from '@/utils/error'
 
 const router = useRouter()
 const { apiGet, apiPost, apiDelete } = useApi()
@@ -240,7 +241,7 @@ const handleCommand = async () => {
     }
     await fetchCommands()
   } catch (e: unknown) {
-    executeResult.value = t('console.execFailed', { msg: e instanceof Error ? e.message : String(e) })
+    executeResult.value = t('console.execFailed', { msg: toErrorMessage(e) })
     executeResultIsError.value = true
   } finally {
     isExecuting.value = false
@@ -314,7 +315,7 @@ onBeforeUnmount(() => {
     <!-- 命令行 Tab -->
     <template v-if="activeTab === 'console'">
       <div class="toolbar">
-        <div class="toolbar-left">
+        <div class="toolbar-left lumi-row-3">
           <div class="filter-group">
             <button class="filter-btn" @click="showCmdFilter = !showCmdFilter">
               <Filter :size="13" />
@@ -348,7 +349,7 @@ onBeforeUnmount(() => {
             <div class="cmd-card-header">
               <div class="cmd-card-left">
                 <component :is="cmd.status === 'success' ? CheckCircle2 : cmd.status === 'failed' ? XCircle : Play" :size="14" class="cmd-status-icon shrink-0" />
-                <code class="cmd-text">{{ cmd.command }}</code>
+                <code class="cmd-text lumi-clip-sm">{{ cmd.command }}</code>
               </div>
               <span :class="['cmd-badge', cmd.status]">{{ statusLabel(cmd.status) }}</span>
             </div>
@@ -387,7 +388,7 @@ onBeforeUnmount(() => {
     <!-- 系统日志 Tab -->
     <template v-if="activeTab === 'logs'">
       <div class="toolbar">
-        <div class="toolbar-left">
+        <div class="toolbar-left lumi-row-3">
           <div class="filter-group">
             <button class="filter-btn" @click="showLogFilter = !showLogFilter">
               <Filter :size="13" />
@@ -415,7 +416,7 @@ onBeforeUnmount(() => {
           </div>
           <span class="record-count">{{ t('console.logCount', { n: filteredLogs.length }) }}</span>
         </div>
-        <div class="toolbar-right">
+        <div class="toolbar-right lumi-row-2">
           <LumiButton
             variant="ghost"
             size="sm"
@@ -464,7 +465,7 @@ onBeforeUnmount(() => {
     <!-- 工作流 Tab（工具调用记录） -->
     <template v-if="activeTab === 'workflow'">
       <div class="toolbar">
-        <div class="toolbar-left">
+        <div class="toolbar-left lumi-row-3">
           <div class="filter-group">
             <button class="filter-btn" @click="showToolFilter = !showToolFilter">
               <Filter :size="13" />
@@ -506,7 +507,7 @@ onBeforeUnmount(() => {
                   class="cmd-status-icon shrink-0"
                 />
                 <Wrench :size="12" class="tool-icon shrink-0" />
-                <code class="cmd-text">{{ record.tool_name }}</code>
+                <code class="cmd-text lumi-clip-sm">{{ record.tool_name }}</code>
               </div>
               <div class="tool-record-meta">
                 <span class="meta-item"><Clock :size="12" />{{ formatDuration(record.duration_ms) }}</span>
@@ -638,18 +639,6 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: var(--space-2);
   flex-shrink: 0;
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .filter-group {
@@ -804,11 +793,6 @@ onBeforeUnmount(() => {
 
 .cmd-text {
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .cmd-badge {

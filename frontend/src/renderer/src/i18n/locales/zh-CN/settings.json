@@ -438,7 +438,6 @@
       "confirmRestoreMessage": "恢复将用备份内容覆盖当前全部数据（对话、记忆、配置等），且无法撤销。恢复完成后建议重启 LuomiNest 以刷新内存缓存。",
       "confirmRestore": "确认恢复",
       "cancel": "取消",
-      "restoring": "恢复中…",
       "restoreSuccess": "数据已从备份恢复，建议尽快重启 LuomiNest",
       "restoreFailed": "恢复失败：{message}",
       "confirmDeleteTitle": "删除此备份？",
@@ -828,7 +827,6 @@
       "contact": "联系我们"
     },
     "contact": {
-      "title": "联系我们",
       "desc": "如果您对本隐私政策有任何疑问、建议或投诉，请通过以下方式联系我们：",
       "githubLabel": "GitHub Issues：",
       "homepageLabel": "项目主页："

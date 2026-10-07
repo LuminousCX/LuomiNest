@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { setStoredTokens } from '@/utils/authToken'
 import { useI18n } from 'vue-i18n'
 import { ArrowRight, Lock, User, LogIn, UserPlus } from 'lucide-vue-next'
 import LumiBrandStar from '../components/common/LumiBrandStar.vue'
@@ -12,10 +13,6 @@ const router = useRouter()
 const route = useRoute()
 const { t } = useI18n()
 const { apiPost } = useApi()
-
-// 与 SettingsLoginSection / 向导 StepLogin 共用同一组 localStorage key，保证登录态互通
-const JWT_ACCESS_TOKEN_KEY = 'lumi_jwt_access_token'
-const JWT_REFRESH_TOKEN_KEY = 'lumi_jwt_refresh_token'
 
 const localForm = ref({ username: '', password: '' })
 const isLoggingIn = ref(false)
@@ -53,13 +50,7 @@ const refreshAuthState = () => {
   }
 }
 
-/** 持久化 JWT（与设置页登录态互通） */
-const persistTokens = (accessToken: string, refreshToken?: string): void => {
-  localStorage.setItem(JWT_ACCESS_TOKEN_KEY, accessToken)
-  if (refreshToken) localStorage.setItem(JWT_REFRESH_TOKEN_KEY, refreshToken)
-}
-
-/** 真实调用本地后端 /auth/register + /auth/login（参照 StepAccount / SettingsLoginSection） */
+/** 真实调用本地后端 /auth/register + /auth/login（参照 SettingsLoginSection） */
 const submitAuth = async (): Promise<void> => {
   if (!canLocalLogin.value || isLoggingIn.value) return
   isLoggingIn.value = true
@@ -76,7 +67,7 @@ const submitAuth = async (): Promise<void> => {
       username: localForm.value.username.trim(),
       password: localForm.value.password,
     })
-    persistTokens(resp.access_token, resp.refresh_token)
+    setStoredTokens(resp.access_token, resp.refresh_token)
     refreshAuthState()
     router.push(resolveRedirectTarget())
   } catch (e: unknown) {
@@ -113,7 +104,7 @@ const handleSkip = () => {
           <p class="login-subtitle">{{ t('login.subtitle') }}</p>
         </div>
 
-        <form class="login-form animate-slide-up" @submit.prevent="handleLocalLogin">
+        <form class="login-form lumi-stack-4 animate-slide-up" @submit.prevent="handleLocalLogin">
           <div v-if="loginError" class="form-error-banner" role="alert">
             <span>{{ loginError }}</span>
           </div>
@@ -333,12 +324,6 @@ const handleSkip = () => {
 }
 
 /* Login Form */
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
 .form-error-banner {
   display: flex;
   align-items: center;

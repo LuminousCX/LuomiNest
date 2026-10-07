@@ -104,13 +104,7 @@ defineEmits<{
   line-height: var(--leading-relaxed);
 }
 
-.step-actions {
-  display: flex;
-  gap: var(--space-3);
-  width: 100%;
-  margin-top: var(--space-1);
-}
-
+/* .step-actions 基础布局见 steps-shared.css */
 .step-actions .lumi-btn--block {
   flex: 1;
 }
@@ -127,3 +121,4 @@ defineEmits<{
   box-shadow: var(--shadow-lg);
 }
 </style>
+<style scoped src="./steps-shared.css"></style>

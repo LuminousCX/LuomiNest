@@ -6,6 +6,7 @@ import { usePlatformStore } from '../../stores/platform'
 import { PRESET_AGENT_AVATARS, type PresetAvatar } from '../../composables/useWorkspaceAgentDialogs'
 import LumiButton from '../common/LumiButton.vue'
 import { createLuomiNestRendererLogger } from '../../utils/logger'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('Settings')
 
@@ -71,7 +72,7 @@ const handleSaveMainAgentConfig = async () => {
     mainAgentSaveMsg.value = { type: 'success', text: t('settingsEx.mainAgent.savedToast') }
     setTimeout(() => { mainAgentSaveMsg.value = null }, 3000)
   } catch (e) {
-    mainAgentSaveMsg.value = { type: 'error', text: t('settingsEx.mainAgent.saveFailed', { message: e instanceof Error ? e.message : String(e) }) }
+    mainAgentSaveMsg.value = { type: 'error', text: t('settingsEx.mainAgent.saveFailed', { message: toErrorMessage(e) }) }
   } finally {
     mainAgentSaving.value = false
   }
@@ -85,7 +86,7 @@ onMounted(() => {
 <template>
   <div class="settings-panel animate-slide-up">
     <div v-if="mainAgentLoading" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact main-agent-loading">
+      <div class="settings-card__body lumi-stack-4 settings-card__body--compact main-agent-loading">
         <Loader2 :size="20" class="spin-animation" />
         <span>{{ t('settingsEx.mainAgent.loading') }}</span>
       </div>
@@ -97,8 +98,8 @@ onMounted(() => {
           <Brain :size="18" />
           <span class="settings-card__title">{{ t('settingsEx.mainAgent.personaTitle') }}</span>
         </div>
-        <div class="settings-card__body">
-          <div class="settings-form-row">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
+          <div class="settings-form-row lumi-stack-2 lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.mainAgent.nameLabel') }}</label>
             <input
               v-model="mainAgentEdit.name"
@@ -109,7 +110,7 @@ onMounted(() => {
             <span class="settings-form-hint">{{ t('settingsEx.mainAgent.nameHint') }}</span>
           </div>
 
-          <div class="settings-form-row">
+          <div class="settings-form-row lumi-stack-2 lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.mainAgent.systemPrompt') }}</label>
             <textarea
               v-model="mainAgentEdit.systemPrompt"
@@ -127,7 +128,7 @@ onMounted(() => {
           <Brain :size="18" />
           <span class="settings-card__title">{{ t('settingsEx.mainAgent.avatarTitle') }}</span>
         </div>
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <div class="settings-mode-selector">
             <button
               :class="['settings-mode-btn', { active: mainAgentEdit.avatarMode === 'color' }]"

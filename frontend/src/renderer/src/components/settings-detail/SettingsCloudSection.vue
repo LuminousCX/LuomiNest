@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { formatTime, formatShortDateTime } from '@/utils/format'
+import { useClipboard } from '@/composables/useClipboard'
 import { useI18n } from 'vue-i18n'
 import {
   Cloud,
@@ -116,21 +118,15 @@ const openVerification = async () => {
   }
 }
 
-// ── 等待授权态：复制用户码 / 取消本次授权 ──
-const copied = ref(false)
-let copyTimer: ReturnType<typeof setTimeout> | undefined
+// ── 等待授权态：复制用户码 / 取消本次授权（useClipboard 统一收口）──
+const { copied, copyText, dispose: disposeClipboard } = useClipboard(1500)
+onUnmounted(disposeClipboard)
 
 const copyUserCode = async () => {
   const code = status.value.userCode
   if (!code) return
-  try {
-    await navigator.clipboard.writeText(code)
-    copied.value = true
-    if (copyTimer) clearTimeout(copyTimer)
-    copyTimer = setTimeout(() => (copied.value = false), 1500)
-  } catch {
-    // 剪贴板不可用时用户码仍可手动选中复制（user-select: all）
-  }
+  // 剪贴板不可用时用户码仍可手动选中复制（user-select: all）
+  await copyText(code)
 }
 
 const handleLogout = async () => {
@@ -241,7 +237,7 @@ const quotaResetText = computed(() => {
   const resetAt = quotaDetail.value?.resetAt
   if (!resetAt) return ''
   const at = new Date(resetAt)
-  return Number.isNaN(at.getTime()) ? '' : at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  return Number.isNaN(at.getTime()) ? '' : formatTime(resetAt)
 })
 
 // 最近用量条目的时间列：可解析则本地化短格式，否则原样透传；缺失为空串
@@ -249,7 +245,7 @@ const usageTimeText = (iso: string | null): string => {
   if (!iso) return ''
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return iso
-  return at.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return formatShortDateTime(iso)
 }
 
 // ── 账户详情行（称号/荣誉/邮箱/注册/到期；缺失的字段不展示对应行）──
@@ -283,7 +279,6 @@ onMounted(() => {
 onUnmounted(() => {
   unsubscribe?.()
   unsubscribe = null
-  if (copyTimer) clearTimeout(copyTimer)
 })
 </script>
 
@@ -291,7 +286,7 @@ onUnmounted(() => {
   <div class="settings-panel animate-slide-up">
     <!-- 加载中 -->
     <section v-if="!loaded" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact cloud-loading">
+      <div class="settings-card__body lumi-stack-4 settings-card__body--compact cloud-loading">
         <Loader2 :size="20" class="cloud-loading__spinner" />
         <span>{{ t('settingsEx.cloud.loading') }}</span>
       </div>
@@ -304,7 +299,7 @@ onUnmounted(() => {
           <KeyRound :size="16" />
           <span class="settings-card__title">{{ t('settingsEx.cloud.pendingTitle') }}</span>
         </div>
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <p class="cloud-pending__hint">
             {{ status.userCode ? t('settingsEx.cloud.pendingHint') : t('settingsEx.cloud.directHint') }}
           </p>
@@ -347,7 +342,7 @@ onUnmounted(() => {
           <Cloud :size="16" />
           <span class="settings-card__title">{{ t('settingsEx.cloud.authorizedTitle') }}</span>
         </div>
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <div class="cloud-profile">
             <div class="cloud-profile__avatar">
               <img
@@ -418,7 +413,7 @@ onUnmounted(() => {
           <Gauge :size="16" />
           <span class="settings-card__title">{{ t('settingsEx.cloud.usagePanelTitle') }}</span>
         </div>
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <!-- 今日免费额度进度（quota 缺失时降级提示） -->
           <template v-if="quotaDetail">
             <div class="cloud-usage-progress">
@@ -508,7 +503,7 @@ onUnmounted(() => {
       </section>
 
       <section class="settings-card">
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <div class="cloud-routing-row">
             <div class="cloud-routing-row__info">
               <label class="cloud-routing-row__label">
@@ -534,7 +529,7 @@ onUnmounted(() => {
 
       <!-- 多端同步开关（仅同步显示偏好：locale / theme / 协议同意记录，最小必要） -->
       <section class="settings-card">
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <div class="cloud-routing-row">
             <div class="cloud-routing-row__info">
               <label class="cloud-routing-row__label">
@@ -563,7 +558,7 @@ onUnmounted(() => {
 
       <!-- 本地后端注入状态（拉取失败时展示未注入，不阻塞页面） -->
       <section class="settings-card">
-        <div class="settings-card__body settings-card__body--compact">
+        <div class="settings-card__body lumi-stack-4 settings-card__body--compact">
           <div class="cloud-backend-row">
             <Cable :size="14" />
             <span>{{ backendStatusLabel }}</span>
@@ -578,7 +573,7 @@ onUnmounted(() => {
           <span class="settings-card__title">{{ t('settingsEx.cloud.modelsTitle') }}</span>
           <span class="cloud-models__count">{{ cloudModels.length }}</span>
         </div>
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <ul class="cloud-models">
             <li v-for="model in cloudModels" :key="model.modelId" class="cloud-models__item">
               <span class="cloud-models__name">{{ model.displayName }}</span>
@@ -589,7 +584,7 @@ onUnmounted(() => {
       </section>
 
       <section class="settings-card settings-card--dimmed">
-        <div class="settings-card__body settings-card__body--compact">
+        <div class="settings-card__body lumi-stack-4 settings-card__body--compact">
           <div class="cloud-tip">
             <ShieldCheck :size="14" />
             <span>{{ t('settingsEx.cloud.logoutTip') }}</span>
@@ -605,7 +600,7 @@ onUnmounted(() => {
           <AlertCircle :size="16" />
           <span class="settings-card__title">{{ t('settingsEx.cloud.errorTitle') }}</span>
         </div>
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <div class="cloud-banner cloud-banner--error" role="status">
             <AlertCircle :size="14" />
             <span>{{ errorText }}</span>
@@ -629,7 +624,7 @@ onUnmounted(() => {
           <Cloud :size="16" />
           <span class="settings-card__title">{{ t('settingsEx.cloud.loggedOutTitle') }}</span>
         </div>
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <p class="cloud-pending__hint">{{ t('settingsEx.cloud.loggedOutDesc') }}</p>
           <div class="cloud-actions">
             <LumiButton variant="primary" size="lg" :loading="loginLoading" @click="handleLogin">
@@ -643,7 +638,7 @@ onUnmounted(() => {
       </section>
 
       <section class="settings-card settings-card--dimmed">
-        <div class="settings-card__body settings-card__body--compact">
+        <div class="settings-card__body lumi-stack-4 settings-card__body--compact">
           <div class="cloud-tip">
             <ShieldCheck :size="14" />
             <span>{{ t('settingsEx.cloud.storageTip') }}</span>

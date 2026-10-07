@@ -1,0 +1,102 @@
+/* =========================================================
+   欢迎向导步骤共享样式（steps-shared.css）
+   来源：文档/2026年10月8日前端清理调查/重复样式聚类报告.md §11.3
+   收口 5 个 Step 组件间逐字重复的样式块。
+
+   挂载方式（项目既有实践，同 AboutView/LicenseView 的 scoped src）：
+     <style scoped src="./steps-shared.css"></style>
+   scoped src 会按挂载组件各自加上 data-v 属性，
+   类名与原本地写法完全一致，模板零改动。
+   ========================================================= */
+
+/* ── 底部动作行（×5：Agreement / Language / Login / Ready / Tour） ── */
+.step-actions {
+  display: flex;
+  gap: var(--space-3);
+  width: 100%;
+  margin-top: var(--space-1);
+}
+
+/* ── 步骤头图（×2：Login / Tour） ── */
+.step-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+}
+
+.step-hero-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.step-hero-title {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+  color: var(--text);
+}
+
+.step-hero-desc {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+/* ── 语言选择卡（与 components/settings-detail/SettingsLanguageSection.vue
+      逐字相同；本轮按分工仅迁 StepLanguage 份，Settings 份保留本地） ── */
+.lang-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  position: relative;
+}
+
+.lang-card:hover {
+  border-color: var(--lumi-brand-border);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.lang-card.active {
+  border-color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
+  box-shadow: var(--shadow-sm);
+}
+
+.lang-flag {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-md);
+  font-weight: var(--font-bold);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.lang-label {
+  font-size: var(--text-md);
+  font-weight: var(--font-medium);
+  color: var(--text);
+}
+
+.lang-check {
+  margin-left: auto;
+  color: var(--lumi-brand);
+}

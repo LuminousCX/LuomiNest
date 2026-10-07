@@ -18,6 +18,7 @@ import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-vue-next'
 // 本地 PDF worker：通过 Vite 的 ?url 后缀将 pdf.worker.min.mjs 作为资源打包，
 // 与主包同源加载，满足 CSP 且无需外部 CDN。
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+import { toErrorMessage } from '@/utils/error'
 
 // pdfjs-dist 的类型（动态导入，类型宽松处理）
 type PdfDocumentProxy = {
@@ -95,7 +96,7 @@ const loadPdf = async () => {
     // 渲染当前页
     await renderPage()
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const msg = toErrorMessage(e)
     errorMsg.value = t('pdfReader.canvas.loadFailed', { message: msg })
     loading.value = false
   }
@@ -156,7 +157,7 @@ const renderPage = async () => {
     page.cleanup()
   } catch (e) {
     if (!renderCancelled) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = toErrorMessage(e)
       errorMsg.value = t('pdfReader.canvas.renderFailed', { message: msg })
     }
   } finally {
@@ -373,7 +374,7 @@ onUnmounted(() => {
 }
 
 .loading-spin {
-  animation: cx-pdf-spin 1s linear infinite;
+  animation: spin 1s linear infinite;
   color: var(--lumi-primary);
 }
 
@@ -522,11 +523,5 @@ onUnmounted(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-}
-
-@keyframes cx-pdf-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

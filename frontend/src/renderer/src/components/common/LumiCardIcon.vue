@@ -142,7 +142,7 @@ const borderRadius = computed(() => `${Math.round((props.size + 24) * 0.25)}px`)
 }
 
 .anim-shimmer {
-  animation: lumi-shimmer calc(var(--duration-slow) * 8 + var(--duration-fast)) var(--ease-in-out) infinite;
+  animation: lumi-icon-blink calc(var(--duration-slow) * 8 + var(--duration-fast)) var(--ease-in-out) infinite;
 }
 
 .anim-glow {
@@ -159,7 +159,8 @@ const borderRadius = computed(() => `${Math.round((props.size + 24) * 0.25)}px`)
   50% { transform: scale(1.04); }
 }
 
-@keyframes lumi-shimmer {
+/* 与全局 animations.css 的 lumi-shimmer（background-position 扫光）同名异体，就地改名区分 */
+@keyframes lumi-icon-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.85; }
 }

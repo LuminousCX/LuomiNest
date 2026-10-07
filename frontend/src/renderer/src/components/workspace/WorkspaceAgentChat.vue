@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { scrollToTextMatch } from '@/utils/chatSearchHelpers'
 import { useI18n } from 'vue-i18n'
 import {
   Send,
@@ -129,26 +130,17 @@ const selectMode = (value: ChatMode) => {
 
 const scrollToSearchResult = async (keyword: string): Promise<void> => {
   if (!messagesContainer.value) return
-  const q = keyword.toLowerCase()
-  const findMatch = (): Element | undefined =>
-    Array.from(messagesContainer.value!.querySelectorAll('.message-row')).find(
-      (el) => el.textContent?.toLowerCase().includes(q)
-    )
-  let target = findMatch()
-  if (!target && renderedStart.value > 0) {
+  await scrollToTextMatch(messagesContainer.value, '.message-row', keyword, {
     // 命中消息可能在未挂载的历史窗口之外：展开全量后再按 DOM 文本定位，
     // 与全量渲染时的查找/高亮行为保持一致
-    renderedStart.value = 0
-    await nextTick()
-    target = findMatch()
-  }
-  if (target) {
-    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    target.classList.add('lumi-chat-search-highlight')
-    setTimeout(() => target.classList.remove('lumi-chat-search-highlight'), 2000)
-    return
-  }
-  scrollToBottom(true)
+    expand: async () => {
+      if (renderedStart.value > 0) {
+        renderedStart.value = 0
+        await nextTick()
+      }
+    },
+    onFail: () => scrollToBottom(true),
+  })
 }
 
 const handleMessagesScroll = () => {
@@ -477,7 +469,7 @@ defineExpose({
           @input="autoResize"
         ></textarea>
         <div class="input-toolbar">
-          <div class="toolbar-left">
+          <div class="toolbar-left lumi-row-1">
             <!-- 2026-08 全局模型统一：对话页不提供模型切换，展示全局主模型；
                  切换请前往 设置 → 模型设置 -->
             <div
@@ -516,7 +508,7 @@ defineExpose({
               </LumiButton>
             </div>
           </div>
-          <div class="toolbar-right">
+          <div class="toolbar-right lumi-row-1">
             <button class="tool-btn icon-only" :title="t('workspace.attachment')" @click="fileUploadRef?.triggerFileSelect()">
               <Paperclip :size="16" />
             </button>
@@ -1218,13 +1210,6 @@ defineExpose({
   right: var(--space-4);
   height: 1px;
   background: var(--divider-soft);
-}
-
-.toolbar-left,
-.toolbar-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
 }
 
 .tool-btn {

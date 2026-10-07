@@ -161,63 +161,7 @@ const emit = defineEmits<{
   gap: var(--space-3);
 }
 
-.lang-card {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  position: relative;
-}
-
-.lang-card:hover {
-  border-color: var(--lumi-brand-border);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-
-.lang-card.active {
-  border-color: var(--lumi-brand);
-  background: var(--lumi-brand-light);
-  box-shadow: var(--shadow-sm);
-}
-
-.lang-flag {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-md);
-  font-weight: var(--font-bold);
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.lang-label {
-  font-size: var(--text-md);
-  font-weight: var(--font-medium);
-  color: var(--text);
-}
-
-.lang-check {
-  margin-left: auto;
-  color: var(--lumi-brand);
-}
-
-.step-actions {
-  display: flex;
-  gap: var(--space-3);
-  width: 100%;
-  margin-top: var(--space-1);
-}
+/* lang-card / lang-flag / lang-label / lang-check 见 steps-shared.css */
 
 .step-actions .lumi-btn--block {
   flex: 1;
@@ -241,3 +185,4 @@ button:focus-visible {
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 </style>
+<style scoped src="./steps-shared.css"></style>

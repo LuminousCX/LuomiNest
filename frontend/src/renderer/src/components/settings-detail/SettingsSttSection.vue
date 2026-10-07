@@ -151,14 +151,14 @@ onMounted(() => {
   <div :class="['settings-panel', 'animate-slide-up', { 'is-embedded': embedded }]">
     <!-- 加载 / 错误状态 -->
     <div v-if="sttLoading" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact settings-state">
+      <div class="settings-card__body lumi-stack-4 settings-card__body--compact settings-state">
         <Loader2 :size="20" class="spin-animation" />
         <span>{{ t('settingsEx.stt.detecting') }}</span>
       </div>
     </div>
 
     <div v-else-if="sttError" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact settings-state settings-state--error">
+      <div class="settings-card__body lumi-stack-4 settings-card__body--compact settings-state settings-state--error">
         <AlertCircle :size="18" />
         <span>{{ sttError }}</span>
         <LumiButton size="sm" @click="fetchSttInfo">{{ t('settingsEx.stt.retry') }}</LumiButton>
@@ -172,8 +172,8 @@ onMounted(() => {
           <Settings :size="18" />
           <span class="settings-card__title">{{ t('settingsEx.stt.engineConfig') }}</span>
         </div>
-        <div class="settings-card__body">
-          <div class="settings-form-row">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
+          <div class="settings-form-row lumi-stack-2 lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.stt.engineLabel') }}</label>
             <select v-model="sttForm.engine" class="settings-form-select">
               <option v-for="opt in sttEngineOptions" :key="opt.value" :value="opt.value">
@@ -182,7 +182,7 @@ onMounted(() => {
             </select>
           </div>
 
-          <div class="settings-form-row">
+          <div class="settings-form-row lumi-stack-2 lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.stt.model') }}</label>
             <select v-model="sttForm.model" class="settings-form-select">
               <option v-for="opt in sttModelOptions" :key="opt.value" :value="opt.value">
@@ -191,7 +191,7 @@ onMounted(() => {
             </select>
           </div>
 
-          <div class="settings-form-row">
+          <div class="settings-form-row lumi-stack-2 lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.stt.language') }}</label>
             <select v-model="sttForm.language" class="settings-form-select">
               <option v-for="lang in modelStore.STT_LANGUAGES" :key="lang.value" :value="lang.value">
@@ -228,7 +228,7 @@ onMounted(() => {
           <Mic :size="18" />
           <span class="settings-card__title">{{ t('settingsEx.stt.behavior') }}</span>
         </div>
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <div class="settings-list-row">
             <div class="settings-list-row__info">
               <span class="settings-list-row__title">{{ t('settingsEx.stt.autoSend') }}</span>
@@ -243,7 +243,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div v-if="sttForm.autoSend" class="settings-form-row">
+          <div v-if="sttForm.autoSend" class="settings-form-row lumi-stack-2 lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.stt.autoSendDelay', { d: delayLabel }) }}</label>
             <input
               v-model.number="sttForm.autoSendDelay"
@@ -263,7 +263,7 @@ onMounted(() => {
           <Cpu :size="18" />
           <span class="settings-card__title">{{ t('settingsEx.stt.device') }}</span>
         </div>
-        <div class="settings-card__body settings-card__body--compact">
+        <div class="settings-card__body lumi-stack-4 settings-card__body--compact">
           <div class="settings-data-row">
             <span class="settings-data-row__label">{{ t('settingsEx.stt.computeDevice') }}</span>
             <span :class="['settings-badge', modelStore.sttDevice?.type === 'gpu' ? 'settings-badge--success' : 'settings-badge--primary']">
@@ -294,7 +294,7 @@ onMounted(() => {
           <Globe :size="18" />
           <span class="settings-card__title">{{ t('settingsEx.stt.availableEngines') }}</span>
         </div>
-        <div class="settings-card__body settings-card__body--compact">
+        <div class="settings-card__body lumi-stack-4 settings-card__body--compact">
           <div
             v-for="engine in modelStore.sttEngines"
             :key="engine.id"

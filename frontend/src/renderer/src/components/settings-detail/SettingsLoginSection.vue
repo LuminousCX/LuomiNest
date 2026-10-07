@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { setStoredTokens as setJwtTokens, clearStoredTokens as clearJwtTokens, hasStoredAccessToken } from '@/utils/authToken'
 import { useI18n } from 'vue-i18n'
 import { User, LogIn, UserPlus, LogOut, ShieldCheck, AlertCircle, Loader2, KeyRound } from 'lucide-vue-next'
 import { useApi } from '../../composables/useApi'
@@ -10,20 +11,6 @@ import { createLuomiNestRendererLogger } from '../../utils/logger'
 const logger = createLuomiNestRendererLogger('SettingsLogin')
 const { apiGet, apiPost } = useApi()
 const { t } = useI18n()
-
-// ── JWT Token 持久化（localStorage，供未来远程访问场景使用）──
-const JWT_ACCESS_TOKEN_KEY = 'lumi_jwt_access_token'
-const JWT_REFRESH_TOKEN_KEY = 'lumi_jwt_refresh_token'
-
-const setJwtTokens = (accessToken: string, refreshToken?: string) => {
-  localStorage.setItem(JWT_ACCESS_TOKEN_KEY, accessToken)
-  if (refreshToken) localStorage.setItem(JWT_REFRESH_TOKEN_KEY, refreshToken)
-}
-
-const clearJwtTokens = () => {
-  localStorage.removeItem(JWT_ACCESS_TOKEN_KEY)
-  localStorage.removeItem(JWT_REFRESH_TOKEN_KEY)
-}
 
 // ── 状态机：'loading' | 'guest' | 'user' ──
 type AuthState = 'loading' | 'guest' | 'user'
@@ -70,7 +57,7 @@ const submitting = ref(false)
 // ── 当前用户信息加载 ──
 const loadCurrentUser = async () => {
   // 无 JWT access_token 时直接进入 guest 状态（不调用 /auth/me，避免 401）
-  if (!localStorage.getItem(JWT_ACCESS_TOKEN_KEY)) {
+  if (!hasStoredAccessToken()) {
     authState.value = 'guest'
     return
   }
@@ -175,7 +162,7 @@ onMounted(() => {
   <div class="settings-panel animate-slide-up">
     <!-- 加载中 -->
     <section v-if="authState === 'loading'" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact auth-loading">
+      <div class="settings-card__body lumi-stack-4 settings-card__body--compact auth-loading">
         <Loader2 :size="20" class="auth-loading__spinner" />
         <span>{{ t('settingsEx.login.loading') }}</span>
       </div>
@@ -188,7 +175,7 @@ onMounted(() => {
           <ShieldCheck :size="16" />
           <span class="settings-card__title">{{ t('settingsEx.login.currentAccount') }}</span>
         </div>
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <div class="auth-profile">
             <div class="auth-profile__avatar">
               <User :size="32" />
@@ -221,7 +208,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div class="auth-actions">
+          <div class="auth-actions lumi-actions-end">
             <LumiButton variant="danger-ghost" size="md" :loading="submitting" @click="handleLogout">
               <template #icon>
                 <LogOut v-if="!submitting" :size="16" />
@@ -233,7 +220,7 @@ onMounted(() => {
       </section>
 
       <section class="settings-card settings-card--dimmed">
-        <div class="settings-card__body settings-card__body--compact">
+        <div class="settings-card__body lumi-stack-4 settings-card__body--compact">
           <div class="auth-tip">
             <KeyRound :size="14" />
             <span>{{ t('settingsEx.login.logoutTip') }}</span>
@@ -249,7 +236,7 @@ onMounted(() => {
           <User :size="16" />
           <span class="settings-card__title">{{ t('settingsEx.login.loginRegister') }}</span>
         </div>
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <!-- 模式切换 Tab -->
           <div class="auth-tabs" role="tablist">
             <button
@@ -360,7 +347,7 @@ onMounted(() => {
       </section>
 
       <section class="settings-card settings-card--dimmed">
-        <div class="settings-card__body settings-card__body--compact">
+        <div class="settings-card__body lumi-stack-4 settings-card__body--compact">
           <div class="auth-tip">
             <ShieldCheck :size="14" />
             <span>{{ t('settingsEx.login.noAuthTip') }}</span>
@@ -468,11 +455,7 @@ onMounted(() => {
   color: var(--lumi-success);
 }
 
-.auth-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
+/* .auth-actions 布局由全局工具类 .lumi-actions-end 提供（components.css §16） */
 
 /* ── Tab 切换 ── */
 .auth-tabs {

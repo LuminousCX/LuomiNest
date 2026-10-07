@@ -13,6 +13,7 @@ import { VueFlow } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
 import { Square, Clock, Cpu, Workflow as WorkflowIcon } from 'lucide-vue-next'
+import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import LumiButton from '../components/common/LumiButton.vue'
 import LumiEmptyState from '../components/common/LumiEmptyState.vue'
 import WorkflowSidebar from '../components/workflow/WorkflowSidebar.vue'
@@ -93,10 +94,18 @@ const handleScheduleTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
   }
 }
 
-/** 删除模板 */
-const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
-  if (!window.confirm(t('workflow.deleteConfirm', { name: tpl.name }))) return
+/** 删除模板：改为 ConfirmDialog 二次确认（原 window.confirm 风格断裂） */
+const deleteTemplateTarget = ref<WorkflowTemplate | null>(null)
+
+const handleDeleteTemplate = (tpl: WorkflowTemplate): void => {
+  deleteTemplateTarget.value = tpl
+}
+
+const confirmDeleteTemplate = async (): Promise<void> => {
+  const tpl = deleteTemplateTarget.value
+  if (!tpl) return
   await workflowStore.deleteTemplate(tpl.template_id)
+  deleteTemplateTarget.value = null
 }
 </script>
 
@@ -104,10 +113,10 @@ const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
   <div class="workflow-view">
     <div class="workflow-header animate-fade-in">
       <div class="workflow-header__text">
-        <h1 class="workflow-title">{{ t('workflow.title') }}</h1>
-        <p class="workflow-desc">{{ t('workflow.desc') }}</p>
+        <h1 class="workflow-title lumi-page-title">{{ t('workflow.title') }}</h1>
+        <p class="workflow-desc lumi-page-desc">{{ t('workflow.desc') }}</p>
       </div>
-      <div class="workflow-header__actions">
+      <div class="workflow-header__actions lumi-row-2">
         <div v-if="currentDisplaySession" class="session-progress">
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: progressStats.progress + '%' }"></div>
@@ -229,6 +238,15 @@ const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
         @schedule="handleScheduleTemplate"
         @delete="handleDeleteTemplate"
       />
+
+      <ConfirmDialog
+        :visible="deleteTemplateTarget !== null"
+        :message="deleteTemplateTarget ? t('workflow.deleteConfirm', { name: deleteTemplateTarget.name }) : ''"
+        :danger="true"
+        :confirm-text="t('common.delete')"
+        @confirm="confirmDeleteTemplate"
+        @cancel="deleteTemplateTarget = null"
+      />
     </div>
   </div>
 </template>
@@ -260,25 +278,6 @@ const handleDeleteTemplate = async (tpl: WorkflowTemplate): Promise<void> => {
 .workflow-header__text {
   display: flex;
   flex-direction: column;
-}
-
-.workflow-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  line-height: 1.2;
-}
-
-.workflow-desc {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-}
-
-.workflow-header__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .workflow-tabs {

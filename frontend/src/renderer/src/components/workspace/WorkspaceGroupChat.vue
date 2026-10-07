@@ -4,11 +4,9 @@ import { useI18n } from 'vue-i18n'
 import {
   Bot,
   Users,
-  User,
   MessageCircle,
   ImagePlus,
   Mic,
-  Send,
   Loader2,
   Zap,
   UserPlus,
@@ -21,8 +19,11 @@ import {
 } from 'lucide-vue-next'
 import { useAgentStore } from '../../stores/agent'
 import type { GroupInfo, GroupMessage, CollaborationPhase, CollaborationSubTask, AgentProfile } from '../../types'
-import { useAutoScroll } from '../../composables/useAutoScroll'
+import { useChatScroll } from '../../composables/useChatScroll'
 import { useChatWindow } from '../../composables/useChatWindow'
+import ChatThreadHeader from './chat-thread/ChatThreadHeader.vue'
+import ChatThreadBubble from './chat-thread/ChatThreadBubble.vue'
+import ChatThreadInputBar from './chat-thread/ChatThreadInputBar.vue'
 
 const { t } = useI18n()
 const agentStore = useAgentStore()
@@ -87,15 +88,6 @@ const phaseIcon = computed(() => {
   return icons[props.collaborationPhase]
 })
 
-const formatGroupTime = (dateStr: string) => {
-  try {
-    const d = new Date(dateStr)
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return ''
-  }
-}
-
 const getTaskStatusIcon = (status: string) => {
   switch (status) {
     case 'running': return Loader2
@@ -114,11 +106,14 @@ const getTaskStatusClass = (status: string) => {
   }
 }
 
-const { scrollToBottom } = useAutoScroll(
-  groupMessagesContainer,
-  () => props.messages,
-  { deep: true, smooth: true }
-)
+const isNearBottom = ref(true)
+const { scrollToBottom, handleScroll: handleChatScroll } = useChatScroll({
+  container: groupMessagesContainer,
+  isNearBottom,
+  // 深度跟随消息数组；用户翻看历史时不再强拽到底（已批准的行为改进）
+  followSource: () => props.messages,
+  followDeep: true,
+})
 
 // —— 消息窗口化渲染：初始仅挂载最近 N 条，向上滚动分批挂载（保留原生滚动条） ——
 const { visibleMessages, maybeLoadOlder } = useChatWindow<GroupMessage>({
@@ -128,6 +123,7 @@ const { visibleMessages, maybeLoadOlder } = useChatWindow<GroupMessage>({
 })
 
 const handleGroupScroll = () => {
+  handleChatScroll()
   maybeLoadOlder()
 }
 
@@ -136,34 +132,27 @@ defineExpose({ scrollToBottom })
 
 <template>
   <div class="chat-group-mode">
-    <div class="group-chat-header">
-      <div class="chat-title-area">
-        <div class="chat-avatar-mini">
-          <Users :size="14" />
-        </div>
-        <div class="chat-title-text">
-          <h3>{{ group?.name }}</h3>
-          <span class="chat-status-line">
-            {{ t('workspace.membersSummary', { members: group?.members.length, ai: group?.aiCount }) }}
-          </span>
-        </div>
-      </div>
-      <div class="chat-actions">
+    <ChatThreadHeader
+      :icon="Users"
+      :title="group?.name || ''"
+      :subtitle="t('workspace.membersSummary', { members: group?.members.length, ai: group?.aiCount })"
+    >
+      <template #actions>
         <button
-          :class="['chat-action-btn', { active: collaborationMode }]"
+          :class="['chat-action-btn lumi-icon-btn', { active: collaborationMode }]"
           :title="t('workspace.collabMode')"
           @click="emit('toggle-collaboration-mode')"
         >
           <Zap :size="15" />
         </button>
-        <button class="chat-action-btn" :title="t('workspace.addAgent')" @click="emit('add-agent')">
+        <button class="chat-action-btn lumi-icon-btn" :title="t('workspace.addAgent')" @click="emit('add-agent')">
           <UserPlus :size="15" />
         </button>
-        <button class="chat-action-btn" :title="t('workspace.more')">
+        <button class="chat-action-btn lumi-icon-btn" :title="t('workspace.more')">
           <MoreVertical :size="15" />
         </button>
-      </div>
-    </div>
+      </template>
+    </ChatThreadHeader>
 
     <div class="collaboration-bar" v-if="collaborationMode">
       <div class="collab-mode-indicator">
@@ -195,44 +184,28 @@ defineExpose({ scrollToBottom })
     </div>
 
     <div ref="groupMessagesContainer" class="group-chat-messages" @scroll="handleGroupScroll">
-      <div
+      <ChatThreadBubble
         v-for="msg in visibleMessages"
         :key="msg.id"
-        :class="['msg-row', msg.senderType, { 'collab-synthesis': msg.collaboration?.type === 'synthesis' }]"
+        :msg="msg"
+        sender-name-fallback="AI"
+        agent-only-sender
       >
-        <div v-if="msg.senderType === 'agent'" class="msg-avatar">
+        <template #avatar="{ msg: m }">
           <div
             class="avatar-agent"
-            :style="msg.role === '调度员' ? { background: 'var(--lumi-brand-light)', color: 'var(--lumi-brand)' } : {}"
+            :style="m.role === '调度员' ? { background: 'var(--lumi-brand-light)', color: 'var(--lumi-brand)' } : {}"
           >
-            <img v-if="getSenderAvatar(msg)" :src="getSenderAvatar(msg)" class="group-msg-avatar-img" :alt="msg.senderName || ''" />
+            <img
+              v-if="getSenderAvatar(m)"
+              :src="getSenderAvatar(m)"
+              class="group-msg-avatar-img"
+              :alt="m.senderName || ''"
+            />
             <Bot v-else :size="14" />
           </div>
-        </div>
-        <div :class="['msg-bubble', msg.senderType, { 'synthesis-bubble': msg.collaboration?.type === 'synthesis' }]">
-          <span class="msg-sender" v-if="msg.senderType === 'agent'">
-            {{ msg.senderName || 'AI' }}
-            <span
-              v-if="msg.role"
-              class="msg-role-tag"
-              :style="msg.collaboration?.type === 'synthesis' ? { background: 'var(--lumi-brand-light)', color: 'var(--lumi-brand)' } : {}"
-            >
-              {{ msg.role }}
-            </span>
-            <span v-if="msg.collaboration?.taskId" class="msg-collab-tag">
-              {{ msg.collaboration.taskDescription?.slice(0, 8) }}...
-            </span>
-          </span>
-          <p class="msg-text">
-            {{ msg.content }}
-            <span v-if="msg.isStreaming" class="streaming-cursor">▋</span>
-          </p>
-          <span v-if="!msg.isStreaming" class="msg-time">{{ formatGroupTime(msg.timestamp) }}</span>
-        </div>
-        <div v-if="msg.senderType === 'user'" class="msg-avatar user-avatar">
-          <User :size="16" />
-        </div>
-      </div>
+        </template>
+      </ChatThreadBubble>
 
       <div v-if="collaborationActive && collaborationPhase" class="collab-progress-msg">
         <div class="collab-progress-inner">
@@ -265,36 +238,28 @@ defineExpose({ scrollToBottom })
       </div>
     </div>
 
-    <div class="group-chat-input-bar">
-      <div class="input-tools">
-        <button class="input-tool-btn" :title="t('workspace.image')">
+    <ChatThreadInputBar
+      v-model="groupChatInputModel"
+      :placeholder="collaborationMode ? t('workspace.phGroupCollab') : t('workspace.phGroupChat')"
+      :disabled="collaborationActive || agentsResponding"
+      :sending="sendingGroupMessage"
+      :send-disabled="!groupChatInput.trim()"
+      spinner-on-disabled
+      @send="emit('send-group-message')"
+    >
+      <template #tools>
+        <button class="input-tool-btn lumi-icon-btn" :title="t('workspace.image')">
           <ImagePlus :size="16" />
         </button>
-        <button class="input-tool-btn" :title="t('workspace.voice')">
+        <button class="input-tool-btn lumi-icon-btn" :title="t('workspace.voice')">
           <Mic :size="16" />
         </button>
-      </div>
-      <div class="input-main">
-        <input
-          v-model="groupChatInputModel"
-          type="text"
-          :placeholder="collaborationMode ? t('workspace.phGroupCollab') : t('workspace.phGroupChat')"
-          :disabled="sendingGroupMessage || collaborationActive || agentsResponding"
-          @keydown.enter="emit('send-group-message')"
-        />
-        <button
-          class="input-send-btn"
-          @click="emit('send-group-message')"
-          :disabled="!groupChatInput.trim() || sendingGroupMessage || collaborationActive || agentsResponding"
-        >
-          <Loader2 v-if="sendingGroupMessage || collaborationActive || agentsResponding" :size="15" class="spin-animation" />
-          <Send v-else :size="15" />
-        </button>
-      </div>
-    </div>
+      </template>
+    </ChatThreadInputBar>
   </div>
 </template>
 
+<style scoped src="./workspace-shared.css"></style>
 <style scoped>
 .chat-group-mode {
   flex: 1;
@@ -303,62 +268,8 @@ defineExpose({ scrollToBottom })
   overflow: hidden;
 }
 
-.group-chat-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--border-light);
-  background: var(--surface);
-  flex-shrink: 0;
-}
-
-.chat-title-area {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.chat-avatar-mini {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lumi-brand-glow);
-  color: var(--lumi-brand);
-}
-
-.chat-title-text h3 {
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.chat-status-line {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.chat-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
+/* transition: all 与全局 .lumi-icon-btn 的 background/color 过滤不同，留本地 */
 .chat-action-btn {
-  width: var(--space-7);
-  height: var(--space-7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  background: transparent;
-  border: none;
-  cursor: pointer;
   transition: all var(--transition-fast);
 }
 
@@ -446,34 +357,7 @@ defineExpose({ scrollToBottom })
   gap: var(--space-3);
 }
 
-.msg-row {
-  display: flex;
-  gap: var(--space-2);
-  max-width: 80%;
-}
-
-.msg-row.user {
-  align-self: flex-end;
-  flex-direction: row-reverse;
-}
-
-.msg-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: var(--lumi-brand-glow);
-  color: var(--lumi-brand);
-}
-
-.msg-avatar.user-avatar {
-  background: var(--lumi-brand);
-  color: var(--text-inverse);
-}
-
+/* 头像插槽内容：归宿主 scoped 作用域 */
 .avatar-agent {
   width: 100%;
   height: 100%;
@@ -489,86 +373,6 @@ defineExpose({ scrollToBottom })
   height: 100%;
   border-radius: inherit;
   object-fit: cover;
-}
-
-.msg-bubble {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.msg-bubble.agent {
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  color: var(--text-primary);
-}
-
-.msg-bubble.user {
-  background: var(--lumi-brand);
-  color: var(--text-inverse);
-}
-
-.msg-bubble.synthesis-bubble {
-  background: var(--lumi-brand-light);
-  border-color: var(--lumi-brand-border);
-}
-
-.msg-sender {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 2px;
-}
-
-.msg-role-tag {
-  padding: 1px 5px;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-2xs);
-  font-weight: 500;
-  background: var(--workspace-panel);
-  color: var(--text-muted);
-}
-
-.msg-collab-tag {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  padding: 1px var(--space-1);
-  background: var(--workspace-panel);
-  border-radius: 4px;
-}
-
-.msg-text {
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.streaming-cursor {
-  display: inline-block;
-  margin-left: 2px;
-  color: var(--lumi-brand);
-  font-weight: 600;
-  animation: luominest-cursor-blink 1s ease-in-out infinite;
-}
-
-@keyframes luominest-cursor-blink {
-  0%, 50% { opacity: 1; }
-  51%, 100% { opacity: 0; }
-}
-
-.msg-time {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-  display: block;
-}
-
-.msg-bubble.user .msg-time {
-  color: color-mix(in srgb, var(--text-inverse), transparent 30%);
 }
 
 .collab-progress-msg {
@@ -602,33 +406,8 @@ defineExpose({ scrollToBottom })
   margin: 0;
 }
 
-.group-chat-input-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
-  border-top: 1px solid var(--workspace-border);
-  background: var(--workspace-sidebar);
-  flex-shrink: 0;
-}
-
-.input-tools {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
+/* transition: all 与全局 .lumi-icon-btn 不同，留本地 */
 .input-tool-btn {
-  width: var(--space-7);
-  height: var(--space-7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  background: transparent;
-  border: none;
-  cursor: pointer;
   transition: all var(--transition-fast);
 }
 
@@ -636,56 +415,4 @@ defineExpose({ scrollToBottom })
   background: var(--workspace-hover);
   color: var(--text-secondary);
 }
-
-.input-main {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: var(--surface);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
-}
-
-.input-main input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  padding: 6px 0;
-}
-
-.input-main input::placeholder {
-  color: var(--text-muted);
-}
-
-.input-send-btn {
-  width: var(--space-7);
-  height: var(--space-7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-inverse);
-  background: var(--lumi-brand);
-  border: none;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.input-send-btn:hover:not(:disabled) {
-  background: var(--lumi-brand-hover);
-}
-
-.input-send-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-
-
 </style>

@@ -22,8 +22,20 @@ import { generateId } from '../utils/id'
 import type { ChatStreamChunk, SubagentEvent, ChatMessage, PermissionRequest } from '../types'
 import type { ToolActivity, SubagentActivity, ChatModeLevel } from '../components/workbench/types'
 import type { NavigationTarget } from './useTaskNavigation'
-import WorkbenchChatArea from '../components/workbench/WorkbenchChatArea.vue'
-import WorkbenchInputArea from '../components/workbench/WorkbenchInputArea.vue'
+import { toErrorMessage } from '@/utils/error'
+
+/** WorkbenchChatArea 子组件实例的最小接口（避免 composable 反向依赖组件，参照 useWorkspaceMessages） */
+interface WorkbenchChatAreaComponent {
+  scrollToBottom: (force?: boolean) => void
+  setupResizeObserver: () => void
+  teardownResizeObserver: () => void
+  $el?: { querySelector?: (selectors: string) => Element | null } | null
+}
+
+/** WorkbenchInputArea 子组件实例的最小接口 */
+interface WorkbenchInputAreaComponent {
+  resetTextareaHeight: () => void
+}
 
 const logger = createLuomiNestRendererLogger('Workbench')
 
@@ -61,7 +73,7 @@ export interface UseWorkbenchMessagesOptions {
   resetCodeBlockFilter: () => void
   navigateToTask: (target: NavigationTarget) => void
   stopTts: () => void
-  inputAreaRef: Ref<InstanceType<typeof WorkbenchInputArea> | null>
+  inputAreaRef: Ref<WorkbenchInputAreaComponent | null>
 }
 
 export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
@@ -152,7 +164,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
   }
 
   // 子组件引用
-  const chatAreaRef = ref<InstanceType<typeof WorkbenchChatArea> | null>(null)
+  const chatAreaRef = ref<WorkbenchChatAreaComponent | null>(null)
 
   const scrollToBottom = (force = false): void => {
     chatAreaRef.value?.scrollToBottom(force)
@@ -278,7 +290,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     try {
       await chatStore.sendMessage(content, sendOptions)
     } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e)
+      const errMsg = toErrorMessage(e)
       toast.error(i18n.global.t('chat.sendFailed', { msg: errMsg }))
     }
     await nextTick()
@@ -301,7 +313,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
         )
         convId = conv?.id || ''
       } catch (e: unknown) {
-        const errMsg = e instanceof Error ? e.message : String(e)
+        const errMsg = toErrorMessage(e)
         toast.error(i18n.global.t('chat.createConvFailed', { msg: errMsg }))
         return
       }
@@ -416,7 +428,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
         },
       })
     } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e)
+      const errMsg = toErrorMessage(e)
       toast.error(i18n.global.t('chat.workflowFailed', { msg: errMsg }))
       finalizeAssistant(i18n.global.t('chat.workflowFailed', { msg: errMsg }))
     }
@@ -443,7 +455,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
         onChunk: createChunkHandler(true),
       })
     } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e)
+      const errMsg = toErrorMessage(e)
       toast.error(i18n.global.t('chat.regenerateFailed', { msg: errMsg }))
     }
     await nextTick()
@@ -458,7 +470,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
     try {
       await chatStore.loadMoreMessages(convId)
     } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e)
+      const errMsg = toErrorMessage(e)
       toast.error(i18n.global.t('chat.loadHistoryFailed', { msg: errMsg }))
     }
     await nextTick()
@@ -479,7 +491,7 @@ export const useWorkbenchMessages = (options: UseWorkbenchMessagesOptions) => {
         toast.success(i18n.global.t('chat.compressSuccess', { before: result.tokens_before, after: result.tokens_after }))
       }
     } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e)
+      const errMsg = toErrorMessage(e)
       toast.error(i18n.global.t('chat.compressFailed', { msg: errMsg }))
     } finally {
       isCompressing.value = false

@@ -95,7 +95,7 @@ const handleConfig = (instance: PlatformInstance) => {
 
 <template>
   <div class="platform-list-panel">
-    <div class="panel-toolbar">
+    <div class="panel-toolbar lumi-stack-2">
       <SearchInput v-model="searchQuery" :placeholder="t('platform.searchPlaceholder')" class="search-input" />
       <div class="filter-group">
         <button :class="['filter-btn', { active: activeFilter === 'all' }]" @click="activeFilter = 'all'">{{ t('platform.filterAll') }}</button>
@@ -120,7 +120,7 @@ const handleConfig = (instance: PlatformInstance) => {
             <component :is="getIcon(p.icon)" :size="16" />
           </div>
           <div class="card-info">
-            <span class="card-name">{{ p.name }}</span>
+            <span class="card-name lumi-title-base">{{ p.name }}</span>
             <span class="card-sync">{{ formatLastSync(p.lastSync) }}</span>
           </div>
           <span :class="['status-dot', p.status]" :title="getStatusLabel(p.status)"></span>
@@ -204,12 +204,6 @@ const handleConfig = (instance: PlatformInstance) => {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-}
-
-.panel-toolbar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
 }
 
 .search-input {
@@ -297,12 +291,6 @@ const handleConfig = (instance: PlatformInstance) => {
   flex: 1;
   display: flex;
   flex-direction: column;
-}
-
-.card-name {
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
 }
 
 .card-sync {

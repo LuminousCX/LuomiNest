@@ -26,15 +26,10 @@
   --lumi-accent: #f43f5e;
   --lumi-accent-hover: #E11D48;
   --lumi-accent-light: rgba(244, 63, 94, 0.1);
-  /* 阴影 */
-  --shadow-brand: 0 4px 14px rgba(20, 126, 188, 0.15);
   /* 渐变 */
   --gradient-brand: linear-gradient(135deg, #147EBC, #5BA4D4);
   /* 组件 Token 覆盖 */
-  --btn-primary-bg: var(--lumi-brand);
-  --btn-primary-hover: var(--lumi-brand-hover);
   --input-focus-border: var(--lumi-brand);
-  --card-accent-border: var(--lumi-brand);
 }
 
 /* ---------- 默认蓝 (Blue) - 深色 ---------- */
@@ -55,12 +50,8 @@
   --lumi-accent: #FB7185;
   --lumi-accent-hover: #FDA4AF;
   --lumi-accent-light: rgba(251, 113, 133, 0.15);
-  --shadow-brand: 0 4px 14px rgba(59, 164, 216, 0.2);
   --gradient-brand: linear-gradient(135deg, #3BA4D8, #7BBCE4);
-  --btn-primary-bg: var(--lumi-brand);
-  --btn-primary-hover: var(--lumi-brand-hover);
   --input-focus-border: var(--lumi-brand);
-  --card-accent-border: var(--lumi-brand);
 }
 
 /* ---------- 紫罗兰 (Purple) - 浅色 ---------- */
@@ -84,15 +75,10 @@
   --lumi-accent: #EC4899;
   --lumi-accent-hover: #DB2777;
   --lumi-accent-light: rgba(236, 72, 153, 0.1);
-  /* 阴影 */
-  --shadow-brand: 0 4px 14px rgba(124, 58, 237, 0.15);
   /* 渐变 */
   --gradient-brand: linear-gradient(135deg, #7C3AED, #A78BFA);
   /* 组件 Token 覆盖 */
-  --btn-primary-bg: var(--lumi-brand);
-  --btn-primary-hover: var(--lumi-brand-hover);
   --input-focus-border: var(--lumi-brand);
-  --card-accent-border: var(--lumi-brand);
 }
 
 /* ---------- 紫罗兰 (Purple) - 深色 ---------- */
@@ -113,12 +99,8 @@
   --lumi-accent: #F472B6;
   --lumi-accent-hover: #F9A8D4;
   --lumi-accent-light: rgba(244, 114, 182, 0.15);
-  --shadow-brand: 0 4px 14px rgba(167, 139, 250, 0.2);
   --gradient-brand: linear-gradient(135deg, #A78BFA, #C4B5FD);
-  --btn-primary-bg: var(--lumi-brand);
-  --btn-primary-hover: var(--lumi-brand-hover);
   --input-focus-border: var(--lumi-brand);
-  --card-accent-border: var(--lumi-brand);
 }
 
 /* ---------- 中国红 (Red) - 浅色 ---------- */
@@ -142,15 +124,10 @@
   --lumi-accent: #F59E0B;
   --lumi-accent-hover: #D97706;
   --lumi-accent-light: rgba(245, 158, 11, 0.1);
-  /* 阴影 */
-  --shadow-brand: 0 4px 14px rgba(192, 57, 43, 0.15);
   /* 渐变 */
   --gradient-brand: linear-gradient(135deg, #C0392B, #E74C3C);
   /* 组件 Token 覆盖 */
-  --btn-primary-bg: var(--lumi-brand);
-  --btn-primary-hover: var(--lumi-brand-hover);
   --input-focus-border: var(--lumi-brand);
-  --card-accent-border: var(--lumi-brand);
 }
 
 /* ---------- 中国红 (Red) - 深色 ---------- */
@@ -171,12 +148,8 @@
   --lumi-accent: #FBBF24;
   --lumi-accent-hover: #FCD34D;
   --lumi-accent-light: rgba(251, 191, 36, 0.15);
-  --shadow-brand: 0 4px 14px rgba(231, 76, 60, 0.2);
   --gradient-brand: linear-gradient(135deg, #E74C3C, #F07169);
-  --btn-primary-bg: var(--lumi-brand);
-  --btn-primary-hover: var(--lumi-brand-hover);
   --input-focus-border: var(--lumi-brand);
-  --card-accent-border: var(--lumi-brand);
 }
 
 /* ---------- 翡翠绿 (Green) - 浅色 ---------- */
@@ -200,15 +173,10 @@
   --lumi-accent: #8B5CF6;
   --lumi-accent-hover: #7C3AED;
   --lumi-accent-light: rgba(139, 92, 246, 0.1);
-  /* 阴影 */
-  --shadow-brand: 0 4px 14px rgba(5, 150, 105, 0.15);
   /* 渐变 */
   --gradient-brand: linear-gradient(135deg, #059669, #34D399);
   /* 组件 Token 覆盖 */
-  --btn-primary-bg: var(--lumi-brand);
-  --btn-primary-hover: var(--lumi-brand-hover);
   --input-focus-border: var(--lumi-brand);
-  --card-accent-border: var(--lumi-brand);
 }
 
 /* ---------- 翡翠绿 (Green) - 深色 ---------- */
@@ -229,12 +197,8 @@
   --lumi-accent: #A78BFA;
   --lumi-accent-hover: #B9A0FC;
   --lumi-accent-light: rgba(167, 139, 250, 0.15);
-  --shadow-brand: 0 4px 14px rgba(52, 211, 153, 0.2);
   --gradient-brand: linear-gradient(135deg, #34D399, #6EE7B7);
-  --btn-primary-bg: var(--lumi-brand);
-  --btn-primary-hover: var(--lumi-brand-hover);
   --input-focus-border: var(--lumi-brand);
-  --card-accent-border: var(--lumi-brand);
 }
 
 /* ---------- 暖橘橙 (Orange) - 浅色 ---------- */
@@ -258,15 +222,10 @@
   --lumi-accent: #0EA5E9;
   --lumi-accent-hover: #0284C7;
   --lumi-accent-light: rgba(14, 165, 233, 0.1);
-  /* 阴影 */
-  --shadow-brand: 0 4px 14px rgba(234, 88, 12, 0.15);
   /* 渐变 */
   --gradient-brand: linear-gradient(135deg, #EA580C, #FB923C);
   /* 组件 Token 覆盖 */
-  --btn-primary-bg: var(--lumi-brand);
-  --btn-primary-hover: var(--lumi-brand-hover);
   --input-focus-border: var(--lumi-brand);
-  --card-accent-border: var(--lumi-brand);
 }
 
 /* ---------- 暖橘橙 (Orange) - 深色 ---------- */
@@ -287,10 +246,6 @@
   --lumi-accent: #38BDF8;
   --lumi-accent-hover: #7DD3FC;
   --lumi-accent-light: rgba(56, 189, 248, 0.15);
-  --shadow-brand: 0 4px 14px rgba(251, 146, 60, 0.2);
   --gradient-brand: linear-gradient(135deg, #FB923C, #FDBA74);
-  --btn-primary-bg: var(--lumi-brand);
-  --btn-primary-hover: var(--lumi-brand-hover);
   --input-focus-border: var(--lumi-brand);
-  --card-accent-border: var(--lumi-brand);
 }

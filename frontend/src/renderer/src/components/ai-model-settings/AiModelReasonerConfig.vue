@@ -13,6 +13,7 @@ import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
 import type { ReasonerModelConfig } from './types'
 import { createLuomiNestRendererLogger } from '../../utils/logger'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('AiModel')
 
@@ -74,7 +75,7 @@ const handleFetchModels = async (providerId: string) => {
     }
   } catch (e: unknown) {
     logger.error('Failed to fetch models:', e)
-    toast.error(t('aiModel.common.fetchFailed', { message: (e instanceof Error ? e.message : String(e)) || t('aiModel.common.unknownError') }))
+    toast.error(t('aiModel.common.fetchFailed', { message: toErrorMessage(e) || t('aiModel.common.unknownError') }))
   }
 }
 
@@ -119,11 +120,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="content-section">
+  <div class="content-section lumi-stack-5">
     <div class="section-header">
-      <div class="section-header-left">
+      <div class="section-header-left lumi-row-3">
         <div class="section-header-text">
-          <h3 class="section-title">{{ t('aiModel.reasoner.title') }}</h3>
+          <h3 class="lumi-section-title">{{ t('aiModel.reasoner.title') }}</h3>
           <span class="section-tag">{{ t('aiModel.reasoner.tag') }}</span>
         </div>
       </div>
@@ -179,7 +180,7 @@ onMounted(() => {
         </span>
       </div>
       <div class="form-group">
-        <div class="form-label-row">
+        <div class="form-label-row lumi-row-between">
           <label class="form-label">Temperature</label>
           <span class="form-value">{{ reasonerModelConfig.temperature }}</span>
         </div>
@@ -187,7 +188,7 @@ onMounted(() => {
         <div class="slider-labels"><span>{{ t('aiModel.common.precise') }}</span><span>{{ t('aiModel.common.creative') }}</span></div>
       </div>
       <div class="form-group">
-        <div class="form-label-row">
+        <div class="form-label-row lumi-row-between">
           <label class="form-label">Max Tokens</label>
           <span class="form-value">{{ reasonerModelConfig.maxTokens }}</span>
         </div>
@@ -222,119 +223,8 @@ onMounted(() => {
   </div>
 </template>
 
+<style scoped src="./ai-model-shared.css"></style>
 <style scoped>
-.content-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-5);
-  background: var(--workspace-card);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--workspace-border);
-  transition: all var(--transition-normal);
-}
-
-.section-header-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.section-header-text {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-}
-
-.section-title {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.section-tag {
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--text-muted);
-  letter-spacing: 0.5px;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--workspace-panel);
-}
-
-.info-btn {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-normal);
-  flex-shrink: 0;
-}
-
-.info-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--lumi-primary);
-}
-
-.info-btn.active {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.section-info-panel {
-  padding: var(--space-3) var(--space-5);
-  background: var(--workspace-panel);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--workspace-border);
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  line-height: 1.7;
-}
-
-.section-info-panel p {
-  margin-bottom: var(--space-2);
-}
-
-.section-info-panel p:last-child {
-  margin-bottom: 0;
-}
-
-.info-tip {
-  color: var(--lumi-primary) !important;
-  font-weight: 500;
-  font-size: var(--text-sm) !important;
-}
-
-.info-expand-enter-active {
-  animation: info-expand-in var(--duration-slow) var(--ease-in-out);
-}
-
-.info-expand-leave-active {
-  animation: info-expand-in var(--duration-fast) var(--ease-in-out) reverse;
-}
-
-@keyframes info-expand-in {
-  from {
-    opacity: 0;
-    max-height: 0;
-    margin-top: calc(var(--space-2) * -1);
-  }
-  to {
-    opacity: 1;
-    max-height: 200px;
-    margin-top: 0;
-  }
-}
-
 .config-form {
   display: flex;
   flex-direction: column;
@@ -357,70 +247,11 @@ onMounted(() => {
   font-weight: 500;
 }
 
-.select-error {
-  border-color: var(--lumi-accent) !important;
-  box-shadow: 0 0 0 var(--space-1) var(--task-red-soft) !important;
-}
-
-.fetch-models-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.fetch-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light);
-  transition: all var(--transition-normal);
-}
-
-.fetch-btn:hover {
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-}
-
-.form-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .form-value {
   font-size: var(--text-base);
   font-weight: 600;
   color: var(--lumi-primary);
   font-variant-numeric: tabular-nums;
-}
-
-.form-select-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.form-select {
-  width: 100%;
-  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  cursor: pointer;
-  appearance: none;
-  transition: all var(--transition-normal);
-}
-
-.form-select:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 var(--space-1) var(--lumi-primary-glow);
 }
 
 .select-icon {
@@ -429,39 +260,6 @@ onMounted(() => {
   color: var(--text-muted);
   pointer-events: none;
   transform: rotate(90deg);
-}
-
-.form-slider {
-  width: 100%;
-  height: var(--space-2);
-  appearance: none;
-  background: var(--workspace-border);
-  border-radius: var(--space-1);
-  outline: none;
-  cursor: pointer;
-}
-
-.form-slider::-webkit-slider-thumb {
-  appearance: none;
-  width: var(--space-4);
-  height: var(--space-4);
-  border-radius: var(--radius-full);
-  background: var(--lumi-primary);
-  cursor: pointer;
-  box-shadow: 0 var(--space-1) var(--space-2) var(--lumi-primary-border);
-  transition: transform var(--transition-normal);
-}
-
-.form-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-}
-
-.slider-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
 }
 
 .effort-group {
@@ -492,38 +290,6 @@ onMounted(() => {
   border-color: var(--lumi-primary);
   color: var(--lumi-primary);
   font-weight: 600;
-}
-
-.save-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-6);
-  border-radius: var(--radius-md);
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--text-inverse);
-  background: var(--lumi-primary);
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  align-self: flex-start;
-}
-
-.save-btn:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.save-btn.saving {
-  opacity: 0.8;
-  cursor: wait;
-}
-
-.save-btn.saved {
-  background: var(--lumi-emerald);
-}
-
-.save-btn.error {
-  background: var(--lumi-accent);
 }
 
 </style>

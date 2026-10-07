@@ -102,23 +102,6 @@
     "createAgentFailed": "Failed to create Agent",
     "updateAgentFailed": "Failed to update Agent",
     "deleteAgentFailed": "Failed to delete Agent",
-    "trash": {
-      "back": "Back",
-      "title": "Trash",
-      "batch": "Batch actions",
-      "selectAll": "Select all",
-      "selectedCount": "{n} selected",
-      "restore": "Restore",
-      "delete": "Delete",
-      "empty": "Empty trash",
-      "emptyTitle": "Trash is empty",
-      "permanentDelete": "Delete permanently",
-      "confirmTitle": "Confirm deletion",
-      "cancel": "Cancel",
-      "confirmEmpty": "Empty the trash? All conversations will be permanently deleted and cannot be recovered.",
-      "confirmBatchDelete": "Permanently delete the {n} selected conversations? This cannot be undone.",
-      "confirmDeleteOne": "Permanently delete this conversation? This cannot be undone."
-    },
     "groupInfo": {
       "back": "Back to contacts",
       "memberCount": "{m} members · {a} AI",

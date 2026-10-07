@@ -46,21 +46,14 @@
     },
     "tracks": {
       "owner": "博主自身记忆",
-      "ownerSub": "博主核心人设与主记忆",
       "users": "粉丝用户画像",
-      "usersSub": "各平台独立粉丝画像与私密心事",
       "groups": "粉丝群聊画像",
-      "groupsSub": "粉丝群专属设定与群规群梗",
       "noUsers": "暂无粉丝画像记录",
-      "noUsersHint": "当粉丝在各平台私聊或群聊互动时，将自动建立独立画像",
       "noGroups": "暂无群聊画像记录",
-      "noGroupsHint": "当博主接入群聊互动时，将自动沉淀群设定与规则",
       "currentFan": "当前粉丝",
       "currentGroup": "当前群聊",
       "searchFans": "搜索粉丝昵称或平台ID...",
-      "searchGroups": "搜索群聊名称或群号...",
-      "allFans": "全部粉丝",
-      "allGroups": "全部群聊"
+      "searchGroups": "搜索群聊名称或群号..."
     },
     "agentPicker": {
       "viewing": "查看",
@@ -361,7 +354,8 @@
       "installed": "安装完成",
       "updating": "正在更新...",
       "updated": "更新完成"
-    }
+    },
+    "filterLabel": "筛选"
   },
   "tasks": {
     "title": "计划视图",
@@ -737,23 +731,14 @@
     "loadingModelConfig": "加载模型配置...",
     "visionHint": "游戏类平台需要支持图片识别（vision）的模型",
     "currentEffective": "当前生效:",
-    "mainAgentDefault": "主 Agent 默认:",
     "visionSupported": "支持图片识别",
     "visionUnsupported": "不支持图片识别",
-    "providerLabel": "供应商 (空 = 继承主 Agent)",
-    "inheritMainAgent": "继承主 Agent",
-    "defaultSuffix": " (默认)",
-    "modelLabel": "模型 (空 = 继承主 Agent)",
     "systemPromptLabel": "System Prompt (空 = 继承主 Agent)",
     "systemPromptPlaceholder": "留空继承主 Agent 的 System Prompt",
-    "temperatureLabel": "Temperature (空 = 继承)",
-    "maxTokensLabel": "Max Tokens (空 = 继承)",
-    "inherit": "继承",
     "resetToInherit": "重置为继承主 Agent",
     "connectionConfig": "连接配置",
     "mainAgentBannerTitle": "智能体身份：由【{name}】接管",
     "mainAgentBannerDesc": "该平台的所有消息与伴侣行为均由主 Agent 统一处理，名称、头像与人格设定直接同步自【设置 - 主智能体】。无需在每个平台单独配置，保持多平台人格统一。",
-    "platformTipTitle": "对接提示与防封建议",
     "minecraftTip": "我的世界伴侣指南：伴侣实体将自动加入单人局域网（开启对局域网开放并填入端口）或多人服务器。实体名称与对话人设统一继承主 Agent。支持具身动作控制、环境遥测感知与截屏多模态分析。",
     "qqOnebotTip": "QQ (NapCat / OneBot) 对接与防封提示：推荐使用 NapCatQQ 或 OneBot v11 协议端。配置 NapCat 反向 WebSocket 指向 ws://127.0.0.1:8080/ws。内置防风控机制（打字延迟、状态上报、速率保护）。",
     "wechatPersonalTip": "微信个人号 (GeweChat) 对接与防封提示：通过 GeweChat (iPad 协议网关) 接入。保存后可在管理菜单点击获取登录二维码，手机扫码即可登录。已启用自然输入模拟与滑动窗口频率保护以防风控。",

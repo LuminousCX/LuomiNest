@@ -15,6 +15,7 @@ import { useTaskStreamStore } from '../stores/taskStream'
 import { generateId } from '../utils/id'
 import { i18n } from '../i18n'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('Browser')
 
@@ -119,7 +120,7 @@ export const useBrowserTabs = (options: UseBrowserTabsOptions) => {
         })
       }
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e)
+      const message = toErrorMessage(e)
       logger.error('Failed to create tab:', e)
       tabs.value.push({
         id: generateId('error'),

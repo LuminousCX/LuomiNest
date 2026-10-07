@@ -4,5 +4,6 @@
 @import './base.css';
 @import './animations.css';
 @import './components.css';
+@import './views/home-market.css';
 @import './chat.css';
 @import './views/settings-shared.css';

@@ -32,6 +32,7 @@ import type {
   CxBackendSkill,
 } from '../../plugins/types'
 import SkillEditDialog from './SkillEditDialog.vue'
+import ConfirmDialog from '../common/ConfirmDialog.vue'
 import PluginConfigAssistantDialog from './PluginConfigAssistantDialog.vue'
 
 const store = usePluginsStore()
@@ -117,9 +118,17 @@ const handleSkillSaved = () => {
   // store.writeSkill 内部已刷新技能列表
 }
 
-const handleDeleteSkill = async (skill: CxBackendSkill) => {
-  if (!window.confirm(t('settingsEx.plugins.confirmDeleteSkill', { name: skill.name }))) return
+const deleteSkillTarget = ref<CxBackendSkill | null>(null)
+
+const handleDeleteSkill = (skill: CxBackendSkill): void => {
+  deleteSkillTarget.value = skill
+}
+
+const confirmDeleteSkill = async (): Promise<void> => {
+  const skill = deleteSkillTarget.value
+  if (!skill) return
   await store.deleteSkill(skill.id)
+  deleteSkillTarget.value = null
 }
 
 // ---------------- 插件 AI 配置助手对话框 ----------------
@@ -443,6 +452,15 @@ const summary = computed(() => ({
       v-model:visible="pluginAssistantVisible"
       :plugin-id="assistantPluginId"
       :plugin-name="assistantPluginName"
+    />
+
+    <ConfirmDialog
+      :visible="deleteSkillTarget !== null"
+      :message="deleteSkillTarget ? t('settingsEx.plugins.confirmDeleteSkill', { name: deleteSkillTarget.name }) : ''"
+      :danger="true"
+      :confirm-text="t('common.delete')"
+      @confirm="confirmDeleteSkill"
+      @cancel="deleteSkillTarget = null"
     />
   </div>
 </template>

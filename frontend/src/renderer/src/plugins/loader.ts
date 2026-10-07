@@ -27,6 +27,7 @@ import type {
 } from './types'
 import { cxContributionRegistry } from './contributions'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('CxPluginLoader')
 
@@ -254,7 +255,7 @@ async function activatePlugin(pluginId: string): Promise<boolean> {
     return true
   } catch (e) {
     instance.status = 'error'
-    instance.errorMessage = e instanceof Error ? e.message : String(e)
+    instance.errorMessage = toErrorMessage(e)
     logger.error(`Failed to activate plugin [${pluginId}]:`, e)
     // 清理可能已注册的部分贡献点
     cxContributionRegistry.unregisterAllByPlugin(pluginId)

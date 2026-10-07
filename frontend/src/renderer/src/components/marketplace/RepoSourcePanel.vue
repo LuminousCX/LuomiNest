@@ -186,7 +186,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
 </script>
 
 <template>
-  <div class="repo-source-panel">
+  <div class="repo-source-panel lumi-stack-3">
     <!-- 发布源选择器 -->
     <div class="registry-source-section">
       <div class="section-header">
@@ -246,7 +246,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
             </div>
           </div>
 
-          <div class="registry-source-right">
+          <div class="registry-source-right lumi-page-actions">
             <span
               :class="[
                 'registry-latency-badge',
@@ -308,7 +308,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
         <span>{{ t('market.source.loading') }}</span>
       </div>
 
-      <div v-else class="source-list">
+      <div v-else class="source-list lumi-stack-1">
       <div
         v-for="source in store.sources"
         :key="source.id"
@@ -334,7 +334,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
             </div>
           </div>
 
-          <div class="source-right">
+          <div class="source-right lumi-page-actions">
             <span v-if="getSourceItemCount(source.id) > 0" class="source-item-count">
               {{ t('market.source.itemsCount', { n: getSourceItemCount(source.id) }) }}
             </span>
@@ -398,7 +398,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
                     v-if="sm.url"
                     :href="sm.url"
                     target="_blank"
-                    class="sub-market-link"
+                    class="sub-market-link lumi-icon-btn lumi-icon-btn--sm"
                     :title="t('market.source.openInBrowser')"
                     @click.stop
                   >
@@ -406,7 +406,7 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
                   </a>
                   <button
                     v-if="sm.linked"
-                    class="sub-action-btn sync-sub-btn"
+                    class="sub-action-btn sync-sub-btn lumi-icon-btn lumi-icon-btn--sm"
                     :disabled="source.status === 'loading' || source.status === 'syncing'"
                     :title="t('market.source.syncSubMarket')"
                     @click="handleSyncSubMarket(source.id, sm.id)"
@@ -502,12 +502,6 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
 </template>
 
 <style scoped>
-.repo-source-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
 .registry-source-section {
   display: flex;
   flex-direction: column;
@@ -640,13 +634,6 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
   text-overflow: ellipsis;
 }
 
-.registry-source-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
 .registry-latency-badge {
   font-size: var(--text-2xs);
   font-weight: var(--font-semibold);
@@ -726,12 +713,6 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
   padding: var(--space-5) 0;
   color: var(--text-muted);
   font-size: var(--text-base);
-}
-
-.source-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
 }
 
 .source-item {
@@ -820,13 +801,6 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.source-right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
 }
 
 .source-item-count {
@@ -1017,14 +991,8 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
   flex-shrink: 0;
 }
 
+/* 尺寸/居中/透明底等由全局 .lumi-icon-btn lumi-icon-btn--sm 提供，本地只留 transition:all 差异 */
 .sub-market-link {
-  width: var(--space-6);
-  height: var(--space-6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
   transition: all var(--transition-fast);
 }
 
@@ -1033,14 +1001,8 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
   color: var(--lumi-brand);
 }
 
+/* 尺寸/居中/透明底等由全局 .lumi-icon-btn lumi-icon-btn--sm 提供，本地只留 transition:all 差异 */
 .sub-action-btn {
-  width: var(--space-6);
-  height: var(--space-6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
   transition: all var(--transition-fast);
 }
 

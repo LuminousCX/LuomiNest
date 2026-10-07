@@ -25,6 +25,7 @@ import TxtViewer from '../components/TxtViewer.vue'
 import ReaderAIPanel from '../components/ReaderAIPanel.vue'
 import ReaderStatusBar from '../components/ReaderStatusBar.vue'
 import DropZone from '../components/DropZone.vue'
+import { toErrorMessage } from '@/utils/error'
 
 // ---------------------------------------------------------------------------
 // 类型定义
@@ -232,7 +233,7 @@ const openFile = async (file: File) => {
 
     toast.success(t('pdfReader.view.toast.opened', { name: tab.fileName }))
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const msg = toErrorMessage(e)
     toast.error(t('pdfReader.view.toast.openFailed', { message: msg }))
   } finally {
     loading.value = false
@@ -641,7 +642,7 @@ watch(activeTabId, () => {
   border: 3px solid var(--border);
   border-top-color: var(--lumi-primary);
   border-radius: 50%;
-  animation: cx-pdf-spin 0.8s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 .loading-text {
@@ -698,11 +699,5 @@ watch(activeTabId, () => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
-}
-
-@keyframes cx-pdf-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

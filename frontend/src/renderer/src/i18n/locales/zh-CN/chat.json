@@ -102,23 +102,6 @@
     "createAgentFailed": "创建 Agent 失败",
     "updateAgentFailed": "更新 Agent 失败",
     "deleteAgentFailed": "删除 Agent 失败",
-    "trash": {
-      "back": "返回",
-      "title": "回收站",
-      "batch": "批量操作",
-      "selectAll": "全选",
-      "selectedCount": "已选 {n} 项",
-      "restore": "恢复",
-      "delete": "删除",
-      "empty": "清空回收站",
-      "emptyTitle": "回收站为空",
-      "permanentDelete": "永久删除",
-      "confirmTitle": "确认删除",
-      "cancel": "取消",
-      "confirmEmpty": "确定要清空回收站吗？所有对话将被永久删除，无法恢复。",
-      "confirmBatchDelete": "确定要永久删除选中的 {n} 个对话吗？此操作无法撤销。",
-      "confirmDeleteOne": "确定要永久删除这个对话吗？此操作无法撤销。"
-    },
     "groupInfo": {
       "back": "返回联系人",
       "memberCount": "{m} 成员 · {a} AI",

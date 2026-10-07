@@ -7,6 +7,7 @@
 import { ref, computed } from 'vue'
 import { useWorkflowStore } from '../stores/workflow'
 import { useApi } from './useApi'
+import { formatShortDateTime } from '@/utils/format'
 import { i18n } from '../i18n'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import type { WorkflowSession } from '../types/workflow'
@@ -24,12 +25,7 @@ export const phaseLabel = (phase: string): string => {
 /** 格式化 ISO 时间为 MM/DD HH:mm */
 export const formatWorkflowTime = (iso: string | null): string => {
   if (!iso) return '--'
-  try {
-    const d = new Date(iso)
-    return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return '--'
-  }
+  return formatShortDateTime(iso) || '--'
 }
 
 // ===== composable =====

@@ -547,10 +547,10 @@ const timeSlotOptions = [
   <div class="tasks-view custom-scrollbar">
     <div class="tasks-page-header animate-fade-in">
       <div class="tasks-page-header__left">
-        <h1 class="tasks-page-title">{{ t('tasks.title') }}</h1>
-        <p class="tasks-page-desc">{{ t('tasks.desc') }}</p>
+        <h1 class="tasks-page-title lumi-page-title">{{ t('tasks.title') }}</h1>
+        <p class="tasks-page-desc lumi-page-desc">{{ t('tasks.desc') }}</p>
       </div>
-      <div class="tasks-page-header__right">
+      <div class="tasks-page-header__right lumi-page-actions">
         <div class="tasks-search-box">
           <SearchInput v-model="searchQuery" :placeholder="t('tasks.searchPlaceholder')" />
         </div>
@@ -665,19 +665,6 @@ const timeSlotOptions = [
   flex-direction: column;
 }
 
-.tasks-page-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  line-height: 1.2;
-}
-
-.tasks-page-desc {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-}
-
 .tasks-page-avatars {
   display: flex;
   align-items: center;
@@ -711,13 +698,6 @@ const timeSlotOptions = [
 .tasks-avatar-add:hover {
   background: var(--workspace-hover);
   color: var(--text-primary);
-}
-
-.tasks-page-header__right {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
 }
 
 .tasks-search-box {

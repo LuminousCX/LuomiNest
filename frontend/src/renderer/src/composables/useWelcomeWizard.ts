@@ -12,6 +12,7 @@
  */
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { getStoredAccessToken, setStoredTokens, clearStoredTokens } from '@/utils/authToken'
 import { useI18n } from 'vue-i18n'
 import { Bot, Zap, Globe, Palette } from 'lucide-vue-next'
 import { useModelStore } from '../stores/model'
@@ -348,10 +349,6 @@ export const useWelcomeWizard = () => {
   }
 
   // --- Account Step ---
-  // 与 SettingsLoginSection.vue 共用同一组 localStorage key，保证两处登录态互通
-  const JWT_ACCESS_TOKEN_KEY = 'lumi_jwt_access_token'
-  const JWT_REFRESH_TOKEN_KEY = 'lumi_jwt_refresh_token'
-
   const accountSubmitting = ref(false)
   const accountError = ref('')
   /** null=检测中，false=未登录（显示创建表单），true 伴随 currentUser=已登录（显示账户卡） */
@@ -373,7 +370,7 @@ export const useWelcomeWizard = () => {
   })
 
   const checkExistingAccount = async (): Promise<void> => {
-    const token = localStorage.getItem(JWT_ACCESS_TOKEN_KEY)
+    const token = getStoredAccessToken()
     if (!token) {
       hasAccount.value = false
       return
@@ -382,8 +379,7 @@ export const useWelcomeWizard = () => {
       currentUser.value = await apiGet<WizardCurrentUser>('/auth/me')
       hasAccount.value = true
     } catch {
-      localStorage.removeItem(JWT_ACCESS_TOKEN_KEY)
-      localStorage.removeItem(JWT_REFRESH_TOKEN_KEY)
+      clearStoredTokens()
       hasAccount.value = false
     }
   }
@@ -406,8 +402,7 @@ export const useWelcomeWizard = () => {
         username: accountForm.username.trim(),
         password: accountForm.password,
       })
-      localStorage.setItem(JWT_ACCESS_TOKEN_KEY, resp.access_token)
-      if (resp.refresh_token) localStorage.setItem(JWT_REFRESH_TOKEN_KEY, resp.refresh_token)
+      setStoredTokens(resp.access_token, resp.refresh_token)
       nextStep()
     } catch (e: unknown) {
       logger.warn('Wizard register failed:', e)
@@ -419,7 +414,7 @@ export const useWelcomeWizard = () => {
 
   /**
    * 登录已有本地账户（POST /auth/login），JWT 存 localStorage 后进入下一步。
-   * 与 SettingsLoginSection / LoginView 共用同一组 localStorage key。
+   * JWT 持久化走 utils/authToken（与登录页/设置页互通）。
    */
   const loginAndNext = async (): Promise<void> => {
     const valid = accountForm.username.trim().length >= 3 && accountForm.password.length >= 6
@@ -431,8 +426,7 @@ export const useWelcomeWizard = () => {
         username: accountForm.username.trim(),
         password: accountForm.password,
       })
-      localStorage.setItem(JWT_ACCESS_TOKEN_KEY, resp.access_token)
-      if (resp.refresh_token) localStorage.setItem(JWT_REFRESH_TOKEN_KEY, resp.refresh_token)
+      setStoredTokens(resp.access_token, resp.refresh_token)
       nextStep()
     } catch (e: unknown) {
       logger.warn('Wizard login failed:', e)

@@ -1,16 +1,18 @@
 /**
  * LuomiNest 工作台对话历史
  *
- * 从 WorkbenchView.vue 拆分：收纳对话搜索、时间分组、选择/新建/删除/重命名等逻辑。
- * agentId 通过 options 传入（主 Agent 固定标识）。
+ * 从 WorkbenchView.vue 拆分：收纳对话搜索、时间分组、选择/新建/删除/重命名逻辑。
+ * 搜索/时间分组/重命名三件套已下沉到 useConversationListCore（与工作区共用），
+ * 本文件保留工作台侧的差异：固定主 Agent、toast 反馈、会话选择/新建/删除编排。
  */
-import { ref, computed } from 'vue'
+import { ref, type Ref } from 'vue'
 import { i18n } from '../i18n'
 import { useChatStore } from '../stores/chat'
-import { useDebouncedSearch } from './useDebouncedSearch'
+import { useConversationListCore } from './useConversationListCore'
 import { useToast } from './useToast'
 import type { ConversationSearchResult } from '../types'
 import type { TimeGroup } from '../components/workbench/types'
+import { toErrorMessage } from '@/utils/error'
 
 export interface UseWorkbenchHistoryOptions {
   agentId: string
@@ -22,35 +24,24 @@ export const useWorkbenchHistory = (options: UseWorkbenchHistoryOptions) => {
   const toast = useToast()
 
   const searchQuery = ref('')
-  const { results: searchResults, isSearching } = useDebouncedSearch<ConversationSearchResult[]>(
+
+  const {
+    searchResults,
+    isSearching,
+    isSearchMode,
+    timeGroups,
+    renamingConvId,
+    renamingTitle,
+    startRename,
+    confirmRename,
+    cancelRename,
+  } = useConversationListCore({
     searchQuery,
-    (q, signal) => chatStore.searchConversations(q, undefined, signal),
-    300,
-  )
-
-  const isSearchMode = computed(() => searchQuery.value.trim().length > 0)
-
-  const timeGroups = computed<TimeGroup[]>(() => {
-    const now = new Date()
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const groups: TimeGroup[] = [
-      { label: i18n.global.t('chat.today'), items: [] },
-      { label: i18n.global.t('chat.yesterday'), items: [] },
-      { label: i18n.global.t('chat.last7Days'), items: [] },
-      { label: i18n.global.t('chat.earlier'), items: [] },
-    ]
-
-    for (const conv of chatStore.conversations) {
-      const d = new Date(conv.updated_at)
-      const target = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-      const diffDays = Math.floor((today.getTime() - target.getTime()) / 86400000)
-      if (diffDays <= 0) groups[0].items.push(conv)
-      else if (diffDays === 1) groups[1].items.push(conv)
-      else if (diffDays <= 7) groups[2].items.push(conv)
-      else groups[3].items.push(conv)
-    }
-
-    return groups.filter((g) => g.items.length > 0)
+    getConversations: () => chatStore.conversations,
+    timeGroupKeys: 'flat',
+    getAgentId: () => agentId,
+    renameTooLongFeedback: 'toast',
+    renameFailedFeedback: 'toast',
   })
 
   const selectConversation = (convId: string, searchKeyword?: string): void => {
@@ -73,51 +64,17 @@ export const useWorkbenchHistory = (options: UseWorkbenchHistoryOptions) => {
     try {
       await chatStore.deleteConversation(convId, agentId)
     } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e)
+      const errMsg = toErrorMessage(e)
       toast.error(i18n.global.t('chat.deleteConvFailed', { msg: errMsg }))
     }
   }
 
-  // 重命名
-  const renamingConvId = ref<string | null>(null)
-  const renamingTitle = ref('')
-
-  const startRename = (convId: string, currentTitle: string): void => {
-    renamingConvId.value = convId
-    renamingTitle.value = currentTitle
-  }
-
-  const confirmRename = async (): Promise<void> => {
-    if (!renamingConvId.value) return
-    const newTitle = renamingTitle.value.trim()
-    if (!newTitle) {
-      renamingConvId.value = null
-      return
-    }
-    if (newTitle.length > 200) {
-      toast.warning(i18n.global.t('chat.titleTooLong'))
-      return
-    }
-    const success = await chatStore.renameConversation(renamingConvId.value, newTitle, agentId)
-    if (success) {
-      renamingConvId.value = null
-      renamingTitle.value = ''
-    } else {
-      toast.error(i18n.global.t('chat.renameFailed'))
-    }
-  }
-
-  const cancelRename = (): void => {
-    renamingConvId.value = null
-    renamingTitle.value = ''
-  }
-
   return {
     searchQuery,
-    searchResults,
+    searchResults: searchResults as Ref<ConversationSearchResult[]>,
     isSearching,
     isSearchMode,
-    timeGroups,
+    timeGroups: timeGroups as Ref<TimeGroup[]>,
     selectConversation,
     handleNewConversation,
     handleDeleteConversation,

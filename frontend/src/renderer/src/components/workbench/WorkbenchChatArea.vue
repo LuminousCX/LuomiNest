@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
+import { formatTokens } from '@/utils/format'
+import { scrollToTextMatch } from '@/utils/chatSearchHelpers'
 import { useI18n } from 'vue-i18n'
 import {
   Loader2,
@@ -71,15 +73,8 @@ watch(
   async ([kw]) => {
     if (!kw) return
     await nextTick()
-    const q = kw.toLowerCase()
-    const rows = messagesContainer.value?.querySelectorAll('.message-row') ?? []
-    for (const el of rows) {
-      if ((el.textContent || '').toLowerCase().includes(q)) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        el.classList.add('lumi-chat-search-highlight')
-        setTimeout(() => el.classList.remove('lumi-chat-search-highlight'), 2000)
-        break
-      }
+    if (messagesContainer.value) {
+      await scrollToTextMatch(messagesContainer.value, '.message-row', kw)
     }
     chatStore.pendingSearchKeyword = ''
   },
@@ -153,12 +148,6 @@ const contextRingColorVar = computed(() => {
   return 'var(--lumi-success, #10b981)'
 })
 
-// 格式化 token 数（带千分位）
-const formatTokens = (n: number): string => {
-  if (!n || n <= 0) return '0'
-  return n.toLocaleString('en-US')
-}
-
 // isNearBottom/showScrollToBottomBtn 的权威来源是父级（props 只读）：
 // 桥接为"读取 props、写入吞掉"的 computed，滚动度量经 emit 上抛由父级重算
 const isNearBottom = computed<boolean>({
@@ -198,7 +187,7 @@ defineExpose({
       <div class="warning-content">
         <AlertTriangle :size="20" />
         <div class="warning-text">
-          <p class="warning-title">{{ t('workbench.backendNotConnected') }}</p>
+          <p class="warning-title lumi-title-md">{{ t('workbench.backendNotConnected') }}</p>
           <p class="warning-desc">{{ t('workbench.backendNotConnectedDesc') }}</p>
         </div>
         <LumiButton variant="danger" size="sm" class="retry-btn shrink-0" @click="emit('retry-backend')">
@@ -360,7 +349,7 @@ defineExpose({
                         <CheckCircle2 v-else-if="agent.status === 'completed'" :size="13" />
                         <XCircle v-else-if="agent.status === 'failed'" :size="13" />
                       </div>
-                      <div class="subagent-card-info">
+                      <div class="subagent-card-info lumi-item-head">
                         <div class="subagent-card-title">
                           <span class="subagent-task">{{ agent.task }}</span>
                           <span class="subagent-depth">{{ t('workbench.depth', { n: agent.depth }) }}</span>
@@ -721,9 +710,8 @@ button:focus-visible {
   flex: 1;
 }
 
+/* 颜色/字号/字重由全局 .lumi-title-md 提供，本地只留 margin 复位 */
 .warning-title {
-  font-size: var(--text-md);
-  font-weight: 600;
   margin: 0;
 }
 
@@ -1138,14 +1126,6 @@ button:focus-visible {
 
 .subagent-card.failed .subagent-status-icon :deep(svg) {
   color: var(--lumi-danger);
-}
-
-.subagent-card-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
 }
 
 .subagent-card-title {

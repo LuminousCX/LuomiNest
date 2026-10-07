@@ -10,6 +10,7 @@
  * 云端状态订阅在组件生命周期内挂载/卸载；本地表单状态由父级 composable 持有。
  */
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useClipboard } from '@/composables/useClipboard'
 import { useI18n } from 'vue-i18n'
 import {
   Cloud,
@@ -107,21 +108,15 @@ const openVerification = async (): Promise<void> => {
   }
 }
 
-// ── 等待授权态：复制用户码 ──
-const copied = ref(false)
-let copyTimer: ReturnType<typeof setTimeout> | undefined
+// ── 等待授权态：复制用户码（useClipboard 统一收口）──
+const { copied, copyText, dispose: disposeClipboard } = useClipboard(1500)
+onUnmounted(disposeClipboard)
 
 const copyUserCode = async (): Promise<void> => {
   const code = cloudStatus.value.userCode
   if (!code) return
-  try {
-    await navigator.clipboard.writeText(code)
-    copied.value = true
-    if (copyTimer) clearTimeout(copyTimer)
-    copyTimer = setTimeout(() => (copied.value = false), 1500)
-  } catch {
-    // 剪贴板不可用时用户码仍可手动选中复制
-  }
+  // 剪贴板不可用时用户码仍可手动选中复制
+  await copyText(code)
 }
 
 // ── 本地账号 ──
@@ -162,7 +157,6 @@ onMounted(() => {
 onUnmounted(() => {
   unsubscribe?.()
   unsubscribe = null
-  if (copyTimer) clearTimeout(copyTimer)
 })
 </script>
 
@@ -411,39 +405,11 @@ onUnmounted(() => {
   gap: var(--space-5);
 }
 
-.step-hero {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  width: 100%;
-}
-
-.step-hero-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
-}
+/* step-hero / step-hero-icon / step-hero-title / step-hero-desc 见 steps-shared.css */
 
 .login-hero-icon {
   background: var(--lumi-brand-gradient-soft);
   color: var(--lumi-brand);
-}
-
-.step-hero-title {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text);
-}
-
-.step-hero-desc {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
 }
 
 /* 三选一模式卡 */
@@ -664,11 +630,7 @@ onUnmounted(() => {
   gap: var(--space-3);
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
+/* .form-group 基础布局与全局 components.css 的 .form-group 一致，删除本地重复份 */
 
 .form-group label {
   font-size: var(--text-sm);
@@ -711,13 +673,7 @@ onUnmounted(() => {
   color: var(--text-muted);
 }
 
-.step-actions {
-  display: flex;
-  gap: var(--space-3);
-  width: 100%;
-  margin-top: var(--space-1);
-}
-
+/* .step-actions 基础布局见 steps-shared.css */
 .step-actions .lumi-btn--block {
   flex: 1;
 }
@@ -728,3 +684,4 @@ button:focus-visible,
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 </style>
+<style scoped src="./steps-shared.css"></style>

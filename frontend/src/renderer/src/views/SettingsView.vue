@@ -89,7 +89,7 @@ const navigateTo = (route: string) => {
           <User :size="28" />
         </div>
         <div class="settings-hero__content">
-          <h1 class="settings-hero__title">{{ t('settings.title') }}</h1>
+          <h1 class="settings-hero__title lumi-title-2xl">{{ t('settings.title') }}</h1>
           <p class="settings-hero__subtitle">{{ t('settings.subtitle') }}</p>
         </div>
         <div class="settings-hero__line">
@@ -99,7 +99,7 @@ const navigateTo = (route: string) => {
         </div>
       </div>
 
-      <div class="settings-body">
+      <div class="settings-body lumi-stack-5">
         <div
           v-for="(group, gIdx) in settingGroups"
           :key="group.title"
@@ -120,7 +120,7 @@ const navigateTo = (route: string) => {
               <div class="setting-item__icon" :style="{ color: item.iconColor }">
                 <component :is="item.icon" :size="20" />
               </div>
-              <div class="setting-item__info">
+              <div class="setting-item__info lumi-item-info">
                 <span class="setting-item__label">{{ item.label }}</span>
                 <span class="setting-item__desc">{{ item.desc }}</span>
               </div>
@@ -198,9 +198,6 @@ const navigateTo = (route: string) => {
 }
 
 .settings-hero__title {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
   letter-spacing: -0.3px;
   margin-bottom: var(--space-1);
 }
@@ -233,12 +230,6 @@ const navigateTo = (route: string) => {
 }
 
 /* ── Body ── */
-.settings-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
 .setting-group {
   display: flex;
   flex-direction: column;
@@ -331,14 +322,6 @@ const navigateTo = (route: string) => {
 
 .setting-item:hover .setting-item__icon {
   transform: scale(1.05);
-}
-
-.setting-item__info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .setting-item__label {

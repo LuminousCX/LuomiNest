@@ -82,7 +82,7 @@ function getWeekday(dateStr: string): string {
         <p>{{ t('memory.history.pickDate') }}</p>
       </div>
       <template v-else>
-        <div class="daily-header">
+        <div class="daily-header lumi-row-2">
           <span class="daily-date-label">{{ selectedDailyDate }}</span>
           <span class="daily-weekday">{{ getWeekday(selectedDailyDate) }}</span>
         </div>
@@ -228,11 +228,7 @@ function getWeekday(dateStr: string): string {
   gap: var(--space-3);
 }
 
-.daily-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
+/* .daily-header 布局由全局工具类 .lumi-row-2 提供（components.css §16） */
 
 .daily-date-label {
   font-size: var(--text-xl);

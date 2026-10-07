@@ -156,14 +156,14 @@ watch(() => modelStore.modelConfig, (cfg) => {
 <template>
   <div class="context-config">
     <!-- 全局上下文与压缩 -->
-    <div class="content-section">
+    <div class="content-section lumi-stack-5">
       <div class="section-header">
-        <div class="section-header-left">
+        <div class="section-header-left lumi-row-3">
           <div class="section-icon">
             <SlidersHorizontal :size="18" />
           </div>
           <div class="section-header-text">
-            <h3 class="section-title">{{ t('aiModel.context.title') }}</h3>
+            <h3 class="lumi-section-title">{{ t('aiModel.context.title') }}</h3>
             <span class="section-tag">{{ t('aiModel.context.tagGlobal') }}</span>
           </div>
         </div>
@@ -184,8 +184,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
 
       <div class="config-form">
         <!-- 上下文窗口大小 -->
-        <div class="form-group">
-          <div class="form-label-row">
+        <div class="form-group lumi-stack-2">
+          <div class="form-label-row lumi-row-between">
             <label class="form-label">{{ t('aiModel.context.globalWindowSize') }}</label>
             <span class="form-value">{{ contextWindowSize === 0 ? t('aiModel.context.auto') : formatTokens(contextWindowSize) }}</span>
           </div>
@@ -217,8 +217,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
         </div>
 
         <!-- 压缩阈值 -->
-        <div class="form-group">
-          <div class="form-label-row">
+        <div class="form-group lumi-stack-2">
+          <div class="form-label-row lumi-row-between">
             <label class="form-label">{{ t('aiModel.context.compressionThreshold') }}</label>
             <span class="form-value">{{ (compressionThreshold * 100).toFixed(0) }}%</span>
           </div>
@@ -228,8 +228,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
         </div>
 
         <!-- LM 摘要压缩比例 -->
-        <div class="form-group">
-          <div class="form-label-row">
+        <div class="form-group lumi-stack-2">
+          <div class="form-label-row lumi-row-between">
             <label class="form-label">{{ t('aiModel.context.summaryRatioLabel') }}</label>
             <span class="form-value" :class="{ 'value-recommended': compressionRatio >= 40 && compressionRatio <= 50 }">{{ compressionRatio }}%</span>
           </div>
@@ -239,7 +239,7 @@ watch(() => modelStore.modelConfig, (cfg) => {
         </div>
 
         <!-- 启用 LLM 摘要压缩（全局模型统一：摘要统一使用主模型，无独立摘要模型） -->
-        <div class="form-group">
+        <div class="form-group lumi-stack-2">
           <div class="toggle-row">
             <label class="form-label">{{ t('aiModel.context.enableLlmCompress') }}</label>
             <button
@@ -267,14 +267,14 @@ watch(() => modelStore.modelConfig, (cfg) => {
     </div>
 
     <!-- 按模型上下文覆盖 -->
-    <div class="content-section">
+    <div class="content-section lumi-stack-5">
       <div class="section-header">
-        <div class="section-header-left">
+        <div class="section-header-left lumi-row-3">
           <div class="section-icon section-icon--model">
             <Bot :size="18" />
           </div>
           <div class="section-header-text">
-            <h3 class="section-title">{{ t('aiModel.context.overridesTitle') }}</h3>
+            <h3 class="lumi-section-title">{{ t('aiModel.context.overridesTitle') }}</h3>
             <span class="section-tag">{{ t('aiModel.context.tagModel') }}</span>
           </div>
         </div>
@@ -303,9 +303,9 @@ watch(() => modelStore.modelConfig, (cfg) => {
               <div class="model-card-header">
                 <div class="model-info">
                   <span class="model-name">{{ item.name || item.modelId }}</span>
-                  <span class="model-id">{{ item.modelId }}</span>
+                  <span class="model-id lumi-clip-xs-muted">{{ item.modelId }}</span>
                 </div>
-                <div class="model-actions">
+                <div class="model-actions lumi-shrink-row">
                   <button
                     :class="['toggle-switch', 'toggle-switch--sm', { active: item.enabled }]"
                     @click="item.enabled = !item.enabled; scheduleUpdateModel(item)"
@@ -328,8 +328,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
 
               <Transition name="expand-vertical">
                 <div v-if="isExpanded(`${providerId}/${item.modelId}`)" class="model-card-body">
-                  <div class="form-group form-group--compact">
-                    <div class="form-label-row">
+                  <div class="form-group form-group--compact lumi-stack-2">
+                    <div class="form-label-row lumi-row-between">
                       <label class="form-label">{{ t('aiModel.context.maxContextLength') }}</label>
                       <span class="form-value">{{ item.maxContextTokens === 0 ? t('aiModel.context.auto') : formatTokens(item.maxContextTokens) }}</span>
                     </div>
@@ -368,34 +368,12 @@ watch(() => modelStore.modelConfig, (cfg) => {
   </div>
 </template>
 
+<style scoped src="./ai-model-shared.css"></style>
 <style scoped>
 .context-config {
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
-}
-
-.content-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-5);
-  background: var(--workspace-card);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--workspace-border);
-  transition: all var(--transition-normal);
-}
-
-.section-header-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
 }
 
 .section-icon {
@@ -414,64 +392,10 @@ watch(() => modelStore.modelConfig, (cfg) => {
   color: var(--lumi-emerald, #10b981);
 }
 
-.section-header-text {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-}
-
-.section-title {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.section-tag {
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--text-muted);
-  letter-spacing: 0.5px;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--workspace-panel);
-}
-
 .section-count {
   font-size: var(--text-xs);
   color: var(--text-muted);
   font-weight: 500;
-}
-
-.info-btn {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted);
-  transition: all var(--transition-normal);
-  flex-shrink: 0;
-}
-
-.info-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--lumi-primary);
-}
-
-.info-btn.active {
-  background: var(--lumi-primary-light);
-  color: var(--lumi-primary);
-}
-
-.section-info-panel {
-  padding: var(--space-3) var(--space-5);
-  background: var(--workspace-panel);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--workspace-border);
-  font-size: var(--text-base);
-  color: var(--text-secondary);
-  line-height: 1.7;
 }
 
 .section-info-panel--inline {
@@ -487,52 +411,11 @@ watch(() => modelStore.modelConfig, (cfg) => {
   color: var(--lumi-primary);
 }
 
-.section-info-panel p {
-  margin-bottom: var(--space-2);
-}
-
-.section-info-panel p:last-child {
-  margin-bottom: 0;
-}
-
-.info-tip {
-  color: var(--lumi-primary) !important;
-  font-weight: 500;
-  font-size: var(--text-sm) !important;
-}
-
-.info-expand-enter-active {
-  animation: info-expand-in var(--duration-slow) var(--ease-in-out);
-}
-
-.info-expand-leave-active {
-  animation: info-expand-in var(--duration-fast) var(--ease-in-out) reverse;
-}
-
-@keyframes info-expand-in {
-  from {
-    opacity: 0;
-    max-height: 0;
-    margin-top: calc(var(--space-2) * -1);
-  }
-  to {
-    opacity: 1;
-    max-height: 200px;
-    margin-top: 0;
-  }
-}
-
 .config-form {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
   max-width: 600px;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
 }
 
 .form-group--compact {
@@ -552,12 +435,6 @@ watch(() => modelStore.modelConfig, (cfg) => {
 .hint-error {
   color: var(--lumi-accent);
   font-weight: 500;
-}
-
-.form-label-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
 .form-label {
@@ -604,39 +481,6 @@ watch(() => modelStore.modelConfig, (cfg) => {
 .form-number-input::placeholder {
   color: var(--text-muted);
   font-size: var(--text-sm);
-}
-
-.form-slider {
-  width: 100%;
-  height: var(--space-2);
-  appearance: none;
-  background: var(--workspace-border);
-  border-radius: var(--space-1);
-  outline: none;
-  cursor: pointer;
-}
-
-.form-slider::-webkit-slider-thumb {
-  appearance: none;
-  width: var(--space-4);
-  height: var(--space-4);
-  border-radius: var(--radius-full);
-  background: var(--lumi-primary);
-  cursor: pointer;
-  box-shadow: 0 var(--space-1) var(--space-2) var(--lumi-primary-border);
-  transition: transform var(--transition-normal);
-}
-
-.form-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-}
-
-.slider-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
 }
 
 .recommended-badge {
@@ -731,71 +575,12 @@ watch(() => modelStore.modelConfig, (cfg) => {
   }
 }
 
-.form-select-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.form-select {
-  width: 100%;
-  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  cursor: pointer;
-  appearance: none;
-  transition: all var(--transition-normal);
-}
-
-.form-select:focus {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 var(--space-1) var(--lumi-primary-glow);
-}
-
 .select-icon {
   position: absolute;
   right: var(--space-3);
   color: var(--text-muted);
   pointer-events: none;
 }
-
-.save-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-6);
-  border-radius: var(--radius-md);
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--text-inverse);
-  background: var(--lumi-primary);
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  align-self: flex-start;
-}
-
-.save-btn:hover {
-  background: var(--lumi-primary-hover);
-}
-
-.save-btn.saving {
-  opacity: 0.8;
-  cursor: wait;
-}
-
-.save-btn.saved {
-  background: var(--lumi-emerald);
-}
-
-.save-btn.error {
-  background: var(--lumi-accent);
-}
-
-
-
 
 .empty-state {
   display: flex;
@@ -902,19 +687,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
   white-space: nowrap;
 }
 
-.model-id {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .model-actions {
-  display: flex;
-  align-items: center;
   gap: var(--space-2);
-  flex-shrink: 0;
 }
 
 .expand-btn {

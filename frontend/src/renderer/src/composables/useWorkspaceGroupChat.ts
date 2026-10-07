@@ -16,7 +16,7 @@ const logger = createLuomiNestRendererLogger('WorkspaceGroupChat')
 
 /** 群聊子组件实例的最小接口（避免依赖具体组件类型） */
 interface GroupChatComponent {
-  scrollToBottom: () => void
+  scrollToBottom: (force?: boolean) => void
 }
 
 export interface UseWorkspaceGroupChatOptions {
@@ -89,7 +89,7 @@ export const useWorkspaceGroupChat = (options: UseWorkspaceGroupChatOptions) => 
         await socialStore.sendGroupMessage(selectedGroupId.value, userContent)
       }
       await nextTick()
-      groupChatRef.value?.scrollToBottom()
+      groupChatRef.value?.scrollToBottom(true)
     } catch (e: unknown) {
       logger.error('Failed to send message:', e)
     } finally {

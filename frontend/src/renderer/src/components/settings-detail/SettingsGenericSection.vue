@@ -54,7 +54,7 @@ function readControlValue(event: Event): string {
 <template>
   <div class="settings-panel animate-slide-up">
     <section class="settings-card">
-      <div class="settings-card__body settings-card__body--compact">
+      <div class="settings-card__body lumi-stack-4 settings-card__body--compact">
         <div
           v-for="item in items"
           :key="item.key"

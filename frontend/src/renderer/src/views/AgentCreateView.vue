@@ -45,7 +45,7 @@ const dismissError = (): void => {
   <div class="wizard-overlay" @click.self="handleClose">
     <div class="wizard-container animate-scale-in">
       <div class="wizard-header">
-        <div class="header-left">
+        <div class="header-left lumi-row-3">
           <div class="header-icon-wrap">
             <Sparkles :size="20" />
           </div>
@@ -156,12 +156,6 @@ const dismissError = (): void => {
   padding: var(--space-5) var(--space-7) var(--space-4);
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-light);
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
 }
 
 .header-icon-wrap {

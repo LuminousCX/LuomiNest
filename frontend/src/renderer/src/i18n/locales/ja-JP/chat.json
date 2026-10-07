@@ -102,23 +102,6 @@
     "createAgentFailed": "Agent の作成に失敗しました",
     "updateAgentFailed": "Agent の更新に失敗しました",
     "deleteAgentFailed": "Agent の削除に失敗しました",
-    "trash": {
-      "back": "戻る",
-      "title": "ゴミ箱",
-      "batch": "一括操作",
-      "selectAll": "すべて選択",
-      "selectedCount": "{n} 件選択中",
-      "restore": "復元",
-      "delete": "削除",
-      "empty": "ゴミ箱を空にする",
-      "emptyTitle": "ゴミ箱は空です",
-      "permanentDelete": "完全に削除",
-      "confirmTitle": "削除の確認",
-      "cancel": "キャンセル",
-      "confirmEmpty": "ゴミ箱を空にしますか？すべての会話が完全に削除され、元に戻せません。",
-      "confirmBatchDelete": "選択した {n} 件の会話を完全に削除しますか？この操作は取り消せません。",
-      "confirmDeleteOne": "この会話を完全に削除しますか？この操作は取り消せません。"
-    },
     "groupInfo": {
       "back": "連絡先に戻る",
       "memberCount": "メンバー {m} 名 · AI {a}",

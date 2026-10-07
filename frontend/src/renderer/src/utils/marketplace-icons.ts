@@ -1,18 +1,4 @@
-import type { Component } from 'vue'
-import {
-  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
-  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
-  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
-  Package, LayoutGrid, Cpu, Wrench, Puzzle, MessageCircle, Code, Image, Heart,
-} from 'lucide-vue-next'
-
-const ITEM_ICON_MAP: Record<string, Component> = {
-  Brain, Home, MessageSquare, Search, Volume2, Zap, User, RefreshCw,
-  Globe, Laptop, PenTool, BookOpen, Palette, HeartPulse, Users, BarChart3,
-  Bot, Lightbulb, Terminal, GraduationCap, TrendingUp, Shield, Scale,
-  Package, LayoutGrid, Cpu, Wrench, Puzzle, MessageCircle, Code, Image, Heart,
-}
-
-const DEFAULT_ICON: Component = Package
-
-export { ITEM_ICON_MAP, DEFAULT_ICON }
+/**
+ * 市场条目图标解析（已收敛到 utils/lucide-icon-map，此文件保留兼容导出）。
+ */
+export { LUCIDE_ICON_MAP as ITEM_ICON_MAP, DEFAULT_ICON } from './lucide-icon-map'

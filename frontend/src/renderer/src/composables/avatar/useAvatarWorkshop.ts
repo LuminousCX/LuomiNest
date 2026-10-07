@@ -38,6 +38,7 @@ import {
   type WorkshopState,
 } from '@/types/avatar'
 import type { PetModelInfo } from '@shared/ipc-types'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('AvatarWorkshop')
 
@@ -375,7 +376,7 @@ export function useAvatarWorkshop() {
       logger.info(`Model imported: ${result.modelInfo.name}`)
       return result.modelInfo
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = toErrorMessage(err)
       toast.error(i18n.global.t('avatar.workshop.importFailed', { message: msg }))
       logger.error('importModel failed', err)
       return null
@@ -406,7 +407,7 @@ export function useAvatarWorkshop() {
       logger.info(`Model deleted: ${modelName}`)
       return true
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = toErrorMessage(err)
       toast.error(i18n.global.t('avatar.workshop.deleteFailed', { message: msg }))
       logger.error('deleteModel failed', err)
       return false
@@ -485,7 +486,7 @@ export function useAvatarWorkshop() {
       logger.info('Binding updated', updates)
       return true
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = toErrorMessage(err)
       toast.error(i18n.global.t('avatar.workshop.updateFailed', { message: msg }))
       logger.error('updateBinding failed', err)
       return false

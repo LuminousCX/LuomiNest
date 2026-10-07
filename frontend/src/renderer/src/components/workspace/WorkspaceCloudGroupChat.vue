@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Cloud, CloudOff, User, Users, Send, Loader2, UserPlus, ChevronUp } from 'lucide-vue-next'
+import { Cloud, CloudOff, User, Users, Loader2, UserPlus, ChevronUp } from 'lucide-vue-next'
 import type { CloudGroupVo } from '@shared/ipc-types'
 import type { GroupMessage } from '../../types'
-import { useAutoScroll } from '../../composables/useAutoScroll'
+import { useChatScroll } from '../../composables/useChatScroll'
+import ChatThreadHeader from './chat-thread/ChatThreadHeader.vue'
+import ChatThreadBubble from './chat-thread/ChatThreadBubble.vue'
+import ChatThreadInputBar from './chat-thread/ChatThreadInputBar.vue'
 
 /**
  * 云端群聊消息线程（气泡 + 发送框 + 加载更多）。
@@ -34,7 +37,13 @@ const emit = defineEmits<{
 }>()
 
 const container = ref<HTMLElement | null>(null)
-const { scrollToBottom } = useAutoScroll(container, () => props.messages, { deep: true, smooth: true })
+const isNearBottom = ref(true)
+const { scrollToBottom, handleScroll } = useChatScroll({
+  container,
+  isNearBottom,
+  followSource: () => props.messages,
+  followDeep: true,
+})
 
 const inputModel = computed<string>({
   get: () => props.input,
@@ -51,43 +60,24 @@ const roleLabel = computed(() => {
   return t('workspace.cloud.roleMember')
 })
 
-const formatTime = (dateStr: string): string => {
-  try {
-    return new Date(dateStr).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-  } catch {
-    return ''
-  }
-}
-
-const handleKeydown = (event: KeyboardEvent): void => {
-  if (!event.isComposing) emit('send')
-}
-
 defineExpose({ scrollToBottom })
 </script>
 
 <template>
   <div class="cloud-group-chat">
-    <div class="cloud-chat-header">
-      <div class="chat-title-area">
-        <div class="chat-avatar-mini">
-          <Cloud :size="14" />
-        </div>
-        <div class="chat-title-text">
-          <h3>{{ group?.name || t('workspace.cloud.sectionLabel') }}</h3>
-          <span class="chat-status-line">
-            {{ t('workspace.cloud.memberCount', { n: group?.memberCount ?? 0 }) }} · {{ roleLabel }}
-          </span>
-        </div>
-      </div>
-      <div class="chat-actions">
-        <button class="chat-action-btn" :title="t('workspace.cloud.inviteTitle')" @click="emit('invite')">
+    <ChatThreadHeader
+      :icon="Cloud"
+      :title="group?.name || t('workspace.cloud.sectionLabel')"
+      :subtitle="t('workspace.cloud.memberCount', { n: group?.memberCount ?? 0 }) + ' · ' + roleLabel"
+    >
+      <template #actions>
+        <button class="chat-action-btn lumi-icon-btn" :title="t('workspace.cloud.inviteTitle')" @click="emit('invite')">
           <UserPlus :size="15" />
         </button>
-      </div>
-    </div>
+      </template>
+    </ChatThreadHeader>
 
-    <div ref="container" class="cloud-chat-messages">
+    <div ref="container" class="cloud-chat-messages" @scroll="handleScroll()">
       <!-- 加载更早历史（契约只有 sinceId 升序，加载更多=加大 limit 重拉） -->
       <div v-if="canLoadMore && !unavailable" class="load-more-row">
         <button class="load-more-btn" :disabled="loading" @click="emit('load-more')">
@@ -102,23 +92,19 @@ defineExpose({ scrollToBottom })
       </div>
 
       <template v-else>
-        <div
+        <ChatThreadBubble
           v-for="msg in messages"
           :key="msg.id"
-          :class="['msg-row', msg.senderType]"
+          :msg="msg"
+          avatar-size="sm"
         >
-          <div v-if="msg.senderType !== 'user'" class="msg-avatar">
+          <template #avatar>
             <User :size="15" />
-          </div>
-          <div :class="['msg-bubble', msg.senderType]">
-            <span class="msg-sender" v-if="msg.senderType !== 'user'">{{ msg.senderName }}</span>
-            <p class="msg-text">{{ msg.content }}</p>
-            <span class="msg-time">{{ formatTime(msg.timestamp) }}</span>
-          </div>
-          <div v-if="msg.senderType === 'user'" class="msg-avatar user-avatar">
+          </template>
+          <template #avatar-user>
             <User :size="15" />
-          </div>
-        </div>
+          </template>
+        </ChatThreadBubble>
       </template>
 
       <!-- 优雅降级：服务端未开通（404）→ 空态提示，不弹错误、不自动重试 -->
@@ -142,28 +128,18 @@ defineExpose({ scrollToBottom })
       </div>
     </div>
 
-    <div class="cloud-chat-input-bar">
-      <div class="input-main">
-        <input
-          v-model="inputModel"
-          type="text"
-          :placeholder="t('workspace.cloud.phMessage')"
-          :disabled="sending || unavailable || idle"
-          @keydown.enter="handleKeydown"
-        />
-        <button
-          class="input-send-btn"
-          :disabled="!input.trim() || sending || unavailable || idle"
-          @click="emit('send')"
-        >
-          <Loader2 v-if="sending" :size="15" class="spin-animation" />
-          <Send v-else :size="15" />
-        </button>
-      </div>
-    </div>
+    <ChatThreadInputBar
+      v-model="inputModel"
+      :placeholder="t('workspace.cloud.phMessage')"
+      :disabled="unavailable || idle"
+      :sending="sending"
+      :send-disabled="!input.trim()"
+      @send="emit('send')"
+    />
   </div>
 </template>
 
+<style scoped src="./workspace-shared.css"></style>
 <style scoped>
 .cloud-group-chat {
   flex: 1;
@@ -172,62 +148,8 @@ defineExpose({ scrollToBottom })
   overflow: hidden;
 }
 
-.cloud-chat-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--border-light);
-  background: var(--surface);
-  flex-shrink: 0;
-}
-
-.chat-title-area {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.chat-avatar-mini {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lumi-brand-glow);
-  color: var(--lumi-brand);
-}
-
-.chat-title-text h3 {
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.chat-status-line {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.chat-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
+/* transition: all 与全局 .lumi-icon-btn 的 background/color 过滤不同，留本地 */
 .chat-action-btn {
-  width: var(--space-7);
-  height: var(--space-7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  background: transparent;
-  border: none;
-  cursor: pointer;
   transition: all var(--transition-fast);
 }
 
@@ -284,77 +206,6 @@ defineExpose({ scrollToBottom })
   padding: var(--space-2) var(--space-4);
 }
 
-.msg-row {
-  display: flex;
-  gap: var(--space-2);
-  max-width: 80%;
-}
-
-.msg-row.user {
-  align-self: flex-end;
-  flex-direction: row-reverse;
-}
-
-.msg-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: var(--lumi-brand-glow);
-  color: var(--lumi-brand);
-}
-
-.msg-avatar.user-avatar {
-  background: var(--lumi-brand);
-  color: var(--text-inverse);
-}
-
-.msg-bubble {
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-.msg-bubble:not(.user) {
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  color: var(--text-primary);
-}
-
-.msg-bubble.user {
-  background: var(--lumi-brand);
-  color: var(--text-inverse);
-}
-
-.msg-sender {
-  display: block;
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: 2px;
-}
-
-.msg-text {
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.msg-time {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-  display: block;
-}
-
-.msg-bubble.user .msg-time {
-  color: color-mix(in srgb, var(--text-inverse), transparent 30%);
-}
-
 .cloud-empty {
   margin: auto;
   display: flex;
@@ -394,64 +245,5 @@ defineExpose({ scrollToBottom })
 
 .cloud-retry-btn:hover {
   background: var(--lumi-brand-glow);
-}
-
-.cloud-chat-input-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
-  border-top: 1px solid var(--workspace-border);
-  background: var(--workspace-sidebar);
-  flex-shrink: 0;
-}
-
-.input-main {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  background: var(--surface);
-  border: 1px solid var(--workspace-border);
-  border-radius: var(--radius-md);
-  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
-}
-
-.input-main input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: var(--text-base);
-  color: var(--text-primary);
-  padding: 6px 0;
-}
-
-.input-main input::placeholder {
-  color: var(--text-muted);
-}
-
-.input-send-btn {
-  width: var(--space-7);
-  height: var(--space-7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm);
-  color: var(--text-inverse);
-  background: var(--lumi-brand);
-  border: none;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.input-send-btn:hover:not(:disabled) {
-  background: var(--lumi-brand-hover);
-}
-
-.input-send-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 </style>

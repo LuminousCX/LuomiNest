@@ -113,7 +113,7 @@ const cloudRoleLabel = (role: string): string => {
             <Bot v-else :size="16" />
           </div>
           <div class="contact-info">
-            <span class="contact-name">{{ agent.name }}</span>
+            <span class="contact-name lumi-clip-base-500">{{ agent.name }}</span>
             <span class="contact-desc">{{ agent.description || t('workspace.defaultAgentDesc') }}</span>
           </div>
           <button class="contact-edit-btn" :title="t('workspace.edit')" @click.stop="emit('edit-agent', agent)">
@@ -143,7 +143,7 @@ const cloudRoleLabel = (role: string): string => {
           </div>
           <div class="contact-info">
             <div class="contact-top-row">
-              <span class="contact-name">{{ group.name }}</span>
+              <span class="contact-name lumi-clip-base-500">{{ group.name }}</span>
               <span class="contact-meta">{{ group.aiCount }} AI</span>
             </div>
             <span class="contact-desc">{{ group.description || t('workspace.noDescription') }}</span>
@@ -178,7 +178,7 @@ const cloudRoleLabel = (role: string): string => {
           </div>
           <div class="contact-info">
             <div class="contact-top-row">
-              <span class="contact-name">{{ group.name }}</span>
+              <span class="contact-name lumi-clip-base-500">{{ group.name }}</span>
               <span class="contact-meta">{{ group.memberCount }}</span>
             </div>
             <span class="contact-desc">{{ cloudRoleLabel(group.myRole) }}</span>
@@ -197,14 +197,8 @@ const cloudRoleLabel = (role: string): string => {
   </div>
 </template>
 
+<style scoped src="./workspace-shared.css"></style>
 <style scoped>
-.contact-panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
 .contact-header {
   padding: var(--space-3) var(--space-3) var(--space-2);
   display: flex;
@@ -352,15 +346,6 @@ const cloudRoleLabel = (role: string): string => {
   gap: 6px;
 }
 
-.contact-name {
-  font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .contact-meta {
   font-size: var(--text-2xs);
   color: var(--text-muted);
@@ -405,15 +390,6 @@ const cloudRoleLabel = (role: string): string => {
   font-size: var(--text-xs);
   color: var(--text-muted);
   text-align: center;
-}
-
-.contact-empty {
-  padding: var(--space-7) var(--space-4);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--text-muted);
 }
 
 .contact-empty p {

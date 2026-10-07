@@ -299,14 +299,7 @@ const highlightText = (key: string) => t(`welcome.agreePoint.${key}`)
   opacity: 0.8;
 }
 
-/* 底部按钮 + 提示 */
-.step-actions {
-  display: flex;
-  gap: var(--space-3);
-  width: 100%;
-  margin-top: var(--space-1);
-}
-
+/* 底部按钮 + 提示（.step-actions 基础布局见 steps-shared.css） */
 .agreement-hint {
   font-size: var(--text-xs);
   color: var(--text-muted);
@@ -320,3 +313,4 @@ button:focus-visible,
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 </style>
+<style scoped src="./steps-shared.css"></style>

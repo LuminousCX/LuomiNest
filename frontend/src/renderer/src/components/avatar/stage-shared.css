@@ -1,0 +1,207 @@
+/*
+ * stage-shared.css - avatar 三胞胎（AvatarStage / PixelPetStage / PngTuberStage）共享舞台样式
+ *
+ * 由三个组件以 <style scoped src="./stage-shared.css"> 导入，样式仍按组件 scoped 隔离，
+ * 不污染全局。各组件的差异（stage 根类、subtitle-fade 过渡、emotion-tag、
+ * primary/brand 颜色覆盖等）保留在各组件本地 <style scoped> 块中，
+ * 见《重复样式聚类报告》§10.2。
+ *
+ * keyframes 约定：本文件只引用全局 animations.css 中的
+ * spin / lumi-sparkle-pulse / lumi-dot-pulse / lumi-hint-fade-in，
+ * 不在组件内重复定义（scoped 只会改名同文件内定义的 keyframes，全局引用不受影响）。
+ */
+
+/* ---------- 顶部信息层 ---------- */
+
+.stage-overlay {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  display: flex;
+  gap: var(--space-2);
+  z-index: 20;
+}
+
+.overlay-tag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-xl);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  backdrop-filter: blur(8px);
+  background: var(--overlay-subtle);
+  border: 1px solid var(--border-light);
+  color: var(--text-inverse);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--lumi-success);
+  animation: lumi-dot-pulse 2s ease-in-out infinite;
+}
+
+/* ---------- 副标题 ---------- */
+
+.subtitle-overlay {
+  position: absolute;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 15;
+  max-width: 80%;
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-sm);
+  pointer-events: none;
+}
+
+/* 无差异版；AvatarStage 本地额外加 letter-spacing: 0.02em */
+.subtitle-text {
+  font-size: var(--text-md);
+  line-height: var(--leading-relaxed);
+  color: var(--text);
+  text-align: center;
+  font-weight: var(--font-medium);
+}
+
+/* ---------- 桌面模式提示 ---------- */
+
+.desktop-mode-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: var(--space-8);
+  z-index: 5;
+  text-align: center;
+  animation: lumi-hint-fade-in var(--duration-slow) var(--ease-in-out);
+}
+
+/* 无差异版；AvatarStage 本地额外加 hint-icon-pulse 动画 */
+.hint-icon {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--lumi-brand-light);
+  color: var(--lumi-brand);
+}
+
+.hint-content h3 {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
+  color: var(--text);
+  margin-bottom: var(--space-2);
+}
+
+.hint-content p {
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  line-height: var(--leading-relaxed);
+  max-width: 360px;
+}
+
+.hint-sub {
+  font-size: var(--text-sm) !important;
+  opacity: 0.7;
+  margin-top: var(--space-1);
+}
+
+/* ---------- 加载 / 错误 ---------- */
+
+/* 公共块取 Pixel/Png 版（loading 与 error 均带模糊底）；
+   AvatarStage 的 .stage-error 无模糊底且 gap 更小，差异见其本地覆盖 */
+.stage-loading,
+.stage-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  z-index: 10;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  backdrop-filter: blur(4px);
+}
+
+.stage-error {
+  color: var(--lumi-accent);
+}
+
+.loading-spinner {
+  color: var(--lumi-brand);
+  animation: spin 1s linear infinite;
+}
+
+.loading-text {
+  font-size: var(--text-base);
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+}
+
+.error-text {
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+  color: var(--text);
+}
+
+.error-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* ---------- 头像占位 ---------- */
+
+/* 无差异版（= Pixel/Png 版）；AvatarStage 本地额外加渐变底/内阴影/过渡 */
+.avatar-placeholder {
+  position: relative;
+  width: 260px;
+  height: 340px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+  z-index: 2;
+}
+
+/* 无颜色版：border 颜色 primary/brand 各组件本地覆盖；
+   ring-spin 与全局 spin 同值，直接复用 */
+.avatar-ring {
+  position: absolute;
+  width: 200px;
+  height: 200px;
+  border-radius: var(--radius-full);
+  animation: spin 12s linear infinite;
+}
+
+.avatar-core {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  z-index: 1;
+}
+
+/* 无颜色版：color primary/brand 各组件本地覆盖 */
+.avatar-sparkle {
+  opacity: 0.6;
+  animation: lumi-sparkle-pulse 2s ease-in-out infinite;
+}
+
+.avatar-label {
+  font-size: var(--text-base);
+  font-weight: 600;
+  letter-spacing: 3px;
+  color: var(--text-muted);
+}

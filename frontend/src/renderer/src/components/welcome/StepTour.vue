@@ -102,39 +102,11 @@ const finish = (): void => {
   gap: var(--space-6);
 }
 
-.step-hero {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  width: 100%;
-}
-
-.step-hero-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  box-shadow: var(--shadow-sm);
-}
+/* step-hero / step-hero-icon / step-hero-title / step-hero-desc 见 steps-shared.css */
 
 .tour-hero-icon {
   background: var(--lumi-brand-gradient-soft);
   color: var(--lumi-brand);
-}
-
-.step-hero-title {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text);
-}
-
-.step-hero-desc {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
 }
 
 /* 亮点卡 */
@@ -200,13 +172,7 @@ const finish = (): void => {
   background: var(--lumi-brand);
 }
 
-.step-actions {
-  display: flex;
-  gap: var(--space-3);
-  width: 100%;
-  margin-top: var(--space-1);
-}
-
+/* .step-actions 基础布局见 steps-shared.css */
 .step-actions .lumi-btn--block {
   flex: 1;
 }
@@ -221,3 +187,4 @@ button:focus-visible,
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 </style>
+<style scoped src="./steps-shared.css"></style>

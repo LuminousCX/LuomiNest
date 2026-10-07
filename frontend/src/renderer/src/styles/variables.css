@@ -572,23 +572,6 @@
    参考 Cyrene-Agent：背景层 + 半透明玻璃面板层分离
    ========================================================= */
 
-/* ── 通用毛玻璃工具类 ── */
-.lumi-glass {
-  background: var(--glass-surface);
-  border: 1px solid var(--glass-border);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
-  box-shadow: var(--glass-shadow);
-}
-
-.lumi-glass-strong {
-  background: var(--glass-surface-hover);
-  border: 1px solid var(--glass-border);
-  -webkit-backdrop-filter: var(--glass-blur-strong);
-  backdrop-filter: var(--glass-blur-strong);
-  box-shadow: var(--glass-shadow);
-}
-
 /* ── 背景激活时让 body / #app 透明，避免遮挡覆盖层 ── */
 [data-lumi-background="active"] body,
 [data-lumi-background="active"] #app {
@@ -620,7 +603,7 @@
 
 /* 侧边栏玻璃：全局背景时也透明化，让背景延伸到导航栏后方 */
 :is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app)
-  :is(.lumi-sidebar, .sidebar-nav-panel) {
+  .sidebar-nav-panel {
   background: color-mix(in srgb, var(--surface) calc(85% - var(--lumi-glass-intensity) * 40%), transparent) !important;
   -webkit-backdrop-filter: var(--glass-blur) !important;
   backdrop-filter: var(--glass-blur) !important;

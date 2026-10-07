@@ -13,6 +13,7 @@
 import { ref, type Ref } from 'vue'
 import { i18n } from '../i18n'
 import { generateId } from '../utils/id'
+import { toErrorMessage } from '@/utils/error'
 
 /** 历史条最大保留张数（本次会话内，FIFO） */
 const MAX_HISTORY = 12
@@ -87,7 +88,7 @@ export const useBrowserActions = () => {
       )
       return null
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e)
+      const message = toErrorMessage(e)
       displayToast(i18n.global.t('browser.actions.screenshotError', { msg: message }))
       return null
     }
@@ -110,7 +111,7 @@ export const useBrowserActions = () => {
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
       displayToast(i18n.global.t('browser.screenshotCopied'))
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e)
+      const message = toErrorMessage(e)
       displayToast(i18n.global.t('browser.screenshotCopyFail', { msg: message }))
     }
   }
@@ -129,7 +130,7 @@ export const useBrowserActions = () => {
       anchor.click()
       displayToast(i18n.global.t('browser.screenshotSaved'))
     } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : String(e)
+      const message = toErrorMessage(e)
       displayToast(i18n.global.t('browser.screenshotSaveFail', { msg: message }))
     }
   }

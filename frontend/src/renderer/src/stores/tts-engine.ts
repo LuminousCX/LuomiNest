@@ -16,12 +16,13 @@
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { API_ENDPOINTS } from '../config/api'
 import { filterTtsText } from '../utils/ttsTextFilter'
 import { interceptEmotionTags } from '../utils/emotionTagInterceptor'
 import type { ChatStreamChunk } from '../types'
 import { i18n } from '../i18n'
+import { synthesizeTts } from '@/utils/ttsApi'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { toErrorMessage } from '@/utils/error'
 import {
   useAvatarAudioEngine,
 } from '../composables/useAvatarAudioEngine'
@@ -150,14 +151,8 @@ export const useTtsEngineStore = defineStore('ttsEngine', () => {
 
     try {
       const cfg = config.ttsConfig ? config.ttsConfig() : {}
-      const token = await window.api.auth.getToken()
-      const response = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
+      const audioBlob = await synthesizeTts(
+        {
           text: text.trim(),
           voice: config.voice ? config.voice() : 'zh-CN-XiaoxiaoNeural',
           engine: config.engine ? config.engine() : 'auto',
@@ -165,19 +160,12 @@ export const useTtsEngineStore = defineStore('ttsEngine', () => {
           speed: cfg.speed ?? 1.0,
           apiKey: cfg.apiKey || '',
           baseUrl: cfg.baseUrl || '',
-        }),
-        signal: controller.signal,
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        const ttsErr = typeof errorData?.error === 'string'
-          ? errorData.error
-          : errorData?.error?.message || errorData?.detail || i18n.global.t('settingsEx.ttsEngineStore.requestFailed', { status: response.status })
-        throw new Error(ttsErr)
-      }
-
-      const audioBlob = await response.blob()
+        },
+        {
+          signal: controller.signal,
+          fallbackMessage: i18n.global.t('settingsEx.ttsEngineStore.requestFailed'),
+        },
+      )
       if (controller.signal.aborted) return
 
       engine.isSynthesizing.value = false
@@ -228,7 +216,7 @@ export const useTtsEngineStore = defineStore('ttsEngine', () => {
       }
       logger.warn('TTS error:', e)
       engine.isSynthesizing.value = false
-      const errMsg = e instanceof Error ? e.message : String(e)
+      const errMsg = toErrorMessage(e)
       if (errMsg.includes('503') || errMsg.includes('未安装') || errMsg.includes('not installed') || errMsg.includes('Service Unavailable')) {
         ttsUnavailable = true
         ttsQueue.length = 0

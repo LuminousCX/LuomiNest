@@ -5,16 +5,11 @@ import { useApi } from '../composables/useApi'
 import { getStringItem, setStringItem } from '../utils/storage'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import { i18n } from '../i18n'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('RepoSource')
 
 const REPO_SOURCES_KEY = 'luominest-repo-sources-active'
-
-/** 从 catch 块的 unknown 类型错误中提取消息字符串 */
-const getErrorMessage = (e: unknown): string => {
-  if (e instanceof Error) return e.message
-  return String(e)
-}
 
 export interface SyncedItemsResult {
   items: MarketplaceItem[]
@@ -94,7 +89,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       const data = await api.apiGet<RepoSource[]>('/repo-sources')
       sources.value = data
     } catch (e: unknown) {
-      error.value = getErrorMessage(e)
+      error.value = toErrorMessage(e)
       sources.value = getDefaultSources()
     } finally {
       loading.value = false
@@ -117,7 +112,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: unknown) {
-      error.value = getErrorMessage(e) || i18n.global.t('market.error.operationFailed')
+      error.value = toErrorMessage(e) || i18n.global.t('market.error.operationFailed')
     }
   }
 
@@ -130,7 +125,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: unknown) {
-      error.value = getErrorMessage(e) || i18n.global.t('market.error.operationFailed')
+      error.value = toErrorMessage(e) || i18n.global.t('market.error.operationFailed')
     }
   }
 
@@ -143,7 +138,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         sources.value[idx] = updated
       }
     } catch (e: unknown) {
-      error.value = getErrorMessage(e) || i18n.global.t('market.error.operationFailed')
+      error.value = toErrorMessage(e) || i18n.global.t('market.error.operationFailed')
     }
   }
 
@@ -164,7 +159,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       // 同步完成后获取条目
       await fetchSourceItems(sourceId)
     } catch (e: unknown) {
-      const msg = getErrorMessage(e)
+      const msg = toErrorMessage(e)
       error.value = msg
       const idx = sources.value.findIndex(s => s.id === sourceId)
       if (idx >= 0) {
@@ -185,7 +180,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       await fetchSourceItems(sourceId)
       return result
     } catch (e: unknown) {
-      error.value = getErrorMessage(e)
+      error.value = toErrorMessage(e)
       return null
     }
   }
@@ -200,7 +195,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       syncedItems.value = { ...syncedItems.value, [sourceId]: result.items || [] }
     } catch (e: unknown) {
       // 静默失败，不影响用户体验
-      logger.warn('Failed to fetch source items:', getErrorMessage(e))
+      logger.warn('Failed to fetch source items:', toErrorMessage(e))
     }
   }
 
@@ -213,7 +208,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       const result = await api.apiGet<SyncedItemsResult>(`/repo-sources/${sourceId}/items?type=${type}`)
       return result.items || []
     } catch (e: unknown) {
-      logger.warn('Failed to fetch source items by type:', getErrorMessage(e))
+      logger.warn('Failed to fetch source items by type:', toErrorMessage(e))
       return []
     }
   }
@@ -230,7 +225,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       delete newSynced[sourceId]
       syncedItems.value = newSynced
     } catch (e: unknown) {
-      error.value = getErrorMessage(e)
+      error.value = toErrorMessage(e)
     }
   }
 
@@ -248,7 +243,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
       sources.value.push(created)
       return created
     } catch (e: unknown) {
-      error.value = getErrorMessage(e)
+      error.value = toErrorMessage(e)
       return null
     }
   }
@@ -267,7 +262,7 @@ export const useRepoSourceStore = defineStore('repoSource', () => {
         saveActiveSourceId(activeSourceId.value)
       }
     } catch (e: unknown) {
-      error.value = getErrorMessage(e)
+      error.value = toErrorMessage(e)
     }
   }
 

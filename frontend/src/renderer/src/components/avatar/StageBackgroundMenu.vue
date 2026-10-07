@@ -14,6 +14,7 @@ import {
   STAGE_BG_PRESET_COLORS
 } from '@/stores/stage-background'
 import { vClickOutside } from '@/directives/clickOutside'
+import { toErrorMessage } from '@/utils/error'
 
 const { t } = useI18n()
 const stageBg = useStageBackgroundStore()
@@ -106,7 +107,7 @@ async function handleImageClick() {
     }
     closeMenu()
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = toErrorMessage(err)
     console.error('[StageBackgroundMenu] upload error:', err)
     toast.error(t('avatar.stageBg.uploadFailed', { message }))
   } finally {

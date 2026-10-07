@@ -60,7 +60,7 @@ export const useBrowserNavigation = () => {
 
   /** 监听侧边栏宽度变化，同步到主进程（修复浏览器覆盖左侧导航） */
   const setupSidebarObserver = (): void => {
-    const sidebarEl = document.querySelector('.lumi-sidebar')
+    const sidebarEl = document.querySelector('.sidebar-nav-panel')
     if (!sidebarEl) return
 
     const syncSidebarWidth = (): void => {

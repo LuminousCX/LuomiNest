@@ -25,6 +25,7 @@ import { BACKGROUND_PRESETS, findPresetById } from '../../stores/background-pres
 import LumiButton from '../common/LumiButton.vue'
 import ThemeCustomEditor from './ThemeCustomEditor.vue'
 import { useToast } from '../../composables/useToast'
+import { toErrorMessage } from '@/utils/error'
 
 const props = defineProps<{
   skin: Skin | null
@@ -145,7 +146,7 @@ async function triggerFileUpload() {
       toast.success(t('theme.editor.bgUploaded', { width: result.width, height: result.height }))
     }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = toErrorMessage(err)
     console.error('[ThemeSkinEditor] upload error:', err)
     toast.error(t('theme.editor.selectBgFailed', { message }))
   } finally {

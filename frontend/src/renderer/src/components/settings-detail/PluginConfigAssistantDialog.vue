@@ -10,6 +10,7 @@ import {
   Loader2,
   Lightbulb,
 } from 'lucide-vue-next'
+import ConfirmDialog from '../common/ConfirmDialog.vue'
 import LumiModal from '../common/LumiModal.vue'
 import LumiButton from '../common/LumiButton.vue'
 import LumiInput from '../common/LumiInput.vue'
@@ -114,9 +115,16 @@ const handleExplain = async () => {
   }
 }
 
-const handleReset = async () => {
+const resetConfirmVisible = ref(false)
+
+const handleReset = () => {
   if (!props.pluginId) return
-  if (!window.confirm(t('settingsEx.pluginAssistant.confirmReset', { name: pluginDisplayName.value }))) return
+  resetConfirmVisible.value = true
+}
+
+const confirmReset = async () => {
+  if (!props.pluginId) return
+  resetConfirmVisible.value = false
   resetting.value = true
   errorMessage.value = ''
   try {
@@ -319,6 +327,15 @@ watch(
       </div>
     </template>
   </LumiModal>
+
+  <ConfirmDialog
+    :visible="resetConfirmVisible"
+    :message="t('settingsEx.pluginAssistant.confirmReset', { name: pluginDisplayName })"
+    :danger="true"
+    :confirm-text="t('common.delete')"
+    @confirm="confirmReset"
+    @cancel="resetConfirmVisible = false"
+  />
 </template>
 
 <style scoped>

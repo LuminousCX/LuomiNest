@@ -336,7 +336,8 @@
       "installed": "インストール完了",
       "updating": "更新中...",
       "updated": "更新完了"
-    }
+    },
+    "filterLabel": "フィルター"
   },
   "tasks": {
     "title": "計画ビュー",
@@ -712,23 +713,14 @@
     "loadingModelConfig": "モデル設定を読み込み中...",
     "visionHint": "ゲーム系プラットフォームには画像認識（vision）対応モデルが必要です",
     "currentEffective": "現在有効:",
-    "mainAgentDefault": "メイン Agent のデフォルト:",
     "visionSupported": "画像認識対応",
     "visionUnsupported": "画像認識非対応",
-    "providerLabel": "プロバイダー（空欄 = メイン Agent を継承）",
-    "inheritMainAgent": "メイン Agent を継承",
-    "defaultSuffix": " (デフォルト)",
-    "modelLabel": "モデル（空欄 = メイン Agent を継承）",
     "systemPromptLabel": "System Prompt（空欄 = メイン Agent を継承）",
     "systemPromptPlaceholder": "空欄の場合はメイン Agent の System Prompt を継承します",
-    "temperatureLabel": "Temperature（空欄 = 継承）",
-    "maxTokensLabel": "Max Tokens（空欄 = 継承）",
-    "inherit": "継承",
     "resetToInherit": "メイン Agent の継承にリセット",
     "connectionConfig": "接続設定",
     "mainAgentBannerTitle": "エージェントID：【{name}】が管理",
     "mainAgentBannerDesc": "このプラットフォームのメッセージとコンパニオン動作はすべてメイン Agent が処理します。名称・アバター・人格は【設定 - メイン Agent】から直接同期されます。",
-    "platformTipTitle": "連携のヒントと保護対策",
     "minecraftTip": "Minecraft コンパニオンガイド: LAN（LANに公開）またはマルチサーバーに自動参加します。名前と人格はメイン Agent を継承します。具身アクション、テレメトリ、画面キャプチャをサポート。",
     "qqOnebotTip": "QQ (NapCat / OneBot) ヒント: NapCatQQ または OneBot v11 推奨。逆方向 WebSocket を ws://127.0.0.1:8080/ws に設定。入力遅延・レート制限内蔵。",
     "wechatPersonalTip": "WeChat 個人号 (GeweChat) ヒント: GeweChat ゲートウェイ経由で接続。管理メニューでQRコードを表示しログイン。BAN防止遅延と頻度制御が有効。",

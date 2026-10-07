@@ -37,7 +37,7 @@ const emit = defineEmits<{
         </div>
         <div class="left-panel-title-text">
           <span class="left-panel-name">{{ group?.name }}</span>
-          <span class="left-panel-sub">{{ t('workspace.groupInfo.memberCount', { m: group?.members.length ?? 0, a: group?.aiCount ?? 0 }) }}</span>
+          <span class="left-panel-sub lumi-clip-xs-muted">{{ t('workspace.groupInfo.memberCount', { m: group?.members.length ?? 0, a: group?.aiCount ?? 0 }) }}</span>
         </div>
       </div>
     </div>
@@ -86,23 +86,9 @@ const emit = defineEmits<{
   </div>
 </template>
 
+<style scoped src="./workspace-shared.css"></style>
 <style scoped>
-.group-info-panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.left-panel-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 10px var(--space-3);
-  flex-shrink: 0;
-  border-bottom: 1px solid var(--workspace-border);
-}
-
+/* back-btn 整块留本地：三份 hover 色不同（--lumi-brand-light vs --workspace-hover），待拍板（报告 §4/§7.1） */
 .back-btn {
   width: 26px;
   height: 26px;
@@ -123,14 +109,7 @@ const emit = defineEmits<{
   color: var(--lumi-brand);
 }
 
-.left-panel-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  flex: 1;
-}
-
+/* 标题文字列 gap:1px 与 CloudGroupPanel 版不同，留本地 */
 .left-panel-title-text {
   display: flex;
   flex-direction: column;
@@ -138,6 +117,7 @@ const emit = defineEmits<{
   min-width: 0;
 }
 
+/* avatar 30px/radius-xs 与 CloudGroupPanel var(--space-7) 变体不同，留本地（报告 §7.1） */
 .left-panel-avatar {
   width: 30px;
   height: 30px;
@@ -151,23 +131,6 @@ const emit = defineEmits<{
 .left-panel-avatar.group-avatar {
   background: var(--lumi-brand-glow);
   color: var(--lumi-brand);
-}
-
-.left-panel-name {
-  font-size: var(--text-base);
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.left-panel-sub {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .group-actions {
@@ -289,18 +252,5 @@ const emit = defineEmits<{
 .member-remove-btn:hover {
   background: var(--lumi-danger-light);
   color: var(--lumi-danger);
-}
-
-.conv-empty {
-  padding: var(--space-7) var(--space-4);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--text-muted);
-}
-
-.conv-empty span {
-  font-size: var(--text-sm);
 }
 </style>

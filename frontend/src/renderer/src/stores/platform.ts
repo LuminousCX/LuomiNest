@@ -8,6 +8,7 @@ import type {
 import { useApi } from '../composables/useApi'
 import { useToast } from '../composables/useToast'
 import { i18n } from '../i18n'
+import { toErrorMessage } from '@/utils/error'
 
 interface RawLogEntry {
   id: string
@@ -456,7 +457,7 @@ export const usePlatformStore = defineStore('platform', () => {
         _lastMainAgentToastMsg = null
       } catch (e: unknown) {
         mainAgent.value = null
-        const msg = (e instanceof Error ? e.message : String(e)) || i18n.global.t('platform.toast.unknownError')
+        const msg = toErrorMessage(e) || i18n.global.t('platform.toast.unknownError')
         mainAgentError.value = msg
         if (_lastMainAgentToastMsg !== msg) {
           _lastMainAgentToastMsg = msg
@@ -482,7 +483,7 @@ export const usePlatformStore = defineStore('platform', () => {
       await fetchMainAgent(true)  // force: true, 确保 settings 保存后工作台显示最新头像
       toast.success(i18n.global.t('platform.toast.mainAgentUpdated'))
     } catch (e: unknown) {
-      toast.error(i18n.global.t('platform.toast.updateFailed', { msg: (e instanceof Error ? e.message : String(e)) || i18n.global.t('platform.toast.unknownError') }))
+      toast.error(i18n.global.t('platform.toast.updateFailed', { msg: toErrorMessage(e) || i18n.global.t('platform.toast.unknownError') }))
       throw e
     }
   }
@@ -498,7 +499,7 @@ export const usePlatformStore = defineStore('platform', () => {
       return d?.conversation_id || d?.conversationId || null
     } catch (e: unknown) {
       const toast = useToast()
-      const msg = (e instanceof Error ? e.message : String(e)) || i18n.global.t('platform.toast.unknownError')
+      const msg = toErrorMessage(e) || i18n.global.t('platform.toast.unknownError')
       toast.error(i18n.global.t('platform.toast.createConversationFailed', { msg }))
       throw e
     }

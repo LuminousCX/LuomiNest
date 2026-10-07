@@ -15,6 +15,7 @@ import { Shield, Plus, Trash2, Check, AlertCircle, Loader2, Info, Save } from 'l
 import { useApi } from '../../composables/useApi'
 import { createLuomiNestRendererLogger } from '../../utils/logger'
 import LumiButton from '../common/LumiButton.vue'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('Settings')
 
@@ -113,7 +114,7 @@ const handleSave = async (): Promise<void> => {
     saveMsg.value = { type: 'success', text: t('settingsEx.cmdSecurity.savedMsg') }
     setTimeout(() => { saveMsg.value = null }, 3000)
   } catch (e) {
-    saveMsg.value = { type: 'error', text: t('settingsEx.cmdSecurity.saveFailed', { message: e instanceof Error ? e.message : String(e) }) }
+    saveMsg.value = { type: 'error', text: t('settingsEx.cmdSecurity.saveFailed', { message: toErrorMessage(e) }) }
   } finally {
     saving.value = false
   }
@@ -140,7 +141,7 @@ onMounted(async () => {
 <template>
   <div class="settings-panel animate-slide-up">
     <div v-if="loading" class="settings-card">
-      <div class="settings-card__body settings-card__body--compact command-loading">
+      <div class="settings-card__body lumi-stack-4 settings-card__body--compact command-loading">
         <Loader2 :size="20" class="spin-animation" />
         <span>{{ t('settingsEx.cmdSecurity.loading') }}</span>
       </div>
@@ -152,14 +153,14 @@ onMounted(async () => {
           <Shield :size="18" />
           <span class="settings-card__title">{{ t('settingsEx.cmdSecurity.title') }}</span>
         </div>
-        <div class="settings-card__body">
+        <div class="settings-card__body lumi-stack-4 lumi-stack-4">
           <div class="settings-form-hint command-policy-hint">
             <Info :size="14" />
             <span>{{ t('settingsEx.cmdSecurity.policyHint') }}</span>
           </div>
 
           <!-- 默认白名单（只读） -->
-          <div class="settings-form-row">
+          <div class="settings-form-row lumi-stack-2 lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.cmdSecurity.defaultWhitelist') }}</label>
             <div class="command-tags">
               <span
@@ -172,7 +173,7 @@ onMounted(async () => {
           </div>
 
           <!-- 额外白名单 -->
-          <div class="settings-form-row">
+          <div class="settings-form-row lumi-stack-2 lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.cmdSecurity.extraWhitelist') }}</label>
             <div class="command-add-row">
               <input
@@ -205,7 +206,7 @@ onMounted(async () => {
           </div>
 
           <!-- 黑名单 -->
-          <div class="settings-form-row">
+          <div class="settings-form-row lumi-stack-2 lumi-stack-2">
             <label class="settings-form-label">{{ t('settingsEx.cmdSecurity.blacklist') }}</label>
             <div class="command-add-row">
               <input

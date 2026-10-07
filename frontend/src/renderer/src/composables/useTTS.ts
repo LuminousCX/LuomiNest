@@ -1,7 +1,9 @@
 import { ref } from 'vue'
 import { useModelStore } from '../stores/model'
-import { API_ENDPOINTS } from '../config/api'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { filterTtsText } from '../utils/ttsTextFilter'
+import { stripEmotionTags } from '../utils/emotionTagInterceptor'
+import { synthesizeTts } from '../utils/ttsApi'
 
 const logger = createLuomiNestRendererLogger('TTS')
 
@@ -19,16 +21,10 @@ function revokeCurrentAudioUrl() {
 }
 
 function cleanTextForTTS(text: string): string {
-  return text
-    // 表情标签 <exp:xxx> → 删除（必须在最前面，防止标签被朗读）
-    .replace(/<\s*exp[:=]\s*[a-zA-Z]+\s*\/?\s*>/g, '')
-    .replace(/```[\s\S]*?```/g, '，代码块，')
-    .replace(/`([^`]+)`/g, '$1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
-    .replace(/\*([^*]+)\*/g, '$1')
-    .replace(/#{1,6}\s/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/[-*+]\s/g, '')
+  // 表情标签（<exp:xxx> 等）→ 删除（必须在最前面，防止标签被朗读）
+  // markdown 清洗复用 utils/ttsTextFilter 统一实现；围栏代码块 → 可朗读占位
+  // 末尾的换行转停顿为聊天气泡朗读场景特有（filterTtsText 不做韵律映射）
+  return filterTtsText(stripEmotionTags(text).replace(/```[\s\S]*?```/g, '，代码块，'))
     .replace(/\n{2,}/g, '。')
     .replace(/\n/g, '，')
     .replace(/\s+/g, ' ')
@@ -68,14 +64,8 @@ async function speakWithEdgeTTS(text: string, messageId: string): Promise<boolea
   const timeoutId = setTimeout(() => controller.abort(), 30000)
 
   try {
-    const token = await window.api.auth.getToken()
-    const response = await fetch(`${API_ENDPOINTS.V1}/chat/tts/synthesize`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
+    const audioBlob = await synthesizeTts(
+      {
         text,
         voice,
         engine,
@@ -83,13 +73,9 @@ async function speakWithEdgeTTS(text: string, messageId: string): Promise<boolea
         speed: ttsConfig.speed ?? 1.0,
         apiKey: ttsConfig.apiKey || '',
         baseUrl: ttsConfig.baseUrl || '',
-      }),
-      signal: controller.signal,
-    })
-
-    if (!response.ok) throw new Error('TTS request failed')
-
-    const audioBlob = await response.blob()
+      },
+      { signal: controller.signal, fallbackMessage: 'TTS request failed' },
+    )
     clearTimeout(timeoutId)
 
     revokeCurrentAudioUrl()

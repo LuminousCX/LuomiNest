@@ -108,12 +108,6 @@
     border-color var(--transition-normal);
 }
 
-.lumi-settings-card--hover:hover {
-  transform: translateY(calc(var(--space-1) * -1));
-  box-shadow: var(--shadow-md);
-  border-color: color-mix(in srgb, var(--lumi-primary) 20%, var(--workspace-border));
-}
-
 /* -------------------------------------------------------
    区块标题（widget-title 风格）
    ------------------------------------------------------- */
@@ -142,18 +136,6 @@
 .lumi-settings-section__header svg {
   color: var(--lumi-primary);
   flex-shrink: 0;
-}
-
-.lumi-settings-section__title {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  margin-bottom: var(--space-1);
-}
-
-.lumi-settings-section__desc {
-  font-size: var(--text-base);
-  color: var(--text-muted);
 }
 
 /* -------------------------------------------------------
@@ -193,105 +175,10 @@
 /* -------------------------------------------------------
    链接与分割线
    ------------------------------------------------------- */
-.lumi-settings-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--lumi-primary);
-  font-weight: var(--font-medium);
-  text-decoration: none;
-  transition: color var(--transition-fast);
-}
-
-.lumi-settings-link:hover {
-  color: var(--lumi-primary-hover);
-  text-decoration: underline;
-}
-
-.lumi-settings-divider {
-  height: 1px;
-  background: var(--divider-soft);
-  border: none;
-  margin: 0;
-}
 
 /* -------------------------------------------------------
    Hero 卡片
    ------------------------------------------------------- */
-.lumi-settings-hero {
-  position: relative;
-  overflow: hidden;
-  border-radius: var(--radius-2xl);
-  background: var(--lumi-brand-gradient);
-  color: var(--text-inverse);
-  padding: var(--space-7);
-  box-shadow: 0 var(--space-3) var(--space-8) color-mix(in srgb, var(--lumi-primary) 25%, transparent);
-}
-
-.lumi-settings-hero::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 20% 30%, color-mix(in srgb, var(--text-inverse) 12%, transparent) 0%, transparent 45%),
-    radial-gradient(circle at 80% 70%, color-mix(in srgb, var(--text-inverse) 8%, transparent) 0%, transparent 45%);
-  pointer-events: none;
-}
-
-.lumi-settings-hero__content {
-  position: relative;
-}
-
-.lumi-settings-hero__icon {
-  margin-bottom: var(--space-4);
-  opacity: 0.9;
-}
-
-.lumi-settings-hero__title {
-  font-size: var(--text-4xl);
-  font-weight: 800;
-  margin-bottom: var(--space-2);
-  letter-spacing: -0.5px;
-}
-
-.lumi-settings-hero__desc {
-  font-size: var(--text-md);
-  line-height: 1.7;
-  opacity: 0.92;
-  max-width: 560px;
-}
-
-.lumi-settings-hero__stats {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: var(--space-5);
-  margin-top: var(--space-6);
-  flex-wrap: wrap;
-}
-
-.lumi-settings-hero__stat {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.lumi-settings-hero__stat-value {
-  font-size: var(--text-3xl);
-  font-weight: 800;
-  line-height: 1;
-}
-
-.lumi-settings-hero__stat-label {
-  font-size: var(--text-sm);
-  opacity: 0.8;
-}
-
-.lumi-settings-hero__divider {
-  width: 1px;
-  height: var(--space-8);
-  background: color-mix(in srgb, var(--text-inverse) 25%, transparent);
-}
 
 /* -------------------------------------------------------
    图标容器
@@ -336,15 +223,6 @@
   max-width: 860px;
   width: 100%;
   margin: 0 auto;
-}
-
-.settings-panel__content {
-  max-width: 860px;
-  width: 100%;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
 }
 
 /* 嵌套面板：用于被包裹在父容器内的 settings-panel，取消居中和独立滚动 */
@@ -412,10 +290,8 @@
 }
 
 .settings-card__body {
+  /* 纵向栈布局（flex column + gap-4）由全局工具类 .lumi-stack-4 提供（components.css §16） */
   padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
 }
 
 .settings-card__body--compact {
@@ -430,25 +306,9 @@
 
 /* -------------------------------------------------------
    设置页表单
+   .settings-form-row 的纵向栈布局（flex column + gap-2）由全局
+   工具类 .lumi-stack-2 提供（components.css §16），模板已挂类。
    ------------------------------------------------------- */
-.settings-form-row {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.settings-form-row--horizontal {
-  flex-direction: row;
-  align-items: center;
-  gap: var(--space-4);
-}
-
-.settings-form-row--horizontal .settings-form-label {
-  margin-bottom: 0;
-  min-width: 80px;
-  flex-shrink: 0;
-}
-
 .settings-form-label {
   display: flex;
   align-items: center;
@@ -569,23 +429,6 @@
 /* -------------------------------------------------------
    设置页滑块
    ------------------------------------------------------- */
-.settings-slider-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  background: var(--workspace-panel);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--workspace-border);
-}
-
-.settings-slider-row__label {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text-secondary);
-  min-width: 56px;
-  flex-shrink: 0;
-}
 
 .settings-slider-row__input {
   flex: 1;
@@ -625,16 +468,6 @@
   border: 3px solid var(--workspace-card);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
   cursor: pointer;
-}
-
-.settings-slider-row__value {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-  min-width: 40px;
-  text-align: right;
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
 }
 
 /* -------------------------------------------------------
@@ -782,36 +615,6 @@
   border-color: var(--lumi-brand-border);
   background: var(--lumi-brand-subtle);
   color: var(--lumi-primary);
-}
-
-.settings-row-control__slider {
-  width: 120px;
-  height: var(--space-2);
-  border-radius: var(--space-1);
-  background: var(--workspace-border);
-  position: relative;
-  overflow: hidden;
-}
-
-.settings-row-control__slider::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 60%;
-  height: 100%;
-  border-radius: var(--space-1);
-  background: var(--lumi-primary);
-}
-
-.settings-row-control__connect {
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-sm);
-  background: var(--lumi-primary-light);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  color: var(--lumi-primary);
-  cursor: default;
 }
 
 /* -------------------------------------------------------

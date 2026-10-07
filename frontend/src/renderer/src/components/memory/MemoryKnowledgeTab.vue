@@ -90,31 +90,7 @@ const emit = defineEmits<{
   gap: var(--space-2);
 }
 
-.editor-section { flex: 1; min-height: 300px; }
-
-.memory-editor {
-  width: 100%;
-  min-height: 300px;
-  padding: var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--text);
-  font-size: var(--text-base);
-  font-family: 'Cascadia Code', 'Fira Code', monospace;
-  line-height: 1.6;
-  resize: vertical;
-  outline: none;
-}
-
-.memory-editor:focus { border-color: var(--task-sky); }
-
-.editor-hint {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-top: var(--space-2);
-  text-align: right;
-}
+/* editor-section / memory-editor / editor-hint 见 memory-shared.css */
 
 .markdown-preview { flex: 1; }
 
@@ -172,3 +148,4 @@ const emit = defineEmits<{
 
 .empty-hint { font-size: var(--text-sm) !important; opacity: 0.7; }
 </style>
+<style scoped src="./memory-shared.css"></style>

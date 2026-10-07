@@ -1,0 +1,44 @@
+/* =========================================================
+   记忆域共享样式（memory-shared.css）
+   来源：文档/2026年10月8日前端清理调查/重复样式聚类报告.md §11.4
+   收口 MemoryKnowledgeTab / MemoryProfileTab 两个编辑器页签间
+   逐字重复的 Markdown 编辑器样式块。
+
+   挂载方式（项目既有实践，同 welcome/steps-shared.css）：
+     <style scoped src="./memory-shared.css"></style>
+   scoped src 按挂载组件各自加 data-v 属性，类名不变，模板零改动。
+   ========================================================= */
+
+/* 编辑器外层区（占满剩余高度，保底 300px） */
+.editor-section {
+  flex: 1;
+  min-height: 300px;
+}
+
+/* Markdown 编辑器（与各页签主题色 focus 态配套） */
+.memory-editor {
+  width: 100%;
+  min-height: 300px;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-base);
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+}
+
+.memory-editor:focus {
+  border-color: var(--task-sky);
+}
+
+/* 编辑器下方提示 */
+.editor-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-2);
+  text-align: right;
+}

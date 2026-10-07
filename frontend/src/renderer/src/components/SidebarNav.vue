@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -19,7 +19,6 @@ import {
   GitBranch,
   Search,
   Settings,
-  ChevronRight,
   Bell,
   Sparkles,
   Package,
@@ -29,50 +28,51 @@ import {
   Bot,
   User,
 } from 'lucide-vue-next'
+import type { Component } from 'vue'
 import { useTaskStreamStore } from '../stores/taskStream'
+import { useAgentStore } from '../stores/agent'
+import { useChatStore } from '../stores/chat'
+import { useChatTrashStore } from '../stores/chat-trash'
 import { cxContributionRegistry } from '../plugins'
 import { resolvePluginIcon } from '../plugins/plugin-icons'
+import BranchedMenu from './common/BranchedMenu.vue'
+import type { BranchedMenuItem } from './common/BranchedMenu.vue'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const taskStreamStore = useTaskStreamStore()
+const agentStore = useAgentStore()
+const chatStore = useChatStore()
+const chatTrashStore = useChatTrashStore()
 
 const isNavCollapsed = ref(true)
+const navMenuRef = ref<InstanceType<typeof BranchedMenu> | null>(null)
+
+// 会话数据预取（原 LumiSidebar 职责，合并后由本组件承担）
+onMounted(async () => {
+  await agentStore.fetchAgents()
+  if (agentStore.activeAgent?.id) {
+    await chatStore.fetchConversations(agentStore.activeAgent.id)
+    chatTrashStore.fetchTrash(agentStore.activeAgent.id)
+  }
+})
 
 // 插件贡献的侧边栏视图（响应式，插件激活/停用时自动更新）
 const pluginSidebarViews = computed(() => cxContributionRegistry.sidebarPluginViews.value)
 
-const isPluginViewActive = (fullPath: string) => {
-  return route.path === fullPath || route.path.startsWith(fullPath + '/')
-}
-
-const handlePluginNavigate = (fullPath: string) => {
-  router.push(fullPath)
-}
-
 interface NavChild {
   id: string
   label: string
-  icon: typeof MessageCircle
+  icon: Component
 }
 
 interface NavGroup {
   id: string
   label: string
-  icon: typeof MessageCircle
+  icon: Component
   children: NavChild[]
 }
-
-interface NavItem {
-  id: string
-  label: string
-  icon: typeof MessageCircle
-  route: string
-  badge?: string
-}
-
-const expandedGroups = ref<Set<string>>(new Set(['chat']))
 
 // 标签走 vue-i18n，语言切换时 computed 重新求值
 const navGroups = computed<NavGroup[]>(() => [
@@ -113,60 +113,17 @@ const navGroups = computed<NavGroup[]>(() => [
   },
 ])
 
+interface NavItem {
+  id: string
+  label: string
+  icon: Component
+  route: string
+}
+
 const navItems = computed<NavItem[]>(() => [
   { id: 'browser', label: t('nav.browser'), icon: Globe, route: '/browser' },
   { id: 'settings', label: t('nav.settings'), icon: Settings, route: '/settings' },
 ])
-
-const activeGroup = computed(() => {
-  for (const group of navGroups.value) {
-    for (const child of group.children) {
-      if (route.path === child.id || route.path.startsWith(child.id + '/')) {
-        return group.id
-      }
-    }
-  }
-  return null
-})
-
-const isItemActive = (item: NavItem) => {
-  return route.path === item.route || route.path.startsWith(item.route + '/')
-}
-
-const isChildActive = (childId: string) => {
-  return route.path === childId || route.path.startsWith(childId + '/')
-}
-
-const toggleGroup = (groupId: string) => {
-  if (isNavCollapsed.value) {
-    isNavCollapsed.value = false
-    expandedGroups.value = new Set([groupId])
-    return
-  }
-  const next = new Set(expandedGroups.value)
-  if (next.has(groupId)) {
-    // 已展开则收缩
-    next.delete(groupId)
-  } else {
-    // 严格手风琴:展开新分组时,自动收缩其他已展开分组
-    next.clear()
-    next.add(groupId)
-  }
-  expandedGroups.value = next
-}
-
-watch(isNavCollapsed, (collapsed) => {
-  if (collapsed) {
-    expandedGroups.value = new Set()
-  }
-})
-
-watch(activeGroup, (groupId) => {
-  if (groupId && !expandedGroups.value.has(groupId)) {
-    // 严格手风琴:路由进入某分组子项时,仅展开该分组,收缩其他
-    expandedGroups.value = new Set([groupId])
-  }
-}, { immediate: true })
 
 const PENDING_NAV_TARGETS: Record<string, 'browser' | 'workflow'> = {
   '/browser': 'browser',
@@ -177,6 +134,77 @@ const isPathPending = (path: string): boolean => {
   const target = PENDING_NAV_TARGETS[path]
   if (!target) return false
   return taskStreamStore.pendingNavigation[target]
+}
+
+const isPathActive = (path: string): boolean => {
+  return route.path === path || route.path.startsWith(path + '/')
+}
+
+// 路由驱动的激活值（ BranchedMenu 以精确匹配消费）
+const activeChildPath = computed(() => {
+  for (const group of navGroups.value) {
+    for (const child of group.children) {
+      if (isPathActive(child.id)) return child.id
+    }
+  }
+  return ''
+})
+
+const activeToolPath = computed(() => navItems.value.find((i) => isPathActive(i.route))?.route ?? '')
+
+const activePluginPath = computed(
+  () => pluginSidebarViews.value.find((p) => isPathActive(p.fullPath))?.fullPath ?? '',
+)
+
+// 菜单项：分组区 + 工具区 + 插件区共用 BranchedMenu 渲染
+const groupMenuItems = computed<BranchedMenuItem[]>(() =>
+  navGroups.value.map((group) => ({
+    label: group.label,
+    icon: group.icon,
+    children: group.children.map((child) => ({
+      value: child.id,
+      label: child.label,
+      icon: child.icon,
+      pending: isPathPending(child.id),
+    })),
+  })),
+)
+
+const toolMenuItems = computed<BranchedMenuItem[]>(() =>
+  navItems.value.map((item) => ({
+    label: item.label,
+    icon: item.icon,
+    value: item.route,
+    pending: isPathPending(item.route),
+  })),
+)
+
+const pluginMenuItems = computed<BranchedMenuItem[]>(() =>
+  pluginSidebarViews.value.map((pview) => ({
+    label: pview.title,
+    icon: resolvePluginIcon(pview.icon),
+    value: pview.fullPath,
+  })),
+)
+
+const activeGroup = computed(() => {
+  for (const group of navGroups.value) {
+    for (const child of group.children) {
+      if (isPathActive(child.id)) return group.id
+    }
+  }
+  return null
+})
+
+// 折叠横栏点击分组图标：展开侧栏并打开该分组
+const expandAndOpen = (groupId: string) => {
+  if (isNavCollapsed.value) {
+    isNavCollapsed.value = false
+  }
+  const index = navGroups.value.findIndex((g) => g.id === groupId)
+  if (index >= 0) {
+    nextTick(() => navMenuRef.value?.openSection(index))
+  }
 }
 
 const handleNavigate = (path: string) => {
@@ -225,77 +253,71 @@ const handleNavigate = (path: string) => {
     </div>
 
     <div class="nav-content">
-      <div class="nav-section">
-        <div v-if="!isNavCollapsed" class="section-label">{{ t('nav.sectionNavigate') }}</div>
-
-        <div v-for="group in navGroups" :key="group.id" class="nav-group">
-          <button
-            :class="['group-header', { active: activeGroup === group.id, expanded: expandedGroups.has(group.id) }]"
-            @click="toggleGroup(group.id)"
-          >
-            <div class="group-header-left">
-              <component :is="group.icon" :size="17" class="group-icon" />
-              <span v-if="!isNavCollapsed" class="group-label">{{ group.label }}</span>
-            </div>
-            <ChevronRight
-              v-if="!isNavCollapsed"
-              :size="14"
-              :class="['group-chevron', { rotated: expandedGroups.has(group.id) }]"
-            />
-          </button>
-
-          <Transition name="tree-expand">
-            <div v-if="!isNavCollapsed && expandedGroups.has(group.id)" class="group-children">
-              <div
-                v-for="(child, idx) in group.children"
-                :key="child.id"
-                :class="['tree-child', { active: isChildActive(child.id), last: idx === group.children.length - 1 }]"
-                :style="{ '--tree-index': idx }"
-                @click="handleNavigate(child.id)"
-              >
-                <div class="tree-line">
-                  <div class="tree-branch"></div>
-                  <div class="tree-node"></div>
-                </div>
-                <component :is="child.icon" :size="14" class="child-icon" />
-                <span class="child-label">{{ child.label }}</span>
-                <span v-if="isPathPending(child.id)" class="nav-pending-dot"></span>
-              </div>
-            </div>
-          </Transition>
-        </div>
-      </div>
-
       <div v-if="!isNavCollapsed" class="nav-section">
-        <div class="section-label">{{ t('nav.sectionTools') }}</div>
-        <div class="nav-items">
-          <button
-            v-for="item in navItems"
-            :key="item.id"
-            :class="['nav-item', { active: isItemActive(item) }]"
-            @click="handleNavigate(item.route)"
-          >
-            <component :is="item.icon" :size="17" class="nav-item-icon" />
-            <span class="nav-item-label">{{ item.label }}</span>
-            <span v-if="item.badge" class="nav-item-badge">{{ item.badge }}</span>
-            <span v-if="isPathPending(item.route)" class="nav-pending-dot"></span>
-          </button>
-        </div>
+        <div class="section-label">{{ t('nav.sectionNavigate') }}</div>
+        <BranchedMenu
+          ref="navMenuRef"
+          :items="groupMenuItems"
+          :active="activeChildPath"
+          :default-open="-1"
+          accordion
+          :row-height="34"
+          :indent="44"
+          :trunk="14"
+          :radius="10"
+          :line-width="1.5"
+          :draw-duration="400"
+          :fold-duration="300"
+          @select="handleNavigate"
+        />
       </div>
 
-      <div v-if="!isNavCollapsed && pluginSidebarViews.length" class="nav-section">
+      <div v-if="!isNavCollapsed && toolMenuItems.length" class="nav-section">
+        <div class="section-label">{{ t('nav.sectionTools') }}</div>
+        <BranchedMenu
+          :items="toolMenuItems"
+          :active="activeToolPath"
+          :default-open="-1"
+          :row-height="32"
+          :indent="44"
+          :trunk="14"
+          :radius="10"
+          :line-width="1.5"
+          :draw-duration="400"
+          :fold-duration="300"
+          @select="handleNavigate"
+        />
+      </div>
+
+      <div v-if="!isNavCollapsed && pluginMenuItems.length" class="nav-section">
         <div class="section-label">{{ t('nav.sectionPlugins') }}</div>
-        <div class="nav-items">
-          <button
-            v-for="pview in pluginSidebarViews"
-            :key="pview.fullName"
-            :class="['nav-item', { active: isPluginViewActive(pview.fullPath) }]"
-            @click="handlePluginNavigate(pview.fullPath)"
-          >
-            <component :is="resolvePluginIcon(pview.icon)" :size="17" class="nav-item-icon" />
-            <span class="nav-item-label">{{ pview.title }}</span>
-          </button>
-        </div>
+        <BranchedMenu
+          :items="pluginMenuItems"
+          :active="activePluginPath"
+          :default-open="-1"
+          :row-height="32"
+          :indent="44"
+          :trunk="14"
+          :radius="10"
+          :line-width="1.5"
+          :draw-duration="400"
+          :fold-duration="300"
+          @select="handleNavigate"
+        />
+      </div>
+
+      <!-- 折叠横栏：仅保留分组图标，点击展开并定位 -->
+      <div v-if="isNavCollapsed" class="nav-rail">
+        <button
+          v-for="group in navGroups"
+          :key="group.id"
+          :class="['rail-btn', { active: activeGroup === group.id }]"
+          :title="group.label"
+          :aria-label="group.label"
+          @click="expandAndOpen(group.id)"
+        >
+          <component :is="group.icon" :size="18" />
+        </button>
       </div>
     </div>
 
@@ -315,6 +337,8 @@ const handleNavigate = (path: string) => {
   display: flex;
   flex-direction: column;
   background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  z-index: var(--z-base);
   flex-shrink: 0;
   overflow: hidden;
   position: relative;
@@ -528,315 +552,37 @@ const handleNavigate = (path: string) => {
   opacity: 0.65;
 }
 
-.nav-group {
-  margin-bottom: calc(var(--space-1) / 2);
-}
-
-.group-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-2) var(--space-2);
-  border: none;
-  background: transparent;
-  border-radius: var(--nav-item-radius);
-  cursor: pointer;
-  color: var(--text-secondary);
-  transition: background var(--transition-fast), color var(--transition-fast);
-  position: relative;
-  overflow: hidden;
-}
-
-.sidebar-nav-panel.collapsed .group-header {
-  padding: var(--space-2) 0;
-  justify-content: center;
-  border-radius: var(--radius-lg);
-}
-
-.group-header:hover {
-  background: var(--nav-item-hover-bg);
-  color: var(--text-primary);
-}
-
-.group-header.active {
-  color: var(--nav-item-active-color);
-  background: var(--nav-item-active-bg);
-}
-
-.group-header.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: var(--radius-xs);
-  bottom: var(--radius-xs);
-  width: calc(var(--space-1) / 1.5);
-  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
-  background: var(--nav-item-active-color);
-  opacity: 0.7;
-}
-
-.group-header-left {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  position: relative;
-  z-index: 1;
-}
-
-.group-icon {
-  flex-shrink: 0;
-  opacity: 0.8;
-}
-
-.group-header.active .group-icon {
-  opacity: 1;
-}
-
-.group-label {
-  font-size: var(--text-base);
-  font-weight: var(--font-medium);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.group-header.active .group-label {
-  font-weight: var(--font-semibold);
-}
-
-.group-chevron {
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-  opacity: 0.5;
-  transition: transform var(--transition-fast), opacity var(--transition-fast);
-}
-
-.group-header:hover .group-chevron {
-  opacity: 0.8;
-}
-
-.group-header.active .group-chevron {
-  color: var(--nav-item-active-color);
-  opacity: 0.8;
-}
-
-.group-chevron.rotated {
-  transform: rotate(90deg);
-}
-
-.group-children {
-  padding: calc(var(--space-1) / 2) 0;
-}
-
-.tree-child {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--radius-xs) var(--space-2) var(--radius-xs) var(--space-6);
-  cursor: pointer;
-  border-radius: var(--nav-item-radius);
-  color: var(--text-muted);
-  transition: background var(--transition-fast), color var(--transition-fast);
-  position: relative;
-  overflow: hidden;
-  font-size: var(--text-base);
-  opacity: 0;
-  transform: translateY(calc(var(--space-1) * -1));
-  /* 使用 CSS 变量控制 stagger，避免硬编码 nth-child，减少合成层数量与代码冗余 */
-  animation: tree-item-in var(--duration-leave) var(--ease-default) forwards;
-  animation-delay: calc(var(--tree-stagger-step, 35ms) * var(--tree-index, 0));
-}
-
-@keyframes tree-item-in {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* 用户偏好减少动态效果时，跳过进入动画，直接保持可见，
-   避免初始 opacity:0 / transform 残留导致导航子项不可见 */
-@media (prefers-reduced-motion: reduce) {
-  .tree-child {
-    opacity: 1;
-    transform: none;
-    animation: none;
-  }
-}
-
-.tree-child:hover {
-  background: var(--nav-item-hover-bg);
-  color: var(--text-primary);
-}
-
-.tree-child.active {
-  color: var(--nav-item-active-color);
-  background: var(--nav-item-active-bg);
-  font-weight: var(--font-medium);
-}
-
-.tree-child.active .child-icon {
-  color: var(--nav-item-active-color);
-}
-
-.tree-line {
-  position: absolute;
-  left: var(--space-3);
-  top: 0;
-  bottom: 0;
-  width: var(--space-3);
-  pointer-events: none;
-}
-
-.tree-line::before {
-  content: '';
-  position: absolute;
-  left: var(--space-1);
-  top: 0;
-  bottom: 0;
-  width: 1px;
-  background: var(--border);
-}
-
-.tree-branch {
-  position: absolute;
-  left: var(--space-1);
-  top: 50%;
-  width: var(--space-1);
-  height: 1px;
-  background: var(--border);
-  transform: translateY(-50%);
-  transition: background var(--transition-fast), opacity var(--transition-fast);
-}
-
-.tree-node {
-  position: absolute;
-  left: var(--space-2);
-  top: 50%;
-  width: var(--space-1);
-  height: var(--space-1);
-  border-radius: var(--radius-full);
-  background: var(--border);
-  transform: translate(-50%, -50%);
-  transition: background var(--transition-fast), transform var(--transition-fast);
-}
-
-/* 激活子项：节点点亮为品牌色并微微放大，连接枝干同步染色，形成“当前所在”的指向 */
-.tree-child.active .tree-node {
-  background: var(--nav-item-active-color);
-  transform: translate(-50%, -50%) scale(1.25);
-}
-
-.tree-child.active .tree-branch {
-  background: var(--nav-item-active-color);
-  opacity: 0.45;
-}
-
-.tree-child.last .tree-line::before {
-  bottom: 50%;
-}
-
-.child-icon {
-  flex-shrink: 0;
-  color: inherit;
-}
-
-.child-label {
-  font-size: var(--text-base);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.nav-items {
+/* ===== 折叠横栏 ===== */
+.nav-rail {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: calc(var(--space-1) / 2);
+  padding: 0 var(--space-2);
 }
 
-.nav-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-2);
+.rail-btn {
+  width: calc(var(--space-6) + var(--space-2));
+  height: calc(var(--space-6) + var(--space-2));
   border: none;
   background: transparent;
   border-radius: var(--nav-item-radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   color: var(--text-muted);
   transition: background var(--transition-fast), color var(--transition-fast);
-  position: relative;
-  overflow: hidden;
 }
 
-.nav-item:hover {
+.rail-btn:hover {
   background: var(--nav-item-hover-bg);
   color: var(--text-primary);
 }
 
-.nav-item.active {
+.rail-btn.active {
   color: var(--nav-item-active-color);
   background: var(--nav-item-active-bg);
-}
-
-.nav-item.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: var(--radius-xs);
-  bottom: var(--radius-xs);
-  width: calc(var(--space-1) / 1.5);
-  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
-  background: var(--nav-item-active-color);
-  opacity: 0.7;
-}
-
-.nav-item-icon {
-  flex-shrink: 0;
-  position: relative;
-  z-index: 1;
-}
-
-.nav-item-label {
-  font-size: var(--text-base);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  position: relative;
-  z-index: 1;
-}
-
-.nav-item-badge {
-  font-size: var(--text-2xs);
-  padding: var(--badge-padding);
-  border-radius: var(--radius-full);
-  background: var(--lumi-brand);
-  color: var(--text-inverse);
-  font-weight: var(--font-semibold);
-  position: relative;
-  z-index: 1;
-}
-
-.nav-pending-dot {
-  position: absolute;
-  top: 50%;
-  right: var(--space-2);
-  transform: translateY(-50%);
-  width: var(--radius-xs);
-  height: var(--radius-xs);
-  border-radius: var(--radius-full);
-  background: var(--lumi-accent);
-  box-shadow: 0 0 0 2px var(--surface);
-  z-index: 2;
-  animation: nav-pending-pulse 1.6s var(--ease-in-out) infinite;
-}
-
-@keyframes nav-pending-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
 }
 
 .nav-footer {
@@ -874,33 +620,12 @@ const handleNavigate = (path: string) => {
   color: var(--text-primary);
 }
 
-/* Tree expand transition */
-.tree-expand-enter-active {
-  animation: tree-expand-in var(--duration-leave) var(--ease-in-out);
-}
-
-.tree-expand-leave-active {
-  animation: tree-expand-out var(--duration-fast) var(--ease-in-out);
-}
-
-@keyframes tree-expand-in {
-  from { opacity: 0; max-height: 0; }
-  to { opacity: 1; max-height: 300px; }
-}
-
-@keyframes tree-expand-out {
-  from { opacity: 1; max-height: 300px; }
-  to { opacity: 0; max-height: 0; }
-}
-
 /* Focus visible */
 .header-action-btn:focus-visible,
 .collapse-toggle-btn:focus-visible,
-.group-header:focus-visible,
-.nav-item:focus-visible,
+.rail-btn:focus-visible,
 .footer-btn:focus-visible {
   outline: var(--space-1) solid var(--focus-ring);
   outline-offset: calc(var(--space-1) / 2);
 }
-
 </style>

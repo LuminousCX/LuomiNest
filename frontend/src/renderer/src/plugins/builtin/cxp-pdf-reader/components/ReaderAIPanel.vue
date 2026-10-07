@@ -27,6 +27,7 @@ import { useToast } from '../../../../composables/useToast'
 import { renderMarkdown } from '../../../../utils/markdown'
 import { cxPdfApi } from '../services/pdfApi'
 import type { CxPdfChatMessage } from '../services/pdfApi'
+import { toErrorMessage } from '@/utils/error'
 
 const props = defineProps<{
   fileId: string
@@ -84,7 +85,7 @@ const handleSummarize = async () => {
       keyPoints: Array.isArray(result.keyPoints) ? result.keyPoints : [],
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const msg = toErrorMessage(e)
     summaryState.value = {
       loading: false,
       error: t('pdfReader.aiPanel.error.summaryFailed', { message: msg }),
@@ -149,7 +150,7 @@ const handleTranslate = async () => {
       translation: result.translation ?? '',
     }
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const msg = toErrorMessage(e)
     translateState.value = {
       ...translateState.value,
       loading: false,
@@ -224,7 +225,7 @@ const handleSendMessage = async () => {
     }
     chatMessages.value.push(assistantMsg)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
+    const msg = toErrorMessage(e)
     const errorMsg: ChatMessage = {
       id: `msg-${Date.now()}-e`,
       role: 'assistant',
@@ -656,7 +657,7 @@ watch(
 }
 
 .loading-spin {
-  animation: cx-pdf-spin 1s linear infinite;
+  animation: spin 1s linear infinite;
   color: var(--lumi-primary);
 }
 
@@ -1012,11 +1013,5 @@ watch(
 .slide-side-right-leave-to {
   width: 0;
   opacity: 0;
-}
-
-@keyframes cx-pdf-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

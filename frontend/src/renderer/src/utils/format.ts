@@ -101,6 +101,11 @@ const formatDateCalendar = (dateStr: string): string => {
   return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`
 }
 
+const formatTokens = (n: number): string => {
+  if (!n || n <= 0) return '0'
+  return n.toLocaleString('en-US')
+}
+
 const formatDuration = (ms: number | null): string => {
   if (ms === null || ms === undefined) return '-'
   if (ms < 1000) return `${ms}ms`
@@ -119,5 +124,6 @@ export {
   formatShortDateTime,
   formatSpeed,
   formatDuration,
+  formatTokens,
   RELATIVE_THRESHOLD,
 }

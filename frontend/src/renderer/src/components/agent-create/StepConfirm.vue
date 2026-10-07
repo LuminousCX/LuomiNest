@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CircleX, X } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 /**
  * 智能体创建向导 - 步骤4：确认创建
@@ -34,18 +35,11 @@ const enabledSkills = computed(() =>
     <Transition name="toast-slide">
       <div v-if="errorMessage" class="error-notification">
         <div class="notification-icon error">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="15" y1="9" x2="9" y2="15"/>
-            <line x1="9" y1="9" x2="15" y2="15"/>
-          </svg>
+          <CircleX :size="18" :stroke-width="2.5" />
         </div>
         <span class="notification-message">{{ errorMessage }}</span>
         <button class="notification-close" @click="emit('dismiss-error')">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18"/>
-            <line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
+          <X :size="14" />
         </button>
       </div>
     </Transition>

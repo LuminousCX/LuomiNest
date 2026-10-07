@@ -1,4 +1,4 @@
-import type { Ref } from 'vue'
+import { nextTick, watch, type Ref, type WatchSource } from 'vue'
 import type { ChatMessage } from '../types'
 
 /** 滚动容器度量（scrollTop/scrollHeight/clientHeight） */
@@ -29,6 +29,15 @@ export const useChatScroll = (options: {
   showScrollToBottomBtn?: Ref<boolean>
   /** 消息数量（按钮仅在存在消息时显示） */
   getMessageCount?: () => number
+  /**
+   * 跟随数据源（原 useAutoScroll 语义的收口）：source 变化且当前贴底时自动滚到底部。
+   * 与旧实现差异：用户翻看历史时不再被强拽到底部（已获批准的行为改进）。
+   */
+  followSource?: WatchSource<unknown>
+  /** 跟随监听是否 deep（消息数组场景传 true） */
+  followDeep?: boolean
+  /** 跟随时无视贴底状态强制滚动（会话切换等"必须看到最新"的场景） */
+  followForce?: boolean
 }) => {
   const getMetrics = (): ScrollMetrics | null => {
     if (!options.container.value) return null
@@ -79,6 +88,16 @@ export const useChatScroll = (options: {
       options.isNearBottom.value = distanceFromBottom < SCROLL_BOTTOM_THRESHOLD
     }
     return m
+  }
+
+  if (options.followSource) {
+    watch(
+      options.followSource,
+      () => {
+        nextTick(() => scrollToBottom(options.followForce ?? false))
+      },
+      { deep: options.followDeep ?? false, flush: 'post' },
+    )
   }
 
   return {

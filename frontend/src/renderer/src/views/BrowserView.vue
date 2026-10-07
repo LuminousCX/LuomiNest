@@ -270,7 +270,7 @@ onUnmounted(() => {
         <div class="screenshot-header">
           <div class="screenshot-title">
             <Camera :size="16" />
-            <span class="screenshot-meta">{{ previewItem.title || previewItem.url || t('browser.screenshotTitle') }}</span>
+            <span class="screenshot-meta lumi-clip">{{ previewItem.title || previewItem.url || t('browser.screenshotTitle') }}</span>
           </div>
           <div class="screenshot-header-actions">
             <button
@@ -439,7 +439,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   z-index: var(--z-modal, 1000);
-  animation: lumi-fade-in var(--duration-normal) var(--ease-in-out);
+  animation: browser-view-fade-in var(--duration-normal) var(--ease-in-out);
 }
 
 .screenshot-modal {
@@ -469,12 +469,6 @@ onUnmounted(() => {
   font-size: var(--text-base);
   color: var(--text-secondary);
   min-width: 0;
-}
-
-.screenshot-meta {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .screenshot-header-actions {
@@ -558,7 +552,7 @@ onUnmounted(() => {
   transform: translate(-50%, var(--space-2));
 }
 
-@keyframes lumi-fade-in {
+@keyframes browser-view-fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }

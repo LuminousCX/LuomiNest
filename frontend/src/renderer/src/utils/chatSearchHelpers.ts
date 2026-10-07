@@ -73,3 +73,34 @@ export const enrichWithUrlContent = async (
     logger.warn('Fetch URL failed, continuing without page content:', err)
   }
 }
+
+/**
+ * 在容器内按文本定位目标行并滚动到位、高亮 2 秒（聊天气泡搜索定位的统一实现）。
+ *
+ * @param options.expand 定位失败时的展开钩子（如窗口化列表先展开全量再重试）
+ * @param options.onFail 仍找不到时的回调（如回滚到底部）
+ */
+export async function scrollToTextMatch(
+  container: HTMLElement,
+  selector: string,
+  keyword: string,
+  options: { expand?: () => Promise<void> | void; onFail?: () => void } = {},
+): Promise<void> {
+  const q = keyword.toLowerCase()
+  const findMatch = (): Element | undefined =>
+    Array.from(container.querySelectorAll(selector)).find((el) =>
+      (el.textContent || '').toLowerCase().includes(q),
+    )
+  let target = findMatch()
+  if (!target && options.expand) {
+    await options.expand()
+    target = findMatch()
+  }
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    target.classList.add('lumi-chat-search-highlight')
+    setTimeout(() => target.classList.remove('lumi-chat-search-highlight'), 2000)
+    return
+  }
+  options.onFail?.()
+}

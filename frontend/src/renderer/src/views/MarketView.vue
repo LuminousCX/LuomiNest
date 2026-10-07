@@ -173,8 +173,8 @@ function toggleFilters() {
   <div class="market-view">
     <div class="market-header animate-fade-in">
       <div class="market-header__text">
-        <h1 class="market-title">{{ t('market.title') }}</h1>
-        <p class="market-desc">{{ t('market.desc') }}</p>
+        <h1 class="market-title lumi-page-title">{{ t('market.title') }}</h1>
+        <p class="market-desc lumi-page-desc">{{ t('market.desc') }}</p>
       </div>
       <div class="market-switch">
         <button
@@ -212,7 +212,7 @@ function toggleFilters() {
           @click.stop="showSourceDropdown = !showSourceDropdown"
         >
           <Globe :size="14" />
-          <span class="source-quick-label">
+          <span class="source-quick-label lumi-clip">
             {{ registryStore.activeSource?.name || t('market.sourceFallback') }}
           </span>
           <Loader2
@@ -290,7 +290,7 @@ function toggleFilters() {
         <div class="sidebar-filter-toggle">
           <button :class="['filter-toggle-btn', { active: showFilters }]" @click="toggleFilters">
             <SlidersHorizontal :size="14" />
-            <span>{{ t('market.filters') }}</span>
+            <span>{{ t('market.filterLabel') }}</span>
           </button>
           <button :class="['filter-toggle-btn', { active: showRepoSource }]" @click="showRepoSource = !showRepoSource">
             <Database :size="14" />
@@ -394,20 +394,6 @@ function toggleFilters() {
   flex-direction: column;
 }
 
-.market-title {
-  font-size: var(--text-3xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  line-height: 1.2;
-}
-
-.market-desc {
-  font-size: var(--text-base);
-  color: var(--text-muted);
-  margin-top: var(--space-1);
-}
-
-
 .market-switch {
   display: flex;
   gap: calc(var(--space-1) / 2);
@@ -482,12 +468,6 @@ function toggleFilters() {
 .source-quick-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-}
-
-.source-quick-label {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .source-quick-dropdown {

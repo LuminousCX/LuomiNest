@@ -438,7 +438,6 @@
       "confirmRestoreMessage": "Restoring will overwrite ALL current data (conversations, memory, settings, etc.) and cannot be undone. It is recommended to restart LuomiNest afterwards to refresh in-memory caches.",
       "confirmRestore": "Restore Now",
       "cancel": "Cancel",
-      "restoring": "Restoring…",
       "restoreSuccess": "Data restored from backup. Please restart LuomiNest soon.",
       "restoreFailed": "Restore failed: {message}",
       "confirmDeleteTitle": "Delete this backup?",
@@ -828,7 +827,6 @@
       "contact": "Contact Us"
     },
     "contact": {
-      "title": "Contact Us",
       "desc": "If you have any questions, suggestions, or complaints about this privacy policy, please contact us in one of the following ways:",
       "githubLabel": "GitHub Issues: ",
       "homepageLabel": "Project homepage: "

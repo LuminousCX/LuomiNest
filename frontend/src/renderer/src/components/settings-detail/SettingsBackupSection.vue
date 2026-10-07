@@ -19,6 +19,7 @@ import { createLuomiNestRendererLogger } from '../../utils/logger'
 import { formatDateTime } from '../../utils/format'
 import LumiButton from '../common/LumiButton.vue'
 import ConfirmDialog from '../common/ConfirmDialog.vue'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('Settings')
 
@@ -82,7 +83,7 @@ const handleCreate = async (): Promise<void> => {
     toast.success(t('settingsEx.backup.createSuccess'))
     await loadBackups()
   } catch (e) {
-    toast.error(t('settingsEx.backup.createFailed', { message: e instanceof Error ? e.message : String(e) }))
+    toast.error(t('settingsEx.backup.createFailed', { message: toErrorMessage(e) }))
   } finally {
     creating.value = false
   }
@@ -106,7 +107,7 @@ const handleRestore = async (): Promise<void> => {
     restoreDialogVisible.value = false
     toast.success(t('settingsEx.backup.restoreSuccess'))
   } catch (e) {
-    toast.error(t('settingsEx.backup.restoreFailed', { message: e instanceof Error ? e.message : String(e) }))
+    toast.error(t('settingsEx.backup.restoreFailed', { message: toErrorMessage(e) }))
   } finally {
     restoring.value = false
     restoreTarget.value = null
@@ -130,7 +131,7 @@ const handleDelete = async (): Promise<void> => {
     await loadBackups()
     deleteDialogVisible.value = false
   } catch (e) {
-    toast.error(t('settingsEx.backup.deleteFailed', { message: e instanceof Error ? e.message : String(e) }))
+    toast.error(t('settingsEx.backup.deleteFailed', { message: toErrorMessage(e) }))
   } finally {
     deleting.value = false
     deleteTarget.value = null
@@ -147,7 +148,7 @@ onMounted(loadBackups)
         <DatabaseBackup :size="18" />
         <span class="settings-card__title">{{ t('settingsEx.backup.title') }}</span>
       </div>
-      <div class="settings-card__body">
+      <div class="settings-card__body lumi-stack-4 lumi-stack-4">
         <div class="settings-form-hint backup-hint">
           <Info :size="14" />
           <span>{{ t('settingsEx.backup.subtitle') }}</span>

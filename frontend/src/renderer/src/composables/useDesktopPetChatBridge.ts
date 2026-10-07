@@ -28,6 +28,7 @@ import { useAgentStore } from '../stores/agent'
 import type { ChatStreamChunk } from '../types'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import { createCodeBlockFilter } from '../utils/ttsTextFilter'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('DesktopPetChatBridge')
 
@@ -159,7 +160,7 @@ export const useDesktopPetChatBridge = (): void => {
     try {
       await chatStore.sendMessage(text, options)
     } catch (e: unknown) {
-      const errMsg = e instanceof Error ? e.message : String(e)
+      const errMsg = toErrorMessage(e)
       logger.error('sendMessage failed:', errMsg)
       toast.error(i18n.global.t('pet.chat.sendMessageFailed', { message: errMsg }))
     } finally {

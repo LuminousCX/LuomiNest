@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import {
   MessageSquare, RefreshCw, Bot, User,
   Image as ImageIcon, Cpu,
@@ -7,7 +6,8 @@ import {
 import { usePlatformStore } from '../../stores/platform'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
 import { formatShortDateTime } from '../../utils/format'
-import { useAutoScroll } from '../../composables/useAutoScroll'
+import { ref } from 'vue'
+import { useChatScroll } from '../../composables/useChatScroll'
 
 const store = usePlatformStore()
 
@@ -23,7 +23,14 @@ const getRoleLabel = (role: string) => {
   return role === 'assistant' ? 'LuomiNest' : role === 'system' ? '系统' : '用户'
 }
 
-useAutoScroll(conversationMessagesRef, () => store.selectedConversationDetail)
+const isNearBottom = ref(true)
+const { handleScroll } = useChatScroll({
+  container: conversationMessagesRef,
+  isNearBottom,
+  // 会话详情整体替换时必须看到最新消息（保持旧 useAutoScroll 的无条件到底语义）
+  followSource: () => store.selectedConversationDetail,
+  followForce: true,
+})
 </script>
 
 <template>
@@ -33,7 +40,7 @@ useAutoScroll(conversationMessagesRef, () => store.selectedConversationDetail)
       <span>加载消息中...</span>
     </div>
 
-    <div v-else-if="store.selectedConversationDetail" ref="conversationMessagesRef" class="conv-messages">
+    <div v-else-if="store.selectedConversationDetail" ref="conversationMessagesRef" class="conv-messages" @scroll="handleScroll()">
       <div
         v-for="msg in store.selectedConversationDetail.messages"
         :key="msg.id"

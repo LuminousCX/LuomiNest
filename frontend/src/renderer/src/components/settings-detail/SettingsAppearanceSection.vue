@@ -134,7 +134,7 @@ const activeColorThemeName = computed(() => {
         <Sparkles :size="18" />
         <span class="settings-card__title">{{ t('settingsEx.appearance.skinSection') }}</span>
       </div>
-      <div class="settings-card__body">
+      <div class="settings-card__body lumi-stack-4 lumi-stack-4">
         <p class="settings-card__hint">{{ t('settingsEx.appearance.skinHint') }}</p>
         <ThemeSkinSelector
           :active-id="themeStore.activeSkinId"
@@ -151,7 +151,7 @@ const activeColorThemeName = computed(() => {
         <Palette :size="18" />
         <span class="settings-card__title">{{ t('settingsEx.appearance.colorSection') }}</span>
       </div>
-      <div class="settings-card__body">
+      <div class="settings-card__body lumi-stack-4 lumi-stack-4">
         <p class="settings-card__hint">{{ t('settingsEx.appearance.colorHint') }}</p>
         <div class="theme-preset-grid">
           <button

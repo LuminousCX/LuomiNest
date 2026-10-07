@@ -46,21 +46,14 @@
     },
     "tracks": {
       "owner": "Blogger Core",
-      "ownerSub": "Core persona & owner memory",
       "users": "Fan Profiles",
-      "usersSub": "Individual fan profiles & private secrets",
       "groups": "Fan Groups",
-      "groupsSub": "Group lore, rules & memes",
       "noUsers": "No fan interaction records yet",
-      "noUsersHint": "Fan profiles will be automatically created when fans chat via platforms",
       "noGroups": "No fan group memories yet",
-      "noGroupsHint": "Group lore and rules will be accumulated when interacting in groups",
       "currentFan": "Current Fan",
       "currentGroup": "Current Group",
       "searchFans": "Search fan name or ID...",
-      "searchGroups": "Search group name or ID...",
-      "allFans": "All Fans",
-      "allGroups": "All Groups"
+      "searchGroups": "Search group name or ID..."
     },
     "agentPicker": {
       "viewing": "Viewing",
@@ -361,7 +354,8 @@
       "installed": "Installation complete",
       "updating": "Updating...",
       "updated": "Update complete"
-    }
+    },
+    "filterLabel": "Filters"
   },
   "tasks": {
     "title": "Plan View",
@@ -737,23 +731,14 @@
     "loadingModelConfig": "Loading model config...",
     "visionHint": "Game platforms require a model with vision (image recognition) support",
     "currentEffective": "Currently active: ",
-    "mainAgentDefault": "Main Agent default: ",
     "visionSupported": "Supports vision",
     "visionUnsupported": "No vision support",
-    "providerLabel": "Provider (empty = inherit main Agent)",
-    "inheritMainAgent": "Inherit main Agent",
-    "defaultSuffix": " (default)",
-    "modelLabel": "Model (empty = inherit main Agent)",
     "systemPromptLabel": "System Prompt (empty = inherit main Agent)",
     "systemPromptPlaceholder": "Leave empty to inherit the main Agent's System Prompt",
-    "temperatureLabel": "Temperature (empty = inherit)",
-    "maxTokensLabel": "Max Tokens (empty = inherit)",
-    "inherit": "Inherit",
     "resetToInherit": "Reset to inherit main Agent",
     "connectionConfig": "Connection Config",
     "mainAgentBannerTitle": "Agent Identity: Managed by [{name}]",
     "mainAgentBannerDesc": "All messages and companion behaviors on this platform are handled by the Main Agent. Name, avatar, and persona synchronize directly from [Settings - Main Agent], maintaining cross-platform consistency.",
-    "platformTipTitle": "Integration Tips & Anti-Ban Advice",
     "minecraftTip": "Minecraft Companion Guide: The companion entity joins LAN (Open to LAN) or multiplayer servers. Name and persona inherit from Main Agent. Supports embodied actions, telemetry, and screenshots.",
     "qqOnebotTip": "QQ (NapCat / OneBot) Tips: Recommended to use NapCatQQ or OneBot v11. Set reverse WebSocket to ws://127.0.0.1:8080/ws. Built-in typing delay and rate limits.",
     "wechatPersonalTip": "WeChat Personal (GeweChat) Tips: Connected via GeweChat gateway. Scan QR code in management menu to log in. Anti-ban delays and rate protection enabled.",
