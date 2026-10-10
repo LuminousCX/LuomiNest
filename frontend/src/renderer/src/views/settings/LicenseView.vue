@@ -470,6 +470,14 @@ const referenceProjects = [
     url: 'https://github.com/browserbase/stagehand'
   },
   {
+    name: 'vue-bits',
+    key: 'vueBits',
+    version: '1.1.1',
+    author: 'DavidHDev',
+    license: 'MIT',
+    url: 'https://github.com/DavidHDev/vue-bits'
+  },
+  {
     name: 'LoliMeow',
     key: 'loliMeow',
     version: '13.12',

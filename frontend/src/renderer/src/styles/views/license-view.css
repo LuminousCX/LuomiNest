@@ -5,25 +5,16 @@
    ========================================================= */
 
 /* -------------------------------------------------------
-   区块头部（组件 LicenseSectionHeader 也使用此类）
+   区块头部
+   __header 挂在子组件 LicenseSectionHeader 的根节点上（会继承父组件
+   scoped 属性，此处规则有效）；__title/__desc 在子组件内部节点上，
+   由 LicenseSectionHeader.vue 自身的 scoped 样式提供。
    ------------------------------------------------------- */
 .license-section__header {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   margin-bottom: var(--space-5);
-}
-
-.license-section__title {
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
-  color: var(--text-primary);
-  margin-bottom: var(--space-1);
-}
-
-.license-section__desc {
-  font-size: var(--text-base);
-  color: var(--text-muted);
 }
 
 /* -------------------------------------------------------

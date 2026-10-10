@@ -419,7 +419,7 @@ onMounted(() => {
 .auth-profile__meta--muted {
   color: var(--text-muted);
   font-size: var(--text-xs);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
 }
 
 /* ── 元信息网格 ── */

@@ -3,6 +3,7 @@
     "skip": "スキップ",
     "delete": "削除",
     "empty": "データがありません",
+    "segmentedControl": "セグメントコントロール",
     "time": {
       "justNow": "たった今",
       "minutesAgo": "{n} 分前",

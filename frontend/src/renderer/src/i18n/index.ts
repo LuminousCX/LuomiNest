@@ -28,12 +28,25 @@ export function normalizeLocale(value: unknown): AppLocale {
   return SUPPORTED_LOCALES.some((l) => l.code === value) ? (value as AppLocale) : DEFAULT_LOCALE
 }
 
+/** 首次使用（无已存偏好）时从系统语言前缀映射到支持的 locale；匹配不上返回 null */
+function detectSystemLocale(): AppLocale | null {
+  const lang = (navigator.language || '').toLowerCase()
+  if (lang.startsWith('zh')) return 'zh-CN'
+  if (lang.startsWith('en')) return 'en-US'
+  if (lang.startsWith('ja')) return 'ja-JP'
+  return null
+}
+
 function getInitialLocale(): AppLocale {
   try {
-    return normalizeLocale(localStorage.getItem(LOCALE_STORAGE_KEY))
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY)
+    // 已存偏好一律优先（含显式存储的非法值走 normalize 兜底）
+    if (stored) return normalizeLocale(stored)
   } catch {
     return DEFAULT_LOCALE
   }
+  // 首次使用：跟随系统语言，匹配不上维持中文兜底
+  return detectSystemLocale() ?? DEFAULT_LOCALE
 }
 
 /** 收集某个语言的全部 JSON（根级整包 + 按域拆分文件），合并为一个 messages 对象 */

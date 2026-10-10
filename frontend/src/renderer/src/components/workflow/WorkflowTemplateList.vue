@@ -127,7 +127,7 @@ defineEmits<{
   border-radius: var(--radius-lg);
   padding: var(--space-4);
   box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-fast, 0.15s ease-in-out);
+  transition: box-shadow var(--transition-fast);
 }
 
 .template-card:hover {
@@ -213,12 +213,13 @@ defineEmits<{
   border-radius: var(--radius-md);
   border: none;
   cursor: pointer;
-  transition: all var(--transition-fast, 0.15s ease-in-out);
+  transition: all var(--transition-fast);
   line-height: 1.4;
 }
 
 .action-btn-primary {
   background: var(--lumi-brand);
+  /* 品牌色底上文字恒为白色（深色模式下 --text-inverse 会翻黑，故不用） */
   color: #fff;
 }
 

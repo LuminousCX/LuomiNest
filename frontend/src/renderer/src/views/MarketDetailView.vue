@@ -8,6 +8,8 @@ import { useRepoSourceStore } from '../stores/repo-source'
 import { useApi } from '../composables/useApi'
 import MarketplaceReviews from '../components/marketplace/MarketplaceReviews.vue'
 import LumiEmptyState from '../components/common/LumiEmptyState.vue'
+import SegmentTabs from '../components/common/SegmentTabs.vue'
+import type { SegmentTabOption } from '../components/common/SegmentTabs.vue'
 import MarketDetailHeader from '../components/marketplace/MarketDetailHeader.vue'
 import MarketDetailScreenshots from '../components/marketplace/MarketDetailScreenshots.vue'
 import MarketDetailInfoTab from '../components/marketplace/MarketDetailInfoTab.vue'
@@ -23,6 +25,13 @@ const repoSourceStore = useRepoSourceStore()
 const api = useApi()
 
 const activeTab = ref<'info' | 'versions' | 'reviews'>('info')
+
+/** 详情页主 tab（SegmentTabs lg 档：详情 / 版本 / 评价，标签带计数） */
+const tabOptions = computed<SegmentTabOption<'info' | 'versions' | 'reviews'>[]>(() => [
+  { value: 'info', label: t('market.detail.info'), icon: FileText },
+  { value: 'versions', label: t('market.detail.versions', { n: item.value?.versions?.length || 0 }), icon: Tag },
+  { value: 'reviews', label: t('market.detail.reviews', { n: item.value?.ratingCount || 0 }), icon: Star },
+])
 const expandedVersion = ref<string | null>(null)
 const screenshotModal = ref<number | null>(null)
 
@@ -245,29 +254,7 @@ onUnmounted(() => {
         @open="openScreenshot"
       />
 
-      <div class="detail-tabs">
-        <button
-          :class="['tab-btn', { active: activeTab === 'info' }]"
-          @click="activeTab = 'info'"
-        >
-          <FileText :size="15" />
-          {{ t('market.detail.info') }}
-        </button>
-        <button
-          :class="['tab-btn', { active: activeTab === 'versions' }]"
-          @click="activeTab = 'versions'"
-        >
-          <Tag :size="15" />
-          {{ t('market.detail.versions', { n: item.versions?.length || 0 }) }}
-        </button>
-        <button
-          :class="['tab-btn', { active: activeTab === 'reviews' }]"
-          @click="activeTab = 'reviews'"
-        >
-          <Star :size="15" />
-          {{ t('market.detail.reviews', { n: item.ratingCount || 0 }) }}
-        </button>
-      </div>
+      <SegmentTabs v-model="activeTab" :options="tabOptions" size="lg" class="detail-tabs" />
 
       <div class="detail-body">
         <Transition name="tab-switch" mode="out-in">
@@ -347,35 +334,9 @@ onUnmounted(() => {
   padding: var(--space-6) var(--space-7);
 }
 
+/* 详情页主 tab：SegmentTabs（lg），仅保留与上下文的间距 */
 .detail-tabs {
-  display: flex;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  background: var(--workspace-panel);
-  border-radius: var(--radius-lg);
   margin-bottom: var(--space-5);
-}
-
-.tab-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-3) var(--space-5);
-  border-radius: var(--radius-md);
-  font-size: var(--text-base);
-  font-weight: 500;
-  color: var(--text-muted);
-  transition: all var(--transition-fast);
-}
-
-.tab-btn:hover {
-  color: var(--text-secondary);
-}
-
-.tab-btn.active {
-  background: var(--workspace-card);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-xs);
 }
 
 .detail-body {

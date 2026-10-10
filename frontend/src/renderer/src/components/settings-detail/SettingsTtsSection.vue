@@ -670,8 +670,8 @@ onMounted(() => {
 }
 
 .tts-translation-row__hint {
-  font-size: var(--font-size-xs, 12px);
-  color: var(--text-tertiary);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
   line-height: 1.4;
 }
 
@@ -681,11 +681,11 @@ onMounted(() => {
   height: 20px;
   flex: none;
   border-radius: 999px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
   cursor: pointer;
-  transition: background var(--duration-fast, 0.15s) ease-in-out,
-    border-color var(--duration-fast, 0.15s) ease-in-out;
+  transition: background var(--duration-fast) ease-in-out,
+    border-color var(--duration-fast) ease-in-out;
   padding: 0;
 }
 
@@ -697,21 +697,21 @@ onMounted(() => {
   height: 16px;
   border-radius: 50%;
   background: var(--text-primary);
-  transition: transform var(--duration-fast, 0.15s) ease-in-out,
-    background var(--duration-fast, 0.15s) ease-in-out;
+  transition: transform var(--duration-fast) ease-in-out,
+    background var(--duration-fast) ease-in-out;
 }
 
 .tts-toggle[aria-checked='true'] {
-  background: var(--accent-color);
-  border-color: var(--accent-color);
+  background: var(--lumi-primary);
+  border-color: var(--lumi-primary);
 }
 
 .tts-toggle[aria-checked='true'] .tts-toggle__thumb {
   transform: translateX(16px);
-  background: var(--bg-primary);
+  background: var(--text-inverse);
 }
 
 .tts-toggle:hover {
-  border-color: var(--accent-color);
+  border-color: var(--lumi-primary);
 }
 </style>

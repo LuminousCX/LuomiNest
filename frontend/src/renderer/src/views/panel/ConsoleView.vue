@@ -1,24 +1,25 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
-  Terminal, Play, Square, Copy, ChevronRight, AlertTriangle, Info,
-  CheckCircle2, XCircle, Maximize2, Minimize2, ScrollText, RotateCcw,
-  Clock, User, Filter, RefreshCw, ChevronDown, Server, Monitor,
+  Terminal, Play, Square, Copy, ChevronRight, Info,
+  CheckCircle2, XCircle, Maximize2, Minimize2, RotateCcw,
+  Clock, User, Filter, RefreshCw, ChevronDown,
   Workflow, Wrench
 } from 'lucide-vue-next'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
 import LumiInput from '../../components/common/LumiInput.vue'
+import SegmentTabs from '../../components/common/SegmentTabs.vue'
+import type { SegmentTabOption } from '../../components/common/SegmentTabs.vue'
+import UnifiedLogPanel from '../../components/panel/UnifiedLogPanel.vue'
 import { useApi } from '../../composables/useApi'
 import { copyToClipboard } from '../../utils/clipboard'
-import type { CommandRecord, SystemLogEntry, ExecuteCommandResponse } from '../../types'
+import type { CommandRecord, ExecuteCommandResponse } from '../../types'
 import { formatTime, formatDuration } from '../../utils/format'
 import LumiPageHeader from '../../components/common/LumiPageHeader.vue'
 import { toErrorMessage } from '@/utils/error'
 
-const router = useRouter()
 const { apiGet, apiPost, apiDelete } = useApi()
 const { t } = useI18n()
 
@@ -40,24 +41,28 @@ interface ToolRecordDetail extends ToolRecordListItem {
   result: string
 }
 
-const activeTab = ref<'console' | 'logs' | 'workflow'>('console')
+type ConsoleTabKey = 'console' | 'logs' | 'workflow'
+const activeTab = ref<ConsoleTabKey>('console')
+
+/** 顶层主 tab（SegmentTabs lg 档：命令行 / 日志 / 工作流） */
+const tabOptions = computed<SegmentTabOption<ConsoleTabKey>[]>(() => [
+  { value: 'console', label: t('console.tabConsole'), icon: Terminal },
+  { value: 'logs', label: t('console.tabLogs'), icon: Info },
+  { value: 'workflow', label: t('console.tabWorkflow'), icon: Workflow },
+])
+
 const isExpanded = ref(false)
 const commandInput = ref('')
 
 const commands = ref<CommandRecord[]>([])
-const logs = ref<SystemLogEntry[]>([])
 const toolRecords = ref<ToolRecordListItem[]>([])
 const isLoadingCommands = ref(false)
-const isLoadingLogs = ref(false)
 const isLoadingToolRecords = ref(false)
 
-const logFilterSource = ref<'all' | 'frontend' | 'backend'>('all')
-const logFilterLevel = ref<'all' | 'info' | 'warn' | 'error' | 'success'>('all')
 const cmdFilterStatus = ref<'all' | 'success' | 'failed' | 'running'>('all')
 const toolFilterStatus = ref<'all' | 'success' | 'failed'>('all')
 
 const showCmdFilter = ref(false)
-const showLogFilter = ref(false)
 const showToolFilter = ref(false)
 
 /** 当前展开查看详情的工具记录 record_id */
@@ -65,24 +70,15 @@ const expandedRecordId = ref<string | null>(null)
 const expandedRecordDetail = ref<ToolRecordDetail | null>(null)
 const isLoadingRecordDetail = ref(false)
 
-const logListRef = ref<HTMLElement | null>(null)
+/** 日志 Tab：数据与操作委托给 UnifiedLogPanel（主进程 log-hub 四路来源） */
+const logPanelRef = ref<InstanceType<typeof UnifiedLogPanel> | null>(null)
+
 const cmdListRef = ref<HTMLElement | null>(null)
 const toolListRef = ref<HTMLElement | null>(null)
 
 const filteredCommands = computed(() => {
   if (cmdFilterStatus.value === 'all') return commands.value
   return commands.value.filter(c => c.status === cmdFilterStatus.value)
-})
-
-const filteredLogs = computed(() => {
-  let result = logs.value
-  if (logFilterSource.value !== 'all') {
-    result = result.filter(l => l.source === logFilterSource.value)
-  }
-  if (logFilterLevel.value !== 'all') {
-    result = result.filter(l => l.level === logFilterLevel.value)
-  }
-  return result
 })
 
 const filteredToolRecords = computed(() => {
@@ -99,11 +95,6 @@ const statusLabel = (status: CommandRecord['status']) => {
   return map[status]
 }
 
-const levelIcon = (level: SystemLogEntry['level']) => {
-  const map = { info: Info, warn: AlertTriangle, error: XCircle, success: CheckCircle2 }
-  return map[level]
-}
-
 const fetchCommands = async () => {
   isLoadingCommands.value = true
   try {
@@ -115,20 +106,6 @@ const fetchCommands = async () => {
     commands.value = []
   } finally {
     isLoadingCommands.value = false
-  }
-}
-
-const fetchLogs = async () => {
-  isLoadingLogs.value = true
-  try {
-    const data = await apiGet<SystemLogEntry[]>('/console/logs')
-    logs.value = data
-    await nextTick()
-    if (logListRef.value) logListRef.value.scrollTop = 0
-  } catch {
-    logs.value = []
-  } finally {
-    isLoadingLogs.value = false
   }
 }
 
@@ -166,12 +143,6 @@ const toggleRecordDetail = async (recordId: string) => {
   }
 }
 
-/** 跳转统一日志页（/panel/logs）：本页仅展示后端内存日志，
- * 前端/主进程/平台日志与导出、诊断日志上传都收敛到「应用日志」页。 */
-const openLogsPage = () => {
-  router.push('/panel/logs')
-}
-
 const copyLogs = () => {
   let entries = ''
   if (activeTab.value === 'console') {
@@ -179,9 +150,7 @@ const copyLogs = () => {
       `[${c.started_at}] [${c.status.toUpperCase()}] [${c.executed_by}] ${c.command} -> ${c.output || c.error || '-'}`
     ).join('\n')
   } else if (activeTab.value === 'logs') {
-    entries = filteredLogs.value.map(l =>
-      `[${l.timestamp}] [${l.level.toUpperCase()}] [${l.source}] [${l.module || '-'}] ${l.message}`
-    ).join('\n')
+    entries = logPanelRef.value?.getCopyText() ?? ''
   } else {
     entries = filteredToolRecords.value.map(r =>
       `[${r.created_at}] [${r.success ? 'SUCCESS' : 'FAILED'}] [${r.tool_name}] (${r.duration_ms}ms) ${r.result_preview}`
@@ -207,7 +176,7 @@ const handleCommand = async () => {
   }
   if (cmd === 'refresh') {
     if (activeTab.value === 'console') fetchCommands()
-    else if (activeTab.value === 'logs') fetchLogs()
+    else if (activeTab.value === 'logs') void logPanelRef.value?.reload()
     else fetchToolRecords()
     return
   }
@@ -216,8 +185,7 @@ const handleCommand = async () => {
       await apiDelete('/console/commands').catch(() => {})
       commands.value = []
     } else if (activeTab.value === 'logs') {
-      await apiDelete('/console/logs').catch(() => {})
-      logs.value = []
+      await logPanelRef.value?.clearAll()
     } else {
       toolRecords.value = []
     }
@@ -253,12 +221,10 @@ let pollTimer: ReturnType<typeof setInterval> | null = null
 
 onMounted(() => {
   fetchCommands()
-  fetchLogs()
   fetchToolRecords()
   pollTimer = setInterval(() => {
     if (activeTab.value === 'console') fetchCommands()
-    else if (activeTab.value === 'logs') fetchLogs()
-    else fetchToolRecords()
+    else if (activeTab.value === 'workflow') fetchToolRecords()
   }, 30000)
 })
 
@@ -297,20 +263,7 @@ onBeforeUnmount(() => {
       </template>
     </LumiPageHeader>
 
-    <div class="tab-bar">
-      <button :class="['tab-btn', { active: activeTab === 'console' }]" @click="activeTab = 'console'">
-        <Terminal :size="14" />
-        {{ t('console.tabConsole') }}
-      </button>
-      <button :class="['tab-btn', { active: activeTab === 'logs' }]" @click="activeTab = 'logs'">
-        <Info :size="14" />
-        {{ t('console.tabLogs') }}
-      </button>
-      <button :class="['tab-btn', { active: activeTab === 'workflow' }]" @click="activeTab = 'workflow'">
-        <Workflow :size="14" />
-        {{ t('console.tabWorkflow') }}
-      </button>
-    </div>
+    <SegmentTabs v-model="activeTab" :options="tabOptions" size="lg" />
 
     <!-- 命令行 Tab -->
     <template v-if="activeTab === 'console'">
@@ -385,82 +338,8 @@ onBeforeUnmount(() => {
       </div>
     </template>
 
-    <!-- 系统日志 Tab -->
-    <template v-if="activeTab === 'logs'">
-      <div class="toolbar">
-        <div class="toolbar-left lumi-row-3">
-          <div class="filter-group">
-            <button class="filter-btn" @click="showLogFilter = !showLogFilter">
-              <Filter :size="13" />
-              <span>{{ logFilterSource === 'all' ? t('console.allSources') : logFilterSource === 'frontend' ? t('console.frontend') : t('console.backend') }}</span>
-              <ChevronDown :size="12" />
-            </button>
-            <div v-if="showLogFilter" class="filter-dropdown">
-              <button :class="['filter-option', { active: logFilterSource === 'all' }]" @click="logFilterSource = 'all'; showLogFilter = false">{{ t('console.allSources') }}</button>
-              <button :class="['filter-option', { active: logFilterSource === 'frontend' }]" @click="logFilterSource = 'frontend'; showLogFilter = false">
-                <Monitor :size="12" /> {{ t('console.frontend') }}
-              </button>
-              <button :class="['filter-option', { active: logFilterSource === 'backend' }]" @click="logFilterSource = 'backend'; showLogFilter = false">
-                <Server :size="12" /> {{ t('console.backend') }}
-              </button>
-            </div>
-          </div>
-          <div class="filter-group">
-            <select v-model="logFilterLevel" class="level-select">
-              <option value="all">{{ t('console.allLevels') }}</option>
-              <option value="info">Info</option>
-              <option value="warn">Warn</option>
-              <option value="error">Error</option>
-              <option value="success">Success</option>
-            </select>
-          </div>
-          <span class="record-count">{{ t('console.logCount', { n: filteredLogs.length }) }}</span>
-        </div>
-        <div class="toolbar-right lumi-row-2">
-          <LumiButton
-            variant="ghost"
-            size="sm"
-            icon-only
-            :loading="isLoadingLogs"
-            :aria-label="t('console.refresh')"
-            @click="fetchLogs"
-          >
-            <template #icon><RefreshCw :size="14" /></template>
-          </LumiButton>
-          <LumiButton
-            variant="primary"
-            size="sm"
-            :title="t('console.openLogsPageHint')"
-            @click="openLogsPage"
-          >
-            <template #icon><ScrollText :size="14" /></template>
-            <span>{{ t('console.openLogsPage') }}</span>
-          </LumiButton>
-        </div>
-      </div>
-
-      <div class="console-body">
-        <div ref="logListRef" class="log-list">
-          <div v-for="log in filteredLogs" :key="log.id" :class="['log-entry', log.level]">
-            <span class="log-time">{{ formatTime(log.timestamp, { seconds: true }) }}</span>
-            <component :is="levelIcon(log.level)" :size="13" class="log-level-icon shrink-0" />
-            <span :class="['log-source', log.source]">
-              <Monitor v-if="log.source === 'frontend'" :size="11" />
-              <Server v-else :size="11" />
-              {{ log.source === 'frontend' ? t('console.frontend') : t('console.backend') }}
-            </span>
-            <span v-if="log.module" class="log-module">{{ log.module }}</span>
-            <span class="log-message">{{ log.message }}</span>
-          </div>
-          <LumiEmptyState
-            v-if="filteredLogs.length === 0 && !isLoadingLogs"
-            icon="file"
-            :title="t('console.emptyLogs')"
-            size="md"
-          />
-        </div>
-      </div>
-    </template>
+    <!-- 日志 Tab：统一日志面板（前端/主进程/后端/平台 log-hub） -->
+    <UnifiedLogPanel v-if="activeTab === 'logs'" ref="logPanelRef" />
 
     <!-- 工作流 Tab（工具调用记录） -->
     <template v-if="activeTab === 'workflow'">
@@ -605,34 +484,6 @@ onBeforeUnmount(() => {
   color: var(--lumi-brand-hover);
 }
 
-.tab-bar {
-  display: flex;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  width: fit-content;
-}
-
-.tab-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-5);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-base);
-  font-weight: var(--font-medium);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.tab-btn.active {
-  background: var(--surface);
-  color: var(--lumi-brand);
-  box-shadow: var(--shadow-xs);
-}
-
 .toolbar {
   display: flex;
   justify-content: space-between;
@@ -698,22 +549,6 @@ onBeforeUnmount(() => {
 .filter-option.active {
   color: var(--lumi-brand);
   font-weight: var(--font-semibold);
-}
-
-.level-select {
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  color: var(--text-secondary);
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.level-select:hover {
-  border-color: var(--lumi-brand);
 }
 
 .record-count {
@@ -892,86 +727,6 @@ onBeforeUnmount(() => {
 
 .cmd-rollback code {
   font-family: var(--font-mono);
-}
-
-.log-list {
-  height: 100%;
-  overflow-y: auto;
-  padding: var(--space-3) var(--space-4);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  line-height: var(--leading-relaxed);
-}
-
-.log-entry {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) 0;
-  border-radius: var(--radius-xs);
-}
-
-.log-time {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  flex-shrink: 0;
-  width: 70px;
-}
-
-.log-entry.info .log-level-icon {
-  color: var(--lumi-brand);
-}
-
-.log-entry.warn .log-level-icon {
-  color: var(--lumi-warning);
-}
-
-.log-entry.error .log-level-icon {
-  color: var(--lumi-accent);
-}
-
-.log-entry.success .log-level-icon {
-  color: var(--lumi-success);
-}
-
-.log-source {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-weight: var(--font-semibold);
-  font-size: var(--text-xs);
-  flex-shrink: 0;
-  padding: 1px var(--space-1);
-  border-radius: var(--radius-xs);
-}
-
-.log-source.frontend {
-  color: var(--lumi-info);
-  background: var(--lumi-info-light);
-}
-
-.log-source.backend {
-  color: var(--lumi-brand);
-  background: var(--lumi-brand-light);
-}
-
-.log-module {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  flex-shrink: 0;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.log-message {
-  color: var(--text-secondary);
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .command-bar {

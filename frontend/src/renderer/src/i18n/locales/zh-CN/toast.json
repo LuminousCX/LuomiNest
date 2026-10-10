@@ -1,0 +1,41 @@
+{
+  "toast": {
+    "close": "关闭通知",
+    "retry": "重试",
+    "detail": "详细信息：{message}",
+    "platform": {
+      "loadFailed": "平台列表加载失败，请确认后端服务已启动",
+      "loadFailedDesc": "详细信息：{message}",
+      "saveConfigFailed": "平台配置保存失败，修改未生效",
+      "saveConfigFailedDesc": "请检查与后端的连接后重新保存。详细信息：{message}",
+      "resetConfigFailed": "人设配置重置失败",
+      "resetConfigFailedDesc": "请稍后重试。详细信息：{message}"
+    },
+    "memory": {
+      "updateFailed": "记忆更新失败，更改未保存",
+      "updateFailedDesc": "请确认后端服务可用后重试。详细信息：{message}",
+      "deleteFailed": "记忆删除失败，该条记忆仍保留",
+      "deleteFailedDesc": "请稍后重试。详细信息：{message}",
+      "pinFailed": "记忆置顶状态切换失败",
+      "pinFailedDesc": "请稍后重试。详细信息：{message}"
+    },
+    "chat": {
+      "loadConversationFailed": "对话记录加载失败",
+      "loadConversationFailedDesc": "请稍后重新打开该对话；若持续失败请检查后端服务。详细信息：{message}",
+      "versionPersistFailed": "版本切换未保存",
+      "versionPersistFailedDesc": "重新打开对话后可能显示回原版本。详细信息：{message}"
+    },
+    "workflow": {
+      "confirmFailed": "确认执行失败，工作流仍在等待确认",
+      "confirmFailedDesc": "请重试；若持续失败请到控制台查看日志。详细信息：{message}",
+      "rejectFailed": "拒绝执行失败，工作流仍在等待确认",
+      "rejectFailedDesc": "请重试；若持续失败请到控制台查看日志。详细信息：{message}",
+      "cancelFailed": "取消请求发送失败",
+      "cancelFailedDesc": "工作流可能仍在运行，请稍后在控制台确认状态。详细信息：{message}"
+    },
+    "market": {
+      "agentCreateFailed": "智能体自动创建失败",
+      "agentCreateFailedDesc": "市场条目已安装成功，可稍后在智能体页手动创建。详细信息：{message}"
+    }
+  }
+}

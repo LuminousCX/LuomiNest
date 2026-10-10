@@ -208,7 +208,7 @@ const toggleScene = (sceneId: string) => {
   justify-content: space-between;
   align-items: flex-start;
   padding-bottom: var(--space-5);
-  border-bottom: 1px solid var(--divider-soft, var(--border-light));
+  border-bottom: 1px solid var(--divider-soft);
 }
 
 .sh-header__info {

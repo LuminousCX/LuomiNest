@@ -25,6 +25,8 @@ import { useRepoSourceStore } from './repo-source'
 import { getItem, setItem } from '../utils/storage'
 import { generateId } from '../utils/id'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { toErrorMessage } from '@/utils/error'
+import { useToast } from '../composables/useToast'
 import { i18n } from '../i18n'
 
 const logger = createLuomiNestRendererLogger('Marketplace')
@@ -38,6 +40,7 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
   const pluginItems = ref<MarketplaceItem[]>([...MOCK_PLUGINS])
   const skillItems = ref<MarketplaceItem[]>([...MOCK_SKILLS])
   const agentItems = ref<MarketplaceItem[]>([...MOCK_AGENTS])
+  const toast = useToast()
   const loading = ref(false)
   const searchQuery = ref('')
   const searchHistory = ref<string[]>(loadSearchHistory())
@@ -429,7 +432,13 @@ export const useMarketplaceStore = defineStore('marketplace', () => {
         capabilities: ['chat'],
       })
     } catch (err) {
+      // 安装已成功、仅自动建 agent 失败：warning 提醒 + 告知补救路径（手动创建）
       logger.error('自动创建智能体失败:', err)
+      toast.warning(i18n.global.t('toast.market.agentCreateFailed'), {
+        description: i18n.global.t('toast.market.agentCreateFailedDesc', {
+          message: toErrorMessage(err),
+        }),
+      })
     }
   }
 

@@ -24,6 +24,8 @@ const BrainIcon = Brain
 import LumiCard from '../common/LumiCard.vue'
 import LumiButton from '../common/LumiButton.vue'
 import LumiEmptyState from '../common/LumiEmptyState.vue'
+import SegmentTabs from '../common/SegmentTabs.vue'
+import type { SegmentTabOption } from '../common/SegmentTabs.vue'
 import { usePluginsStore } from '../../stores/plugins'
 import { resolvePluginIcon } from '../../plugins/plugin-icons'
 import type {
@@ -39,12 +41,6 @@ const store = usePluginsStore()
 const { t } = useI18n()
 
 const activeTab = ref<'frontend' | 'backend' | 'skills'>('frontend')
-
-const tabs = computed(() => [
-  { id: 'frontend' as const, label: t('settingsEx.plugins.tabFrontend'), icon: Puzzle },
-  { id: 'backend' as const, label: t('settingsEx.plugins.tabBackend'), icon: Package },
-  { id: 'skills' as const, label: t('settingsEx.plugins.tabSkills'), icon: Brain },
-])
 
 onMounted(() => {
   store.initAll()
@@ -148,23 +144,19 @@ const summary = computed(() => ({
   backend: t('settingsEx.plugins.summaryBackend', { active: store.backendStats.active, total: store.backendStats.total }),
   skills: t('settingsEx.plugins.summarySkills', { active: store.skillStats.active, total: store.skillStats.total }),
 }))
+
+/** 插件页主 tab（SegmentTabs lg 档，badge 为各类统计摘要） */
+const tabOptions = computed<SegmentTabOption<'frontend' | 'backend' | 'skills'>[]>(() => [
+  { value: 'frontend', label: t('settingsEx.plugins.tabFrontend'), icon: Puzzle, badge: summary.value.frontend },
+  { value: 'backend', label: t('settingsEx.plugins.tabBackend'), icon: Package, badge: summary.value.backend },
+  { value: 'skills', label: t('settingsEx.plugins.tabSkills'), icon: Brain, badge: summary.value.skills },
+])
 </script>
 
 <template>
   <div class="settings-panel plugins-section">
-    <!-- 标签栏 -->
-    <div class="tabs-bar">
-      <button
-        v-for="tab in tabs"
-        :key="tab.id"
-        :class="['tab-btn', { active: activeTab === tab.id }]"
-        @click="activeTab = tab.id"
-      >
-        <component :is="tab.icon" :size="15" />
-        <span>{{ tab.label }}</span>
-        <span class="tab-summary">{{ summary[tab.id] }}</span>
-      </button>
-    </div>
+    <!-- 标签栏：SegmentTabs（lg） -->
+    <SegmentTabs v-model="activeTab" :options="tabOptions" size="lg" />
 
     <!-- 操作栏 -->
     <div class="action-bar">
@@ -470,55 +462,7 @@ const summary = computed(() => ({
   /* layout handled by settings-panel shared class */
 }
 
-.tabs-bar {
-  display: flex;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  border-radius: var(--radius-md);
-  background: var(--workspace-panel);
-  border: 1px solid var(--workspace-border);
-}
-
-.tab-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: none;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.tab-btn:hover {
-  color: var(--text-primary);
-  background: var(--workspace-hover);
-}
-
-.tab-btn.active {
-  background: var(--workspace-card);
-  color: var(--lumi-primary);
-  box-shadow: var(--shadow-xs);
-}
-
-.tab-summary {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-  padding: 1px 6px;
-  border-radius: var(--radius-full);
-  background: var(--surface-hover);
-}
-
-.tab-btn.active .tab-summary {
-  color: var(--lumi-primary);
-  background: var(--lumi-primary-light, rgba(99, 102, 241, 0.1));
-}
+/* 标签栏 → SegmentTabs（lg），样式由全局组件承担 */
 
 .action-bar {
   display: flex;
@@ -620,7 +564,7 @@ const summary = computed(() => ({
 .plugin-id {
   font-size: var(--text-2xs);
   color: var(--text-muted);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
 }
 
 .plugin-desc {
@@ -642,8 +586,8 @@ const summary = computed(() => ({
 }
 
 .status-badge.active {
-  background: var(--lumi-success-light, rgba(34, 197, 94, 0.12));
-  color: var(--lumi-success-hover, rgb(22, 163, 74));
+  background: var(--lumi-success-light);
+  color: var(--lumi-success-hover);
 }
 
 .status-badge.inactive {
@@ -652,13 +596,13 @@ const summary = computed(() => ({
 }
 
 .status-badge.error {
-  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.12));
-  color: var(--lumi-danger-hover, rgb(220, 38, 38));
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger-hover);
 }
 
 .status-badge.discovered {
-  background: var(--lumi-info-light, rgba(59, 130, 246, 0.12));
-  color: var(--lumi-info-hover, rgb(37, 99, 235));
+  background: var(--lumi-info-light);
+  color: var(--lumi-info-hover);
 }
 
 .error-message {
@@ -667,8 +611,8 @@ const summary = computed(() => ({
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.08));
-  color: var(--lumi-danger-hover, rgb(220, 38, 38));
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger-hover);
   font-size: var(--text-xs);
 }
 
@@ -696,7 +640,7 @@ const summary = computed(() => ({
   font-size: var(--text-2xs);
   padding: 1px 6px;
   border-radius: var(--radius-xs);
-  background: var(--lumi-primary-light, rgba(99, 102, 241, 0.1));
+  background: var(--lumi-primary-light);
   color: var(--lumi-primary);
 }
 

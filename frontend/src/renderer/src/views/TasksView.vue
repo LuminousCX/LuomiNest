@@ -657,7 +657,7 @@ const timeSlotOptions = [
   gap: var(--space-4);
   margin-bottom: var(--space-5);
   padding-bottom: var(--space-5);
-  border-bottom: 1px solid var(--divider-soft, var(--workspace-border));
+  border-bottom: 1px solid var(--divider-soft);
 }
 
 .tasks-page-header__left {

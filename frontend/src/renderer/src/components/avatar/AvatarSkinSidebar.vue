@@ -614,8 +614,8 @@ const hiddenListExpanded = ref(false)
 }
 
 .skin-tag.source-tag.imported {
-  background: var(--task-amber-soft, var(--overlay-subtle));
-  color: var(--lumi-amber-dark, var(--text-muted));
+  background: var(--lumi-amber-soft);
+  color: var(--lumi-amber-dark);
 }
 
 .skin-caps {

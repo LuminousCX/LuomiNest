@@ -96,25 +96,20 @@ const emit = defineEmits<{
   width: 260px;
   flex-shrink: 0;
   padding: var(--space-4);
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
-  background: var(--workspace-card, var(--surface));
+  background: var(--workspace-card);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--workspace-border, var(--border));
+  border: 1px solid var(--workspace-border);
   box-shadow: var(--shadow-sm);
-  align-self: flex-start;
-  position: sticky;
-  top: 0;
-  max-height: 100%;
 }
 
 .stats-overview {
   padding: var(--space-4);
   border-radius: var(--radius-lg);
-  background: var(--bg-secondary, var(--bg));
-  border: 1px solid var(--border-light, var(--border));
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
 }
 
 .stats-header {
@@ -196,8 +191,8 @@ const emit = defineEmits<{
 .nav-card {
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
-  border: 1px solid var(--border-light, var(--border));
-  background: var(--bg-secondary, var(--bg));
+  border: 1px solid var(--border-light);
+  background: var(--bg-secondary);
   cursor: pointer;
   transition: all var(--transition-normal);
 }
@@ -268,7 +263,6 @@ const emit = defineEmits<{
     padding: var(--space-4);
     border-right: none;
     border-bottom: 1px solid var(--border);
-    overflow-y: visible;
     flex-wrap: wrap;
     flex-direction: row;
   }

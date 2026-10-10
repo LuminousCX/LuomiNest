@@ -126,8 +126,8 @@ const emitResolve = (decision: 'once' | 'session' | 'full' | 'deny'): void => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--lumi-primary-soft, rgba(99, 102, 241, 0.12));
-  color: var(--lumi-primary, #6366f1);
+  background: var(--lumi-primary-soft);
+  color: var(--lumi-primary);
   flex-shrink: 0;
 }
 .perm-meta {
@@ -139,31 +139,31 @@ const emitResolve = (decision: 'once' | 'session' | 'full' | 'deny'): void => {
 .perm-tool {
   font-size: 13px;
   font-weight: 600;
-  color: var(--lumi-text-primary, #1f2937);
+  color: var(--text-primary);
 }
 .perm-countdown {
   font-size: 12px;
-  color: var(--lumi-text-secondary, #6b7280);
+  color: var(--text-secondary);
 }
 .perm-command {
   margin: 0;
   padding: 12px 14px;
   border-radius: 10px;
-  background: var(--lumi-code-bg, #0f172a0d);
-  border: 1px solid var(--lumi-border, #e5e7eb);
-  font-family: var(--lumi-font-mono, 'JetBrains Mono', Consolas, monospace);
+  background: color-mix(in srgb, var(--text) 5%, transparent);
+  border: 1px solid var(--border-light);
+  font-family: var(--font-mono);
   font-size: 12.5px;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 180px;
   overflow: auto;
-  color: var(--lumi-text-primary, #1f2937);
+  color: var(--text-primary);
 }
 .perm-hint {
   margin: 0;
   font-size: 12.5px;
-  color: var(--lumi-text-secondary, #6b7280);
+  color: var(--text-secondary);
   line-height: 1.6;
 }
 .perm-actions {
@@ -174,7 +174,7 @@ const emitResolve = (decision: 'once' | 'session' | 'full' | 'deny'): void => {
 .perm-footnote {
   margin: 0;
   font-size: 11.5px;
-  color: var(--lumi-text-tertiary, #9ca3af);
+  color: var(--text-muted);
   line-height: 1.5;
 }
 </style>

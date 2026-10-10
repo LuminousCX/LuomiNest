@@ -3,6 +3,7 @@
     "skip": "Skip",
     "delete": "Delete",
     "empty": "No data yet",
+    "segmentedControl": "Segmented control",
     "time": {
       "justNow": "just now",
       "minutesAgo": "{n} min ago",

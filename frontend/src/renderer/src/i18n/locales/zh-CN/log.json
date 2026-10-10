@@ -1,11 +1,5 @@
 {
   "log": {
-    "nav": {
-      "title": "应用日志"
-    },
-    "route": {
-      "title": "应用日志 - LuomiNest"
-    },
     "title": "应用日志",
     "desc": "前端 / 主进程 / 后端 / 平台日志统一查看与导出",
     "source": {

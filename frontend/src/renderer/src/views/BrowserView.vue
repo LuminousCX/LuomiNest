@@ -378,7 +378,7 @@ onUnmounted(() => {
   justify-content: center;
   gap: var(--space-1);
   color: var(--text-muted);
-  font-size: var(--text-xs, 12px);
+  font-size: var(--text-xs);
   min-width: 64px;
 }
 
@@ -389,7 +389,7 @@ onUnmounted(() => {
   min-width: 20px;
   height: 18px;
   padding: 0 var(--space-1);
-  border-radius: var(--radius-full, 999px);
+  border-radius: var(--radius-full);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: 11px;
@@ -438,7 +438,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: var(--z-modal, 1000);
+  z-index: var(--z-modal);
   animation: browser-view-fade-in var(--duration-normal) var(--ease-in-out);
 }
 
@@ -538,7 +538,7 @@ onUnmounted(() => {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
   font-size: var(--text-sm);
-  z-index: var(--z-modal, 1000);
+  z-index: var(--z-modal);
 }
 
 .toast-fade-enter-active,

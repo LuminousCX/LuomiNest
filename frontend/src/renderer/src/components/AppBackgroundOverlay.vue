@@ -116,17 +116,17 @@ watch(image, applyBackgroundToOverlay, { immediate: true })
 
 /* 基础层：主题底色，始终存在，避免切换时闪白/黑 */
 .app-bg-overlay__base {
-  background: var(--app-bg-base, var(--bg));
+  background: var(--app-bg-base);
 }
 
 /* 媒体层：背景图/渐变/图案 */
 .app-bg-overlay__media {
   opacity: 0;
-  background: var(--lumi-bg-media, none);
+  background: var(--lumi-bg-media);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  filter: blur(var(--app-bg-blur, 0px));
+  filter: blur(var(--app-bg-blur));
   transform: scale(var(--app-bg-scale, 1));
   image-rendering: -webkit-optimize-contrast;
   image-rendering: crisp-edges;
@@ -141,7 +141,7 @@ watch(image, applyBackgroundToOverlay, { immediate: true })
 }
 
 .app-bg-overlay--active .app-bg-overlay__media {
-  opacity: var(--app-bg-opacity, 1);
+  opacity: var(--app-bg-opacity);
 }
 
 .app-bg-overlay--fit-cover .app-bg-overlay__media {
@@ -169,17 +169,17 @@ watch(image, applyBackgroundToOverlay, { immediate: true })
 /* 环境光层：品牌色/主题色柔光，参考 Cyrene-Agent */
 .app-bg-overlay__ambient {
   opacity: 0;
-  background: var(--app-bg-ambient, transparent);
+  background: var(--app-bg-ambient);
 }
 
 .app-bg-overlay--active .app-bg-overlay__ambient {
-  opacity: var(--lumi-ambient-intensity, 0.3);
+  opacity: var(--lumi-ambient-intensity);
 }
 
 /* 色彩着色层：统一不同图片色调，提升文字可读性 */
 .app-bg-overlay__tint {
   opacity: 0;
-  background: var(--app-bg-overlay-tint, transparent);
+  background: var(--app-bg-overlay-tint);
 }
 
 .app-bg-overlay--active .app-bg-overlay__tint {
@@ -189,7 +189,7 @@ watch(image, applyBackgroundToOverlay, { immediate: true })
 /* 暗角层：径向暗角，增强视觉焦点 */
 .app-bg-overlay__vignette {
   opacity: 0;
-  background: var(--app-bg-vignette, transparent);
+  background: var(--app-bg-vignette);
 }
 
 .app-bg-overlay--active .app-bg-overlay__vignette {

@@ -33,6 +33,7 @@ import { useChatTrashStore } from './chat-trash'
 import { enrichWithSearchResults, enrichWithUrlContent } from '../utils/chatSearchHelpers'
 import { generateId } from '../utils/id'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { toErrorMessage } from '@/utils/error'
 import { MAIN_AGENT_ID } from '../constants'
 
 const logger = createLuomiNestRendererLogger('Chat')
@@ -217,9 +218,16 @@ export const useChatStore = defineStore('chat', () => {
       const mappedMessages = (conv.messages || []).map(mapApiMessage)
       convMessages.value = { ...convMessages.value, [convId]: mappedMessages }
     } catch (error) {
+      // 打开对话失败时界面表现为"空对话"，用户会误以为记录丢失，需说明原因与出路
+      logger.warn('Failed to load conversation:', error)
       if (!convMessages.value[convId]) {
         convMessages.value = { ...convMessages.value, [convId]: [] }
       }
+      toast.error(i18n.global.t('toast.chat.loadConversationFailed'), {
+        description: i18n.global.t('toast.chat.loadConversationFailedDesc', {
+          message: toErrorMessage(error),
+        }),
+      })
     } finally {
       const newLoading = { ...convLoading.value }
       delete newLoading[convId]
@@ -745,7 +753,13 @@ export const useChatStore = defineStore('chat', () => {
         current_version: versionIndex,
       })
     } catch (error) {
+      // 本地已切换但未持久化，重进对话会跳回原版本；warning 级提醒即可，不阻塞操作
       logger.warn('Failed to persist version switch:', error)
+      toast.warning(i18n.global.t('toast.chat.versionPersistFailed'), {
+        description: i18n.global.t('toast.chat.versionPersistFailedDesc', {
+          message: toErrorMessage(error),
+        }),
+      })
     }
   }
 

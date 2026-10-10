@@ -177,10 +177,6 @@
    ------------------------------------------------------- */
 
 /* -------------------------------------------------------
-   Hero 卡片
-   ------------------------------------------------------- */
-
-/* -------------------------------------------------------
    图标容器
    ------------------------------------------------------- */
 .lumi-settings-icon-wrap {
@@ -237,7 +233,7 @@
 .settings-card {
   position: relative;
   background: var(--workspace-card);
-  border: 1px solid var(--border-light, var(--workspace-border));
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-xl);
   overflow: hidden;
   box-shadow: var(--shadow-xs);
@@ -250,7 +246,7 @@
 
 .settings-card:hover {
   box-shadow: var(--shadow-sm);
-  border-color: color-mix(in srgb, var(--lumi-primary) 12%, var(--border-light, var(--workspace-border)));
+  border-color: color-mix(in srgb, var(--lumi-primary) 12%, var(--border-light));
 }
 
 .settings-card--dimmed {
@@ -326,8 +322,8 @@
   font-family: var(--font-sans);
   font-size: var(--text-md);
   color: var(--text-primary);
-  background: var(--bg-secondary, var(--workspace-panel));
-  border: 1px solid var(--border-light, var(--workspace-border));
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   outline: none;
   transition:
@@ -346,7 +342,7 @@
 .settings-form-select:focus,
 .settings-form-textarea:focus {
   border-color: var(--lumi-brand);
-  box-shadow: var(--input-focus-ring, 0 0 0 3px var(--lumi-brand-light));
+  box-shadow: var(--input-focus-ring);
   background: var(--surface);
 }
 
@@ -502,7 +498,7 @@
    卡片强调变体
    ------------------------------------------------------- */
 .settings-card--accent {
-  border-color: color-mix(in srgb, var(--lumi-primary) 24%, var(--border-light, var(--workspace-border)));
+  border-color: color-mix(in srgb, var(--lumi-primary) 24%, var(--border-light));
 }
 
 .settings-card--accent::before {
@@ -644,25 +640,8 @@
     padding: var(--space-1) var(--space-2);
   }
 
-  .lumi-settings-hero {
-    padding: var(--space-5);
-  }
-
-  .lumi-settings-hero__title {
-    font-size: var(--text-2xl);
-  }
-
-  .lumi-settings-hero__stats {
-    gap: var(--space-3);
-  }
-
   .settings-card__body {
     padding: var(--space-3);
-  }
-
-  .settings-form-row--horizontal {
-    flex-direction: column;
-    align-items: stretch;
   }
 
   .settings-data-row {

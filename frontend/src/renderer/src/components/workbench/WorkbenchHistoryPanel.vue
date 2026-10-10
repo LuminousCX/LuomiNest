@@ -351,8 +351,8 @@ button:focus-visible {
 }
 
 .mode-tag-standard {
-  color: var(--primary-color, var(--text-link));
-  background: var(--primary-bg, rgba(0, 122, 255, 0.1));
+  color: var(--lumi-primary);
+  background: var(--lumi-primary-light);
 }
 
 .history-item-time {

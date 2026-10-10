@@ -304,6 +304,8 @@
     "thinkingProcess": "思考プロセス",
     "thinkingCollapsed": "思考プロセス（折りたたみ済み）",
     "thinkingDone": "思考完了",
+    "thinkingLabel": "考え中…",
+    "thoughtFor": "思考時間",
     "interrupted": "中断されました",
     "modeNormal": "通常",
     "modePro": "プロ",

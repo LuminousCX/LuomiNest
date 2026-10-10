@@ -304,6 +304,8 @@
     "thinkingProcess": "Thinking process",
     "thinkingCollapsed": "Thinking process (collapsed)",
     "thinkingDone": "Thinking done",
+    "thinkingLabel": "Thinking…",
+    "thoughtFor": "Thought for",
     "interrupted": "Interrupted",
     "modeNormal": "Normal",
     "modePro": "Pro",

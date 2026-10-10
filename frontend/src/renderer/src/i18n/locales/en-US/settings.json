@@ -975,7 +975,8 @@
         "fabric": "An AI prompt orchestration framework that boosts AI task efficiency with 170+ patterns and supports multiple providers.",
         "hyperledgerFabric": "An enterprise-grade permissioned blockchain platform with an execute-order-validate architecture, pluggable consensus, and channel privacy isolation.",
         "stagehand": "An AI-driven browser automation framework supporting natural-language browser control, structured data extraction, and multi-mode AI Agents.",
-        "loliMeow": "A WordPress blog theme that inspired this page's background decoration and card visual style."
+        "loliMeow": "A WordPress blog theme that inspired this page's background decoration and card visual style.",
+        "vueBits": "MIT License · Source of UI components such as the thinking animation, toasts and segmented tabs (ThoughtLine / ToastContainer / SegmentTabs / BranchedMenu are all ported from this project)."
       },
       "special": {
         "description": "Live2D Cubism SDK for creating and rendering Live2D models. This project uses Cubism Core (proprietary license) and Cubism Components (open-source license).",

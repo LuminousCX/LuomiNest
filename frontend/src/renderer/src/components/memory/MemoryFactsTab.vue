@@ -5,7 +5,7 @@ import SearchInput from '../common/SearchInput.vue'
 import { categoryLabel, CATEGORY_COLORS, FACT_CATEGORIES } from '../../stores/memory'
 import type { FactItem, FactCategory } from '../../stores/memory'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 interface Props {
   factCount: number
@@ -48,7 +48,8 @@ const emit = defineEmits<{
 function formatExpiresAt(iso: string): string {
   try {
     const d = new Date(iso)
-    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+    // 跟随界面语言格式化本地日期（原硬编码 'zh-CN'，en-US 下会显示中文日期）
+    return d.toLocaleDateString(locale.value, { month: 'short', day: 'numeric' })
   } catch {
     return iso
   }
@@ -432,12 +433,12 @@ function formatExpiresAt(iso: string): string {
 }
 
 .fact-badge.pinned {
-  background: color-mix(in srgb, var(--lumi-warning, #f59e0b) 14%, transparent);
-  color: var(--lumi-warning, #b45309);
+  background: color-mix(in srgb, var(--lumi-warning) 14%, transparent);
+  color: var(--lumi-warning);
 }
 
 .fact-btn.pinned-active {
-  color: var(--lumi-warning, #b45309);
+  color: var(--lumi-warning);
 }
 
 .fact-badge.expires {
@@ -446,21 +447,21 @@ function formatExpiresAt(iso: string): string {
 }
 
 .fact-badge.scope-private {
-  background: color-mix(in srgb, var(--lumi-danger, #ef4444) 14%, transparent);
-  color: var(--lumi-danger, #ef4444);
-  border: 1px solid color-mix(in srgb, var(--lumi-danger, #ef4444) 28%, transparent);
+  background: color-mix(in srgb, var(--lumi-danger) 14%, transparent);
+  color: var(--lumi-danger);
+  border: 1px solid color-mix(in srgb, var(--lumi-danger) 28%, transparent);
 }
 
 .fact-badge.scope-group {
-  background: color-mix(in srgb, var(--task-sky, #0ea5e9) 14%, transparent);
-  color: var(--task-sky, #0ea5e9);
-  border: 1px solid color-mix(in srgb, var(--task-sky, #0ea5e9) 28%, transparent);
+  background: color-mix(in srgb, var(--task-sky) 14%, transparent);
+  color: var(--task-sky);
+  border: 1px solid color-mix(in srgb, var(--task-sky) 28%, transparent);
 }
 
 .fact-badge.scope-global {
-  background: color-mix(in srgb, var(--lumi-success, #10b981) 14%, transparent);
-  color: var(--lumi-success, #10b981);
-  border: 1px solid color-mix(in srgb, var(--lumi-success, #10b981) 28%, transparent);
+  background: color-mix(in srgb, var(--lumi-success) 14%, transparent);
+  color: var(--lumi-success);
+  border: 1px solid color-mix(in srgb, var(--lumi-success) 28%, transparent);
 }
 
 .add-fact-scope-select {

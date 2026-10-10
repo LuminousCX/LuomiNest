@@ -203,9 +203,9 @@ onUnmounted(() => {
   gap: 12px;
   width: 100%;
   padding: 8px 12px;
-  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+  background: var(--surface-hover);
   border-radius: 8px;
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border-light);
 }
 
 .header-icon {
@@ -214,7 +214,8 @@ onUnmounted(() => {
   justify-content: center;
   width: 42px;
   height: 42px;
-  background: rgba(7, 193, 96, 0.12);
+  /* 微信品牌绿锚点 */
+  background: color-mix(in srgb, #07C160 12%, transparent);
   border-radius: 8px;
   flex-shrink: 0;
 }
@@ -223,13 +224,13 @@ onUnmounted(() => {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--text-normal, #e0e0e0);
+  color: var(--text);
 }
 
 .header-text p {
   margin: 2px 0 0;
   font-size: 12px;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
 }
 
 .qr-card {
@@ -239,6 +240,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* 二维码识别要求固定白底 */
   background: white;
   border-radius: 12px;
   padding: 12px;
@@ -252,6 +254,7 @@ onUnmounted(() => {
   align-items: center;
   gap: 10px;
   font-size: 12px;
+  /* QR 卡固定白底，文字需恒为深色 */
   color: #555;
   text-align: center;
 }
@@ -286,7 +289,7 @@ onUnmounted(() => {
 }
 
 .qr-overlay.scanned {
-  background: rgba(18, 150, 219, 0.88);
+  background: color-mix(in srgb, var(--lumi-brand) 88%, transparent);
 }
 
 .qr-overlay.success {
@@ -308,26 +311,26 @@ onUnmounted(() => {
   padding: 6px 14px;
   border-radius: 20px;
   font-size: 12px;
-  background: var(--bg-hover, rgba(255, 255, 255, 0.06));
-  color: var(--text-normal, #ccc);
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+  background: var(--surface-hover);
+  color: var(--text);
+  border: 1px solid var(--border-light);
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--text-muted, #888);
+  background: var(--text-muted);
 }
 
 .status-pill.waiting_scan .status-dot {
-  background: #1890ff;
-  box-shadow: 0 0 6px #1890ff;
+  background: var(--lumi-info);
+  box-shadow: 0 0 6px var(--lumi-info);
 }
 
 .status-pill.scanned .status-dot {
-  background: #fa8c16;
-  box-shadow: 0 0 6px #fa8c16;
+  background: var(--lumi-warning);
+  box-shadow: 0 0 6px var(--lumi-warning);
 }
 
 .status-pill.logged_in .status-dot {
@@ -336,7 +339,7 @@ onUnmounted(() => {
 }
 
 .status-pill.expired .status-dot {
-  background: #f5222d;
+  background: var(--lumi-danger);
 }
 
 .qr-actions {
@@ -344,7 +347,7 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 10px;
   width: 100%;
-  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-top: 1px solid var(--border-light);
   padding-top: 12px;
 }
 </style>

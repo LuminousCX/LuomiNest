@@ -754,7 +754,7 @@ onMounted(() => {
 }
 
 .pi-icon.game {
-  background: var(--task-amber-soft);
+  background: var(--lumi-amber-soft);
   color: var(--lumi-amber);
 }
 
@@ -927,7 +927,7 @@ onMounted(() => {
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-3);
-  background: var(--surface, var(--workspace-panel));
+  background: var(--surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -962,7 +962,7 @@ onMounted(() => {
 }
 
 .adapter-type-icon.game {
-  background: var(--task-amber-soft);
+  background: var(--lumi-amber-soft);
   color: var(--lumi-amber);
 }
 
@@ -1009,7 +1009,7 @@ onMounted(() => {
 }
 
 .adapter-type-cat.game {
-  background: var(--task-amber-soft);
+  background: var(--lumi-amber-soft);
   color: var(--lumi-amber);
 }
 
@@ -1028,7 +1028,7 @@ onMounted(() => {
 .platform-form-input {
   width: 100%;
   padding: var(--space-2) var(--space-3);
-  background: var(--surface, var(--workspace-panel));
+  background: var(--surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   font-size: var(--text-base);
@@ -1045,7 +1045,7 @@ onMounted(() => {
 .platform-form-textarea {
   width: 100%;
   padding: var(--space-2) var(--space-3);
-  background: var(--surface, var(--workspace-panel));
+  background: var(--surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   font-size: var(--text-base);
@@ -1058,20 +1058,6 @@ onMounted(() => {
 .platform-form-textarea:focus {
   outline: none;
   border-color: var(--lumi-primary);
-}
-
-.platform-form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-}
-
-.platform-form-hint {
-  display: block;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  margin-top: var(--space-2);
-  line-height: 1.4;
 }
 
 .platform-config-fields {

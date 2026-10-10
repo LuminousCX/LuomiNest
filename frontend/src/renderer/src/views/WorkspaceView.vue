@@ -218,14 +218,14 @@ const {
 } = convList
 
 const {
-  inputText, selectedSkillIds, showReasoning,
+  inputText, selectedSkillIds,
   messages, isStreaming, isLoadingCurrentConv, isBackendReady, currentConvId,
   currentModel, currentProviderLogo, hasProvider,
   canSend, sendMessage, cancelStreaming,
   chatMode, chatModeOptions, selectChatMode,
   contextUsage, contextTokens, contextPercent, currentSuggestionMessageId,
   handleSwitchVersion, handleSuggestionClick, handleRegenerate,
-  handleDeleteMessage, handleGoBackToStart, handleQuoteMessage, toggleReasoning,
+  handleDeleteMessage, handleGoBackToStart, handleQuoteMessage,
 } = messages_
 
 // —— 外部事件触发器 ——
@@ -365,7 +365,6 @@ onBeforeUnmount(() => {
         :context-percent="contextPercent"
         :context-tokens="contextTokens"
         :copied-id="copiedId"
-        :show-reasoning="showReasoning"
         :current-suggestion-message-id="currentSuggestionMessageId"
         :is-tts-speaking="isTTSSpeaking"
         :tts-speaking-msg-id="ttsSpeakingMsgId"
@@ -373,7 +372,6 @@ onBeforeUnmount(() => {
         :selected-skill-ids="selectedSkillIds"
         @check-backend="chatStore.checkBackend()"
         @go-settings="router.push('/settings/ai-model')"
-        @toggle-reasoning="toggleReasoning"
         @copy-message="copyMessage"
         @quote-message="handleQuoteMessage"
         @tts-speak="ttsSpeak"

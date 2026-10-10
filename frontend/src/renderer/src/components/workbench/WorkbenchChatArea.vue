@@ -10,7 +10,6 @@ import {
   ChevronDown,
   Bot,
   Sparkles,
-  Wand2,
   Wrench,
   Terminal,
   CheckCircle2,
@@ -28,6 +27,7 @@ import {
 } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
 import LumiEmptyState from '../common/LumiEmptyState.vue'
+import ThoughtLine from '../common/ThoughtLine.vue'
 import WorkflowCreatedCard from '../chat/WorkflowCreatedCard.vue'
 import { renderMarkdown } from '../../utils/markdown'
 import { useClipboard } from '../../composables/useClipboard'
@@ -54,7 +54,6 @@ const props = defineProps<{
   expandedToolOutputs: Record<string, boolean>
   expandedSubagents: Record<string, boolean>
   expandedSubagentTools: Record<string, boolean>
-  showReasoning: Record<string, boolean>
   workflowPendingPlan: WorkflowPendingPlan | null
   confirmationFeedback: string
   isNearBottom: boolean
@@ -81,7 +80,6 @@ watch(
 )
 
 const emit = defineEmits<{
-  'toggle-reasoning': [msgId: string]
   'copy-message': [msgId: string, content: string]
   regenerate: [msgId: string]
   'toggle-tool-output': [id: string]
@@ -143,9 +141,9 @@ const contextRingDashoffset = computed(() => {
 // 根据使用率返回颜色变量名（绿/黄/红 三档警示）
 const contextRingColorVar = computed(() => {
   const p = props.contextPercent
-  if (p >= 90) return 'var(--lumi-danger, #ef4444)'
-  if (p >= 70) return 'var(--lumi-warning, #f59e0b)'
-  return 'var(--lumi-success, #10b981)'
+  if (p >= 90) return 'var(--lumi-danger)'
+  if (p >= 70) return 'var(--lumi-warning)'
+  return 'var(--lumi-success)'
 })
 
 // isNearBottom/showScrollToBottomBtn 的权威来源是父级（props 只读）：
@@ -167,6 +165,27 @@ const { getMetrics, scrollToBottom, setupResizeObserver, teardownResizeObserver,
 })
 
 const isLastAssistantMessage = (msgId: string) => checkLastAssistantMessage(props.messages, msgId)
+
+// 标记本会话内"亲眼见过流式思考"的消息 id：这类消息 settle 后展示"思考了 X.Xs"；
+// 历史加载的思考没有计时数据，只展示"思考完成"、不带计时（ThoughtLine 内部 collapse 自管）
+const liveThinking = ref<Record<string, boolean>>({})
+watch(
+  () => {
+    const last = props.messages[props.messages.length - 1]
+    return last && last.role === 'assistant' && !last.done && !last.content ? last.id : null
+  },
+  (id) => {
+    if (id && !liveThinking.value[id]) liveThinking.value = { ...liveThinking.value, [id]: true }
+  },
+  { immediate: true }
+)
+
+// reasoning 原文 → 思考步骤列表：按行拆分并剥离行首 markdown 修饰
+const reasoningSteps = (msg: ChatMessage): string[] =>
+  (msg.reasoningContent || '')
+    .split('\n')
+    .map((line) => line.trim().replace(/^[-*>#]+\s*/, '').replace(/\*\*/g, '').trim())
+    .filter(Boolean)
 
 const handleMessagesScroll = () => {
   const metrics = handleScroll()
@@ -240,25 +259,16 @@ defineExpose({
               </div>
               <div
                 v-if="msg.role === 'assistant' && (msg.reasoningContent !== undefined || (!msg.done && msg.id === messages[messages.length - 1].id && !msg.content))"
-                class="reasoning-section lumi-card"
+                class="thought-section"
               >
-                <div class="reasoning-header" @click="emit('toggle-reasoning', msg.id)">
-                  <Loader2 v-if="!msg.done && !msg.content && !msg.reasoningContent" :size="12" class="spin-animation" />
-                  <Wand2 v-else :size="12" />
-                  <span>
-                    <template v-if="!msg.done && !msg.content && !msg.reasoningContent">{{ t('chat.waitingModel') }}</template>
-                    <template v-else-if="!msg.done && !msg.content && msg.reasoningContent">{{ t('chat.thinking') }}</template>
-                    <template v-else-if="msg.reasoningContent && msg.reasoningContent.length > 0">{{ showReasoning[msg.id] ? t('chat.thinkingProcess') : t('chat.thinkingCollapsed') }}</template>
-                    <template v-else>{{ t('chat.thinkingDone') }}</template>
-                  </span>
-                  <ChevronDown :size="12" class="reasoning-chevron lumi-chat-reasoning-chevron" :class="{ rotated: !showReasoning[msg.id] }" />
-                </div>
-                <div
-                  v-show="showReasoning[msg.id] !== false"
-                  class="reasoning-content reasoning-markdown"
-                >
-                  <div v-html="renderMarkdown(msg.reasoningContent || '')"></div>
-                </div>
+                <ThoughtLine
+                  :working="!msg.done && !msg.content"
+                  :label="!msg.done && !msg.content && !msg.reasoningContent ? t('chat.waitingModel') : t('chat.thinkingLabel')"
+                  :done-label="liveThinking[msg.id] ? t('chat.thoughtFor') : t('chat.thinkingDone')"
+                  :show-timer="!!liveThinking[msg.id]"
+                  :steps="reasoningSteps(msg)"
+                  :font-size="13"
+                />
               </div>
 
               <div
@@ -761,7 +771,7 @@ button:focus-visible {
 }
 
 .load-more-btn {
-  color: var(--lumi-text-secondary);
+  color: var(--text-secondary);
   font-size: 0.8rem;
   gap: var(--space-1);
   opacity: 0.7;
@@ -806,38 +816,8 @@ button:focus-visible {
   max-width: calc(100% - 44px);
 }
 
-.reasoning-section {
+.thought-section {
   margin-bottom: var(--space-2);
-  background: var(--surface-hover);
-  overflow: hidden;
-}
-
-.reasoning-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  cursor: pointer;
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  transition: background-color var(--transition-fast);
-}
-
-.reasoning-header:hover {
-  background: var(--surface-active);
-}
-
-.reasoning-chevron {
-  margin-left: auto;
-  transition: transform var(--transition-fast);
-}
-
-.reasoning-content {
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  max-height: 240px;
-  overflow-y: auto;
 }
 
 .tool-activities-section {
@@ -1769,7 +1749,7 @@ button:focus-visible {
 }
 
 .context-ring-bg {
-  stroke: var(--border-light, rgba(0, 0, 0, 0.08));
+  stroke: var(--border-light);
 }
 
 .context-ring-progress {
@@ -1779,7 +1759,7 @@ button:focus-visible {
 .context-ring-text {
   font-size: 7px;
   font-weight: 600;
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   user-select: none;
   pointer-events: none;
   dominant-baseline: central;
@@ -1795,7 +1775,7 @@ button:focus-visible {
 }
 
 .compress-btn:hover:not(:disabled) {
-  color: var(--lumi-primary-hover, var(--lumi-primary));
+  color: var(--lumi-primary-hover);
   background: var(--lumi-primary-light);
 }
 

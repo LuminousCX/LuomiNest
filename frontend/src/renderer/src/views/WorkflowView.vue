@@ -295,7 +295,7 @@ const confirmDeleteTemplate = async (): Promise<void> => {
   font-weight: 500;
   border: none;
   cursor: pointer;
-  transition: all var(--transition-fast, 0.15s ease-in-out);
+  transition: all var(--transition-fast);
   background: var(--surface-hover);
   color: var(--text-muted);
 }
@@ -307,6 +307,7 @@ const confirmDeleteTemplate = async (): Promise<void> => {
 
 .workflow-tab.active {
   background: var(--lumi-brand);
+  /* 品牌色底上文字恒为白色（深色模式下 --text-inverse 会翻黑，故不用） */
   color: #fff;
 }
 
@@ -331,7 +332,7 @@ const confirmDeleteTemplate = async (): Promise<void> => {
   height: 100%;
   background: var(--lumi-success);
   border-radius: var(--radius-full);
-  transition: width var(--transition-normal, 0.3s ease-in-out);
+  transition: width var(--transition-normal);
 }
 
 .progress-text {
@@ -376,7 +377,7 @@ const confirmDeleteTemplate = async (): Promise<void> => {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-  transition: all var(--transition-fast, 0.15s ease-in-out);
+  transition: all var(--transition-fast);
 }
 
 .wf-node:hover {
@@ -479,13 +480,13 @@ const confirmDeleteTemplate = async (): Promise<void> => {
 /* 节点详情面板过渡 */
 .panel-slide-right-enter-active,
 .panel-slide-right-leave-active {
-  transition: all var(--transition-normal, 0.25s ease-in-out);
+  transition: all var(--transition-normal);
 }
 
 .panel-slide-right-enter-from,
 .panel-slide-right-leave-to {
   opacity: 0;
-  transform: translateX(var(--space-5, 20px));
+  transform: translateX(var(--space-5));
   width: 0;
 }
 

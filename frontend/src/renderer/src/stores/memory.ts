@@ -1,7 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useApi } from '../composables/useApi'
+import { useToast } from '../composables/useToast'
 import { i18n } from '../i18n'
+import { createLuomiNestRendererLogger } from '../utils/logger'
+import { toErrorMessage } from '@/utils/error'
 
 export interface MemoryProfile {
   name: string
@@ -105,8 +108,11 @@ export const SCOPE_LABELS: Record<string, string> = {
   group: '群聊公开',
 }
 
+const logger = createLuomiNestRendererLogger('Memory')
+
 export const useMemoryStore = defineStore('memory', () => {
   const { apiGet, apiPost, apiPut, apiPatch, apiDelete } = useApi()
+  const toast = useToast()
 
   const currentTrack = ref<MemoryTrackType>('owner')
   const currentUserKey = ref<string>('')
@@ -226,14 +232,26 @@ export const useMemoryStore = defineStore('memory', () => {
     try {
       await apiDelete(`/memory/facts/${factId}${queryForCurrentTrack()}`)
       facts.value = facts.value.filter(f => f.id !== factId)
-    } catch { /* ignore */ }
+    } catch (e) {
+      // 用户主动删除却静默失败会让人以为已删除，必须明确告知 + 给出重试建议
+      logger.warn('Failed to remove fact:', e)
+      toast.error(i18n.global.t('toast.memory.deleteFailed'), {
+        description: i18n.global.t('toast.memory.deleteFailedDesc', { message: toErrorMessage(e) }),
+      })
+    }
   }
 
   const toggleFactPin = async (factId: string, pinned: boolean) => {
     try {
       await apiPost(`/memory/facts/${factId}/pin${queryForCurrentTrack()}`, { pinned })
       await fetchMemory()
-    } catch { /* ignore */ }
+    } catch (e) {
+      // 置顶状态不落库，下次刷新会跳回，用户会困惑
+      logger.warn('Failed to toggle fact pin:', e)
+      toast.error(i18n.global.t('toast.memory.pinFailed'), {
+        description: i18n.global.t('toast.memory.pinFailedDesc', { message: toErrorMessage(e) }),
+      })
+    }
   }
 
   const updateFact = async (factId: string, data: {
@@ -246,7 +264,13 @@ export const useMemoryStore = defineStore('memory', () => {
     try {
       await apiPatch(`/memory/facts/${factId}${queryForCurrentTrack()}`, data)
       await fetchMemory()
-    } catch { /* ignore */ }
+    } catch (e) {
+      // 编辑未保存却无反馈，用户会以为已保存成功
+      logger.warn('Failed to update fact:', e)
+      toast.error(i18n.global.t('toast.memory.updateFailed'), {
+        description: i18n.global.t('toast.memory.updateFailedDesc', { message: toErrorMessage(e) }),
+      })
+    }
   }
 
   const fetchKnowledge = async (agentId?: string | null) => {

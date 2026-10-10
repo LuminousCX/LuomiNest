@@ -354,7 +354,7 @@ watch(
   border-radius: var(--radius-sm);
   background: var(--workspace-card);
   color: var(--text-primary);
-  font-family: var(--font-mono, 'Cascadia Mono', Consolas, monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 1.6;
   resize: vertical;
@@ -384,18 +384,18 @@ watch(
 }
 
 .validate-badge.valid {
-  color: var(--lumi-success-hover, rgb(22, 163, 74));
+  color: var(--lumi-success-hover);
 }
 
 .validate-badge.invalid {
-  color: var(--lumi-danger-hover, rgb(220, 38, 38));
+  color: var(--lumi-danger-hover);
 }
 
 .error-list {
   margin: 0;
   padding-left: var(--space-4);
   font-size: var(--text-xs);
-  color: var(--lumi-danger-hover, rgb(220, 38, 38));
+  color: var(--lumi-danger-hover);
 }
 
 .error-message {
@@ -404,8 +404,8 @@ watch(
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.08));
-  color: var(--lumi-danger-hover, rgb(220, 38, 38));
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger-hover);
   font-size: var(--text-xs);
 }
 

@@ -91,7 +91,7 @@ defineEmits<{
   border-radius: var(--radius-sm);
   font-size: var(--text-2xl);
   color: var(--text-muted);
-  transition: all var(--transition-fast, 0.15s ease-in-out);
+  transition: all var(--transition-fast);
 }
 
 .panel-close:hover {
@@ -124,7 +124,7 @@ defineEmits<{
 }
 
 .detail-mono {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   background: var(--surface-hover);
   padding: var(--space-1) var(--space-2);
@@ -133,7 +133,7 @@ defineEmits<{
 
 .detail-desc {
   color: var(--text-secondary);
-  line-height: var(--leading-relaxed, 1.6);
+  line-height: var(--leading-relaxed);
 }
 
 .detail-badge {

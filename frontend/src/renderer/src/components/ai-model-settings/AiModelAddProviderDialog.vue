@@ -647,7 +647,7 @@ watch(() => props.visible, (visible) => {
 }
 
 .test-result.success {
-  color: var(--lumi-success, var(--lumi-success));
+  color: var(--lumi-success);
 }
 
 .test-result.error {

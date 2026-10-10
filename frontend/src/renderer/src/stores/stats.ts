@@ -25,6 +25,8 @@ export interface UsageSummary {
   total_tokens: number
   by_provider: ProviderUsage[]
   by_day: Record<string, number>
+  /** 按天 token 求和（新增，向后兼容，可能缺省） */
+  tokens_by_day?: Record<string, number>
   recent: UsageRecord[]
 }
 
@@ -56,12 +58,47 @@ export interface StatsOverview {
   memory: MemoryStats
 }
 
+/**
+ * 查询窗口：
+ * - { days: n }              最近 n 天
+ * - { start, end }           任意闭区间（'YYYY-MM-DD'）
+ * - {} / undefined           全部
+ */
+export interface StatsRange {
+  days?: number | null
+  start?: string | null
+  end?: string | null
+}
+
+interface DailyUsageResponse {
+  by_day: Record<string, number>
+  tokens_by_day?: Record<string, number>
+}
+
+const normalizeRange = (range?: number | StatsRange): StatsRange | undefined =>
+  typeof range === 'number' ? { days: range } : range
+
+const buildRangeQuery = (range?: StatsRange): string => {
+  if (!range) return ''
+  const parts: string[] = []
+  if (range.days) parts.push(`days=${range.days}`)
+  if (range.start) parts.push(`start_date=${range.start}`)
+  if (range.end) parts.push(`end_date=${range.end}`)
+  return parts.length ? `?${parts.join('&')}` : ''
+}
+
 export const useStatsStore = defineStore('stats', () => {
   const { apiGet } = useApi()
 
   const overview = ref<StatsOverview | null>(null)
   const usageSummary = ref<UsageSummary | null>(null)
+  /** 当前区间的按天调用量（直方图用） */
   const dailyUsage = ref<Record<string, number>>({})
+  /** 当前区间的按天 token（直方图 tooltip 用） */
+  const tokensByDay = ref<Record<string, number>>({})
+  /** 最近一年的按天调用量（活跃度热力图用，与区间选择无关） */
+  const heatmapByDay = ref<Record<string, number>>({})
+  const heatmapTokensByDay = ref<Record<string, number>>({})
   const usageComparison = ref<UsageComparison | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -152,11 +189,14 @@ export const useStatsStore = defineStore('stats', () => {
   const agentsCount = computed(() => overview.value?.agents_count ?? 0)
   const memoryStats = computed(() => overview.value?.memory ?? { user_facts: 0, agent_facts: 0, episodic_events: 0, total_memory_records: 0 })
 
-  async function fetchOverview(days?: number) {
+  async function fetchOverview(range?: number | StatsRange) {
     loading.value = true
     error.value = null
     try {
-      const params = days ? `?days=${days}` : ''
+      // overview 只支持 days 窗口；任意区间/全部时不带参数
+      const normalized = normalizeRange(range)
+      const daysOnly = typeof normalized?.days === 'number' ? normalized.days : undefined
+      const params = daysOnly ? `?days=${daysOnly}` : ''
       overview.value = await apiGet<StatsOverview>(`/stats/overview${params}`)
     } catch (e: unknown) {
       error.value = (e instanceof Error ? e.message : '') || 'Failed to fetch stats overview'
@@ -165,12 +205,12 @@ export const useStatsStore = defineStore('stats', () => {
     }
   }
 
-  async function fetchUsage(days?: number) {
+  async function fetchUsage(range?: number | StatsRange) {
     loading.value = true
     error.value = null
     try {
-      const params = days ? `?days=${days}` : ''
-      usageSummary.value = await apiGet<UsageSummary>(`/stats/usage${params}`)
+      const normalized = normalizeRange(range)
+      usageSummary.value = await apiGet<UsageSummary>(`/stats/usage${buildRangeQuery(normalized)}`)
     } catch (e: unknown) {
       error.value = (e instanceof Error ? e.message : '') || 'Failed to fetch usage stats'
     } finally {
@@ -178,32 +218,54 @@ export const useStatsStore = defineStore('stats', () => {
     }
   }
 
-  async function fetchDailyUsage(days: number = 7) {
+  async function fetchDailyUsage(range?: number | StatsRange) {
     try {
-      const result = await apiGet<{ by_day: Record<string, number> }>(`/stats/usage/daily?days=${days}`)
+      const normalized = normalizeRange(range)
+      const result = await apiGet<DailyUsageResponse>(`/stats/usage/daily${buildRangeQuery(normalized)}`)
       dailyUsage.value = result?.by_day ?? {}
+      tokensByDay.value = result?.tokens_by_day ?? {}
     } catch (e: unknown) {
       dailyUsage.value = {}
+      tokensByDay.value = {}
     }
   }
 
-  async function fetchComparison(days: number = 7) {
+  /** 热力图固定拉取最近一年，不随区间选择变化 */
+  async function fetchHeatmapUsage() {
     try {
-      usageComparison.value = await apiGet<UsageComparison>(`/stats/usage/compare?days=${days}`)
+      const result = await apiGet<DailyUsageResponse>('/stats/usage/daily?days=365')
+      heatmapByDay.value = result?.by_day ?? {}
+      heatmapTokensByDay.value = result?.tokens_by_day ?? {}
+    } catch (e: unknown) {
+      heatmapByDay.value = {}
+      heatmapTokensByDay.value = {}
+    }
+  }
+
+  async function fetchComparison(range?: number | StatsRange) {
+    try {
+      const normalized = normalizeRange(range)
+      // 「全部」没有可比区间
+      if (!normalized || (!normalized.days && !(normalized.start && normalized.end))) {
+        usageComparison.value = null
+        return
+      }
+      usageComparison.value = await apiGet<UsageComparison>(`/stats/usage/compare${buildRangeQuery(normalized)}`)
     } catch (e: unknown) {
       usageComparison.value = null
     }
   }
 
-  async function fetchAll(days?: number) {
+  async function fetchAll(range?: number | StatsRange) {
     loading.value = true
     error.value = null
     try {
       await Promise.all([
-        fetchOverview(days),
-        fetchUsage(days),
-        fetchDailyUsage(days || 7),
-        fetchComparison(days || 7),
+        fetchOverview(range),
+        fetchUsage(range),
+        fetchDailyUsage(range),
+        fetchComparison(range),
+        fetchHeatmapUsage(),
       ])
     } finally {
       loading.value = false
@@ -214,6 +276,9 @@ export const useStatsStore = defineStore('stats', () => {
     overview,
     usageSummary,
     dailyUsage,
+    tokensByDay,
+    heatmapByDay,
+    heatmapTokensByDay,
     usageComparison,
     loading,
     error,
@@ -236,6 +301,7 @@ export const useStatsStore = defineStore('stats', () => {
     fetchOverview,
     fetchUsage,
     fetchDailyUsage,
+    fetchHeatmapUsage,
     fetchComparison,
     fetchAll,
   }

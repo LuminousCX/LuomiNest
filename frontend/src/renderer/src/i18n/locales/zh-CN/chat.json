@@ -304,6 +304,8 @@
     "thinkingProcess": "思考过程",
     "thinkingCollapsed": "思考过程（已折叠）",
     "thinkingDone": "思考完成",
+    "thinkingLabel": "思考中…",
+    "thoughtFor": "思考了",
     "interrupted": "已中断",
     "modeNormal": "普通",
     "modePro": "专业",

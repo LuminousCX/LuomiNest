@@ -654,13 +654,13 @@ const getRegistryLatencyClass = (source: RegistrySource) => {
 }
 
 .registry-latency-badge.latency-slow {
-  background: var(--lumi-amber-light);
+  background: var(--lumi-amber-soft);
   color: var(--lumi-amber);
 }
 
 .registry-latency-badge.latency-unavailable,
 .registry-latency-badge.latency-unknown {
-  background: var(--surface-disabled);
+  background: var(--surface-active);
   color: var(--text-muted);
 }
 

@@ -18,16 +18,6 @@
   to { opacity: 1; transform: scale(1); }
 }
 
-@keyframes lumi-pulse-soft {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-@keyframes lumi-shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
-}
-
 @keyframes lumi-content-fade-up {
   from {
     opacity: 0;
@@ -56,6 +46,7 @@
 }
 
 .lumi-gradient-text {
+  /* 第三段 #A8D1E1 为固定的淡蓝高光锚点，不随主题色相变化（有意保留的硬编码） */
   background: linear-gradient(135deg, var(--lumi-primary) 0%, var(--lumi-primary-soft) 50%, #A8D1E1 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -79,17 +70,6 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-}
-
-/* 光晕呼吸动画 */
-@keyframes home-glow-breathe {
-  0%, 100% { opacity: 0.35; transform: translateX(-50%) scale(1); }
-  50% { opacity: 0.55; transform: translateX(-50%) scale(1.08); }
-}
-
-@keyframes home-glow-breathe-reverse {
-  0%, 100% { opacity: 0.25; transform: scale(1); }
-  50% { opacity: 0.4; transform: scale(1.1); }
 }
 
 .spin-animation {

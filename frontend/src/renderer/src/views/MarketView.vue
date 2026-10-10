@@ -571,13 +571,13 @@ function toggleFilters() {
 }
 
 .source-quick-latency.slow {
-  background: var(--lumi-amber-light);
+  background: var(--lumi-amber-soft);
   color: var(--lumi-amber);
 }
 
 .source-quick-latency.unavailable,
 .source-quick-latency.unknown {
-  background: var(--surface-disabled);
+  background: var(--surface-active);
   color: var(--text-muted);
 }
 

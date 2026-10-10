@@ -420,9 +420,6 @@
    6. 弹窗 (Modal / Dialog)
    ------------------------------------------------------- */
 .lumi-modal-overlay,
-.luomi-modal-overlay,
-.create-dialog-overlay,
-.dialog-overlay,
 .wizard-overlay {
   position: fixed;
   inset: 0;
@@ -741,7 +738,7 @@
 
 .h-btn.danger {
   background: var(--lumi-danger-light);
-  border: 1px solid var(--lumi-danger-border);
+  border: 1px solid color-mix(in srgb, var(--lumi-danger) 30%, transparent);
   color: var(--lumi-danger);
 }
 
@@ -790,7 +787,6 @@
 .lumi-row-3 { display: flex; align-items: center; gap: var(--space-3); }
 .lumi-row-between { display: flex; align-items: center; justify-content: space-between; }
 .lumi-actions-end { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
-.lumi-wrap-2 { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .lumi-shrink-row { display: flex; align-items: center; flex-shrink: 0; }
 
 /* ── flex 列 ── */
@@ -818,11 +814,6 @@
 .lumi-title-md { color: var(--text-primary); font-size: var(--text-md); font-weight: 600; }
 .lumi-title-base { color: var(--text-primary); font-size: var(--text-base); font-weight: 600; }
 
-/* ── 辅助提示文字 ── */
-.lumi-hint-xs { color: var(--text-muted); font-size: var(--text-xs); margin: 0; }
-.lumi-hint-sm { color: var(--text-muted); font-size: var(--text-sm); text-align: center; }
-.lumi-overline { color: var(--text-muted); font-size: var(--text-xs); letter-spacing: 0.5px; text-transform: uppercase; }
-
 /* ── 正方形透明图标按钮（默认 28px） ── */
 .lumi-icon-btn {
   display: flex;
@@ -840,7 +831,4 @@
 .lumi-icon-btn--sm { width: var(--space-6); height: var(--space-6); }
 .lumi-icon-btn--xs { width: var(--space-5); height: var(--space-5); }
 .lumi-icon-btn--lg { width: var(--space-8); height: var(--space-8); }
-
-/* ── 头像图片（随容器圆角裁切） ── */
-.lumi-avatar-img { border-radius: inherit; width: 100%; height: 100%; object-fit: cover; }
 

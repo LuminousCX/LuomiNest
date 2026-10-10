@@ -55,7 +55,7 @@ const emit = defineEmits<{
   border: 1px solid color-mix(in srgb, var(--lumi-primary) 25%, transparent);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all var(--transition-fast, 0.2s ease-in-out);
+  transition: all var(--transition-fast);
   user-select: none;
 }
 

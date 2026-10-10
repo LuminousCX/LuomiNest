@@ -975,7 +975,8 @@
         "fabric": "AI Prompt 模式化编排框架，通过 170+ Pattern 增强 AI 任务效率，支持多供应商集成。",
         "hyperledgerFabric": "企业级许可型区块链平台，采用 Execute-Order-Validate 架构，支持可插拔共识与通道隐私隔离。",
         "stagehand": "AI 驱动的浏览器自动化框架，支持自然语言控制浏览器、结构化数据提取与多模式 AI Agent。",
-        "loliMeow": "WordPress 博客主题，本页面背景装饰与卡片视觉风格受其启发。"
+        "loliMeow": "WordPress 博客主题，本页面背景装饰与卡片视觉风格受其启发。",
+        "vueBits": "MIT License · 思考动画/通知/分段控件等 UI 组件来源（ThoughtLine / ToastContainer / SegmentTabs / BranchedMenu 均移植自该项目）。"
       },
       "special": {
         "description": "Live2D Cubism SDK，用于创建和渲染 Live2D 模型。本项目使用了 Cubism Core（专有许可）和 Cubism Components（开放源代码许可）。",

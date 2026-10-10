@@ -32,33 +32,31 @@ interface SearchEngine {
   name: string
   icon: Component
   url: string
-  color: string
 }
 
 interface Website {
   name: string
   initial: string
   url: string
-  className: string
 }
 
 // --- 数据 ---
 const searchEngines: SearchEngine[] = [
-  { id: 'bing', name: 'Bing', icon: Search, url: 'https://www.bing.com/search?q=', color: 'var(--lumi-brand)' },
-  { id: 'google', name: 'Google', icon: Globe, url: 'https://www.google.com/search?q=', color: 'var(--lumi-info)' },
-  { id: 'bilibili', name: 'Bilibili', icon: Tv, url: 'https://search.bilibili.com/all?keyword=', color: 'var(--lumi-sky)' },
-  { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=', color: 'var(--lumi-danger)' }
+  { id: 'bing', name: 'Bing', icon: Search, url: 'https://www.bing.com/search?q=' },
+  { id: 'google', name: 'Google', icon: Globe, url: 'https://www.google.com/search?q=' },
+  { id: 'bilibili', name: 'Bilibili', icon: Tv, url: 'https://search.bilibili.com/all?keyword=' },
+  { id: 'youtube', name: 'YouTube', icon: Video, url: 'https://www.youtube.com/results?search_query=' }
 ]
 
 const websites: Website[] = [
-  { name: 'GitHub', initial: 'G', url: 'https://github.com', className: 'ws-github' },
-  { name: 'Google', initial: 'G', url: 'https://google.com', className: 'ws-google' },
-  { name: 'MDN', initial: 'M', url: 'https://developer.mozilla.org', className: 'ws-mdn' },
-  { name: 'Stack Overflow', initial: 'S', url: 'https://stackoverflow.com', className: 'ws-stack' },
-  { name: 'Bing', initial: 'B', url: 'https://www.bing.com', className: 'ws-bing' },
-  { name: 'Bilibili', initial: 'B', url: 'https://www.bilibili.com', className: 'ws-bili' },
-  { name: 'YouTube', initial: 'Y', url: 'https://www.youtube.com', className: 'ws-youtube' },
-  { name: '知乎', initial: '知', url: 'https://www.zhihu.com', className: 'ws-zhihu' }
+  { name: 'GitHub', initial: 'G', url: 'https://github.com' },
+  { name: 'Google', initial: 'G', url: 'https://google.com' },
+  { name: 'MDN', initial: 'M', url: 'https://developer.mozilla.org' },
+  { name: 'Stack Overflow', initial: 'S', url: 'https://stackoverflow.com' },
+  { name: 'Bing', initial: 'B', url: 'https://www.bing.com' },
+  { name: 'Bilibili', initial: 'B', url: 'https://www.bilibili.com' },
+  { name: 'YouTube', initial: 'Y', url: 'https://www.youtube.com' },
+  { name: '知乎', initial: '知', url: 'https://www.zhihu.com' }
 ]
 
 // --- 状态 ---
@@ -86,20 +84,6 @@ const greeting = computed(() => {
   if (hour < 18) return t('browser.greeting.afternoon')
   return t('browser.greeting.evening')
 })
-
-// --- 网站品牌色 ---
-const wsColorMap: Record<string, string> = {
-  'ws-github': '#24292e',
-  'ws-google': '#4285f4',
-  'ws-mdn': '#1a1a1a',
-  'ws-stack': '#f48024',
-  'ws-bing': '#008373',
-  'ws-bili': '#fb7299',
-  'ws-youtube': '#ff0000',
-  'ws-zhihu': '#0084ff'
-}
-
-const getWsColor = (className: string): string => wsColorMap[className] ?? 'var(--lumi-brand)'
 
 // --- 事件 ---
 const emit = defineEmits<{
@@ -189,12 +173,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="home-page">
-    <!-- 沉浸式背景 -->
-    <div class="home-bg" aria-hidden="true">
-      <div class="home-glow home-glow--top" />
-      <div class="home-glow home-glow--bottom" />
-    </div>
-
     <!-- 内容滚动区域 -->
     <div class="home-scroll">
       <div class="home-content">
@@ -206,7 +184,6 @@ onBeforeUnmount(() => {
           </h1>
           <div class="hero-greeting">
             <span class="hero-greeting-text">{{ greeting }}</span>
-            <span class="hero-greeting-dot" />
             <time class="hero-greeting-time">{{ currentTime }}</time>
           </div>
           <p class="hero-date">{{ currentDate }} · {{ currentWeek }}</p>
@@ -226,7 +203,7 @@ onBeforeUnmount(() => {
               :aria-expanded="showEngineDropdown"
               @click="showEngineDropdown = !showEngineDropdown"
             >
-              <component :is="selectedEngine.icon" :size="16" :style="{ color: selectedEngine.color }" />
+              <component :is="selectedEngine.icon" :size="16" />
               <span class="search-engine-name">{{ selectedEngine.name }}</span>
               <ChevronDown :size="13" class="search-engine-arrow" :class="{ 'is-open': showEngineDropdown }" />
             </button>
@@ -269,7 +246,7 @@ onBeforeUnmount(() => {
                   :aria-selected="engine.id === selectedEngine.id"
                   @click="selectEngine(engine)"
                 >
-                  <component :is="engine.icon" :size="15" :style="{ color: engine.color }" />
+                  <component :is="engine.icon" :size="15" />
                   <span>{{ engine.name }}</span>
                 </button>
               </div>
@@ -279,24 +256,18 @@ onBeforeUnmount(() => {
 
         <!-- ==================== 常用网站 ==================== -->
         <section class="home-section home-stagger-enter" style="animation-delay: 160ms">
-          <header class="section-head">
-            <span class="section-marker" />
-            <h2 class="section-label">{{ t('browser.section.websites') }}</h2>
-          </header>
-          <div class="home-card">
-            <div class="tiles-grid tiles-grid--4">
-              <button
-                v-for="ws in websites"
-                :key="ws.name"
-                class="home-tile"
-                :style="{ '--tile-accent': getWsColor(ws.className) }"
-                :title="ws.name"
-                @click="handleWebsiteClick(ws.url)"
-              >
-                <span class="home-tile-icon" :class="ws.className">{{ ws.initial }}</span>
-                <span class="home-tile-label">{{ ws.name }}</span>
-              </button>
-            </div>
+          <h2 class="section-label">{{ t('browser.section.websites') }}</h2>
+          <div class="tiles-grid tiles-grid--4">
+            <button
+              v-for="ws in websites"
+              :key="ws.name"
+              class="home-tile"
+              :title="ws.name"
+              @click="handleWebsiteClick(ws.url)"
+            >
+              <span class="home-tile-icon">{{ ws.initial }}</span>
+              <span class="home-tile-label">{{ ws.name }}</span>
+            </button>
           </div>
         </section>
 

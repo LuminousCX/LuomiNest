@@ -518,9 +518,9 @@ const SOURCE_LABELS = computed<Record<string, string>>(() => ({
   padding: 6px var(--space-3);
   font-size: var(--text-sm);
   font-weight: 500;
-  color: var(--lumi-brand, var(--text));
+  color: var(--lumi-brand);
   background: var(--workspace-card);
-  border: 1px solid var(--lumi-brand, var(--workspace-border));
+  border: 1px solid var(--lumi-brand);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--duration-leave) var(--ease-in-out);
@@ -581,7 +581,7 @@ const SOURCE_LABELS = computed<Record<string, string>>(() => ({
 }
 
 .db-card {
-  border-left: 3px solid var(--lumi-brand, var(--workspace-border));
+  border-left: 3px solid var(--lumi-brand);
 }
 
 .db-card.inactive {
@@ -616,7 +616,7 @@ const SOURCE_LABELS = computed<Record<string, string>>(() => ({
 }
 
 .db-icon {
-  color: var(--lumi-brand, var(--text-muted));
+  color: var(--lumi-brand);
 }
 
 .scheduled-status-icon .spin-animation {
@@ -672,8 +672,8 @@ const SOURCE_LABELS = computed<Record<string, string>>(() => ({
 
 .inactive-tag {
   padding: 1px 6px;
-  background: var(--lumi-danger-light, var(--workspace-hover));
-  color: var(--lumi-danger, var(--text-muted));
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
   border-radius: 4px;
 }
 

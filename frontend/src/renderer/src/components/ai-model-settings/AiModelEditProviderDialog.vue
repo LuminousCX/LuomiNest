@@ -301,7 +301,7 @@ watch(() => props.providerId, (providerId) => {
 }
 
 .current-key-hint code {
-  font-family: var(--font-mono, 'Courier New', monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
   color: var(--text-secondary);
   background: var(--workspace-panel);

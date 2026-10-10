@@ -1,0 +1,36 @@
+/* =========================================================
+   云设置区块共享样式（SettingsCloudSection / CloudUsagePanel）
+   由两个组件的 <style scoped> @import 引入，随宿主一起加 scoped 属性。
+   ========================================================= */
+
+.cloud-detail-list {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.cloud-detail-list__item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+}
+
+.cloud-detail-list__label {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.cloud-detail-list__value {
+  color: var(--text-secondary);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

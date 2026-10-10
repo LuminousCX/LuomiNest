@@ -114,7 +114,6 @@ const inputAreaRef = ref<InstanceType<typeof WorkbenchInputArea> | null>(null)
 const {
   inputText,
   selectedSkillIds,
-  showReasoning,
   isNearBottom,
   showScrollToBottomBtn,
   chatMode,
@@ -243,7 +242,6 @@ onBeforeUnmount(() => {
         :expanded-tool-outputs="expandedToolOutputs"
         :expanded-subagents="expandedSubagents"
         :expanded-subagent-tools="expandedSubagentTools"
-        :show-reasoning="showReasoning"
         :workflow-pending-plan="(workflowStore.pendingPlan as WorkflowPendingPlan | null)"
         :confirmation-feedback="workflowStore.confirmationFeedback"
         :is-near-bottom="isNearBottom"
@@ -253,7 +251,6 @@ onBeforeUnmount(() => {
         :context-percent="contextPercent"
         :is-compressing="isCompressing"
         :has-more-messages="hasMoreMessages"
-        @toggle-reasoning="(id: string) => { showReasoning = { ...showReasoning, [id]: !showReasoning[id] } }"
         @regenerate="handleRegenerate"
         @toggle-tool-output="toggleToolOutput"
         @toggle-subagent="toggleSubagent"

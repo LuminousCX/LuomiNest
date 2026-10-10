@@ -233,8 +233,20 @@ export const usePlatformStore = defineStore('platform', () => {
         updatedAt: i.updated_at || i.updatedAt || '',
         modelConfig: (i.model_config || i.modelConfig || {}) as PlatformModelConfig,
       }))
-    } catch {
+    } catch (e) {
+      // 平台列表静默清空会让用户以为实例全丢了；明确告知 + 提供"重试"动作
+      const toast = useToast()
+      const msg = toErrorMessage(e)
       instances.value = []
+      toast.error(i18n.global.t('toast.platform.loadFailed'), {
+        description: i18n.global.t('toast.platform.loadFailedDesc', { message: msg }),
+        action: {
+          label: i18n.global.t('toast.retry'),
+          handler: () => {
+            void fetchInstances()
+          },
+        },
+      })
     } finally {
       loading.value = false
     }

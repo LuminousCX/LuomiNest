@@ -405,7 +405,7 @@ watch(
 .config-key {
   font-size: var(--text-2xs);
   color: var(--text-muted);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
 }
 
 .config-value {
@@ -452,7 +452,7 @@ watch(
   padding: var(--space-3);
   background: var(--surface-hover);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--lumi-primary-light, rgba(99, 102, 241, 0.2));
+  border: 1px solid var(--lumi-primary-light);
 }
 
 .confidence-badge {
@@ -461,7 +461,7 @@ watch(
   font-size: var(--text-2xs);
   font-weight: var(--font-semibold);
   color: var(--lumi-primary);
-  background: var(--lumi-primary-light, rgba(99, 102, 241, 0.1));
+  background: var(--lumi-primary-light);
   border-radius: var(--radius-full);
 }
 
@@ -487,8 +487,8 @@ watch(
 }
 
 .patch-item.invalid {
-  border-color: var(--lumi-danger-hover, rgba(239, 68, 68, 0.4));
-  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.05));
+  border-color: var(--lumi-danger-hover);
+  background: var(--lumi-danger-light);
 }
 
 .patch-head {
@@ -507,29 +507,29 @@ watch(
 }
 
 .patch-op.op-set {
-  color: var(--lumi-success-hover, rgb(22, 163, 74));
-  background: var(--lumi-success-light, rgba(34, 197, 94, 0.12));
+  color: var(--lumi-success-hover);
+  background: var(--lumi-success-light);
 }
 
 .patch-op.op-remove {
-  color: var(--lumi-danger-hover, rgb(220, 38, 38));
-  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.12));
+  color: var(--lumi-danger-hover);
+  background: var(--lumi-danger-light);
 }
 
 .patch-op.op-reset {
-  color: var(--lumi-info-hover, rgb(37, 99, 235));
-  background: var(--lumi-info-light, rgba(59, 130, 246, 0.12));
+  color: var(--lumi-info-hover);
+  background: var(--lumi-info-light);
 }
 
 .patch-key {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   color: var(--text-primary);
   font-weight: var(--font-semibold);
 }
 
 .patch-value {
   color: var(--text-secondary);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
 }
 
 .patch-reason {
@@ -544,7 +544,7 @@ watch(
   gap: 4px;
   margin: 4px 0 0;
   font-size: var(--text-2xs);
-  color: var(--lumi-danger-hover, rgb(220, 38, 38));
+  color: var(--lumi-danger-hover);
 }
 
 .suggestion-actions {
@@ -560,8 +560,8 @@ watch(
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
-  background: var(--lumi-danger-light, rgba(239, 68, 68, 0.08));
-  color: var(--lumi-danger-hover, rgb(220, 38, 38));
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger-hover);
   font-size: var(--text-xs);
 }
 

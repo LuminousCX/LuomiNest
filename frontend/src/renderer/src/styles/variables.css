@@ -35,7 +35,6 @@
   --text-5xl: 36px;
 
   --leading-none: 1;
-  --leading-tight: 1.25;
   --leading-snug: 1.4;
   --leading-normal: 1.5;
   --leading-relaxed: 1.6;
@@ -53,6 +52,7 @@
   --space-8: 40px;
   --space-9: 48px;
   --space-10: 64px;
+  --space-12: 96px;
 
   /* -------------------------------------------------------
      3. 颜色系统 (Color)
@@ -72,7 +72,6 @@
 
   /* 3.2 强调色 */
   --lumi-accent: #f43f5e;
-  --lumi-accent-hover: #e11d48;
   --lumi-accent-light: rgba(244, 63, 94, 0.08);
   --lumi-accent-glow: rgba(244, 63, 94, 0.12);
   --lumi-accent-border: rgba(244, 63, 94, 0.20);
@@ -83,7 +82,6 @@
   --lumi-success-light: rgba(34, 197, 94, 0.10);
 
   --lumi-warning: #eab308;
-  --lumi-warning-hover: #ca8a04;
   --lumi-warning-light: rgba(234, 179, 8, 0.10);
 
   --lumi-danger: #ef4444;
@@ -96,7 +94,6 @@
 
   /* 3.4 扩展功能色 */
   --lumi-amber: #f59e0b;
-  --lumi-amber-hover: #d97706;
   --lumi-amber-soft: rgba(245, 158, 11, 0.10);
   --lumi-amber-dark: #b45309;
   --lumi-amber-border: rgba(245, 158, 11, 0.30);
@@ -106,8 +103,6 @@
 
   --lumi-indigo: #6366f1;
   --lumi-emerald: #10b981;
-  --lumi-teal: #0d9488;
-  --lumi-teal-soft: rgba(13, 148, 136, 0.08);
 
   /* 3.5 中性色阶 - 浅色模式 */
   --bg: #F5F8FB;
@@ -128,7 +123,6 @@
 
   /* 3.6 特殊颜色 */
   --overlay-bg: rgba(0, 0, 0, 0.45);
-  --overlay-backdrop: rgba(0, 0, 0, 0.50);
   --overlay-subtle: rgba(0, 0, 0, 0.15);
 
   --glass-bg: rgba(255, 255, 255, 0.72);
@@ -148,7 +142,7 @@
   --lumi-primary-gradient-soft: var(--lumi-brand-gradient-soft);
 
   /* -------------------------------------------------------
-     5. 工作区与浏览器主题变量（向后兼容）
+     5. 工作区主题变量（向后兼容）
      ------------------------------------------------------- */
   --workspace-bg: var(--bg);
   --workspace-sidebar: var(--surface);
@@ -156,15 +150,6 @@
   --workspace-card: var(--surface);
   --workspace-border: var(--border);
   --workspace-hover: var(--surface-hover);
-
-  --browser-bg: var(--bg);
-  --browser-surface: var(--surface);
-  --browser-elevated: var(--surface-hover);
-  --browser-border: var(--border);
-  --browser-text: var(--text);
-  --browser-text-dim: var(--text-muted);
-  --browser-input: var(--surface);
-  --browser-input-border: var(--border);
 
   /* -------------------------------------------------------
      6. 圆角系统 (Border Radius)
@@ -194,46 +179,27 @@
      8. 渐变与装饰
      ------------------------------------------------------- */
   --surface-gradient: linear-gradient(135deg, rgba(20,126,188,0.04) 0%, rgba(98,169,200,0.03) 50%, rgba(168,209,225,0.02) 100%);
-  --surface-soft: linear-gradient(180deg, var(--surface) 0%, var(--bg-secondary) 100%);
   --divider-soft: linear-gradient(90deg, transparent 0%, var(--border-light) 20%, var(--border-light) 80%, transparent 100%);
   --divider-vertical: linear-gradient(180deg, transparent 0%, var(--border-light) 20%, var(--border-light) 80%, transparent 100%);
   --divider-horizontal: var(--border-light);
-
-  --gradient-hero: linear-gradient(135deg, #A8D1E1 0%, #62A9C8 40%, #147EBC 100%);
-  --gradient-hero-soft: linear-gradient(135deg, rgba(168,209,225,0.15) 0%, rgba(98,169,200,0.10) 40%, rgba(20,126,188,0.08) 100%);
-  --gradient-brand: linear-gradient(135deg, #147EBC 0%, #62A9C8 50%, #A8D1E1 100%);
 
   /* -------------------------------------------------------
      9. 任务/状态颜色（向后兼容）
      ------------------------------------------------------- */
   --task-pink: #ec4899;
-  --task-pink-soft: rgba(236, 72, 153, 0.10);
-  --task-pink-bg: #fdf2f8;
   --task-yellow: #eab308;
   --task-yellow-soft: rgba(234, 179, 8, 0.10);
-  --task-yellow-bg: #fefce8;
   --task-blue: #3b82f6;
   --task-blue-soft: rgba(59, 130, 246, 0.10);
-  --task-blue-bg: #eff6ff;
   --task-sky: #0ea5e9;
   --task-sky-soft: rgba(14, 165, 233, 0.10);
-  --task-sky-bg: #f0f9ff;
-  --task-sky-light: #38bdf8;
   --task-sky-border: rgba(14, 165, 233, 0.20);
-  /* 兼容别名：--task-purple* 已按实际色相更名为 --task-sky*，旧名仅保留给遗留引用，新代码请使用 --task-sky* */
-  --task-purple: var(--task-sky);
-  --task-purple-soft: var(--task-sky-soft);
-  --task-purple-bg: var(--task-sky-bg);
-  --task-purple-light: var(--task-sky-light);
-  --task-purple-border: var(--task-sky-border);
   --task-green: #22c55e;
   --task-green-soft: rgba(34, 197, 94, 0.10);
-  --task-green-bg: #f0fdf4;
   --task-green-border: rgba(34, 197, 94, 0.30);
   --task-red: #ef4444;
   --task-red-soft: rgba(239, 68, 68, 0.10);
   --task-red-border: rgba(239, 68, 68, 0.30);
-  --task-blue-border: rgba(59, 130, 246, 0.30);
 
   --surface-ghost: rgba(20, 126, 188, 0.04);
   --surface-ghost-hover: rgba(20, 126, 188, 0.10);
@@ -250,9 +216,7 @@
 
   /* 页面切换动画时长：较短时长可减少重型视图（Live2D/Workbench）切换时的卡顿感 */
   --page-switch-enter-duration: 180ms;
-  --page-switch-leave-duration: 120ms;
   --page-fade-enter-duration: 200ms;
-  --page-fade-leave-duration: 140ms;
 
   /* 组件入场动画 */
   --stage-appear-duration: 600ms;
@@ -260,9 +224,6 @@
   --stage-appear-scale-to: 1;
   --stage-appear-opacity-from: 0;
   --stage-appear-opacity-to: 1;
-
-  /* 侧边栏树形菜单 stagger */
-  --tree-stagger-step: 35ms;
 
   --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
@@ -272,7 +233,6 @@
   --transition-fast: var(--duration-fast) var(--ease-default);
   --transition-normal: var(--duration-normal) var(--ease-default);
   --transition-slow: var(--duration-slow) var(--ease-default);
-  --transition-spring: var(--duration-slow) var(--ease-spring);
 
   /* -------------------------------------------------------
      11. Z-Index 层级
@@ -280,10 +240,8 @@
   --z-base: 1;
   --z-sticky: 10;
   --z-dropdown: 100;
-  --z-sidebar: 200;
   --z-overlay: 300;
   --z-modal: 400;
-  --z-tooltip: 600;
   --z-toast: 9999;
 
   /* -------------------------------------------------------
@@ -321,26 +279,12 @@
   --input-focus-ring: 0 0 0 3px var(--lumi-brand-glow);
   --input-placeholder-color: var(--text-muted);
 
-  /* 徽章 */
-  --badge-radius: var(--radius-full);
-  --badge-padding: 2px var(--space-2);
-  --badge-font: var(--text-2xs);
-  --badge-height: 18px;
-
   /* 导航项 */
   --nav-item-height: 36px;
   --nav-item-radius: var(--radius-md);
-  --nav-item-padding: 0 var(--space-3);
   --nav-item-active-bg: var(--lumi-brand-subtle);
   --nav-item-active-color: var(--lumi-brand);
   --nav-item-hover-bg: var(--surface-hover);
-
-  /* 页头 */
-  --page-header-height: 64px;
-  --page-header-padding: 0 var(--space-6);
-  --page-title-size: var(--text-3xl);
-  --page-subtitle-size: var(--text-sm);
-  --page-subtitle-color: var(--text-muted);
 
   /* 弹窗 */
   --modal-radius: var(--radius-xl);
@@ -353,11 +297,8 @@
 
   /* ========== 辅色（三色主题系统） ========== */
   --lumi-secondary: #5BA4D4;
-  --lumi-secondary-hover: #4A93C3;
-  --lumi-secondary-light: rgba(91, 164, 212, 0.1);
 
   /* ========== 全局背景变量 ========== */
-  --app-bg-image: none;
   --app-bg-blur: 0px;
   --app-bg-opacity: 1;
   --app-bg-fit: cover;
@@ -380,7 +321,6 @@
   --app-bg-ambient: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--lumi-brand) 10%, transparent) 0%, transparent 55%);
   --app-bg-overlay-tint: rgba(255, 255, 255, 0.02);
   --app-bg-vignette: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.14) 100%);
-  --app-bg-transition: opacity 0.55s ease-in-out, filter 0.55s ease-in-out, transform 0.55s ease-in-out;
 
   /* ========== 毛玻璃面板变量 ========== */
   --glass-surface: rgba(255, 255, 255, 0.68);
@@ -389,14 +329,6 @@
   --glass-blur: blur(calc(var(--lumi-glass-intensity) * 30px)) saturate(150%);
   --glass-blur-strong: blur(calc(var(--lumi-glass-intensity) * 40px)) saturate(170%);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.50);
-  --glass-radius: var(--radius-lg);
-
-  /* ========== 系统级通知（Toast）反相高对比样式 ==========
-     明色主题：黑底白字，确保在浅色背景上醒目突出 */
-  --toast-bg: #1a1a1a;
-  --toast-fg: #ffffff;
-  --toast-border: rgba(255, 255, 255, 0.14);
-  --toast-shadow: 0 8px 24px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.18);
 }
 
 /* =========================================================
@@ -418,7 +350,6 @@
 
   /* 强调色 - 深色模式 */
   --lumi-accent: #fb7185;
-  --lumi-accent-hover: #f43f5e;
   --lumi-accent-light: rgba(244, 63, 94, 0.10);
   --lumi-accent-glow: rgba(244, 63, 94, 0.15);
   --lumi-accent-border: rgba(244, 63, 94, 0.20);
@@ -429,7 +360,6 @@
   --lumi-success-light: rgba(74, 222, 128, 0.12);
 
   --lumi-warning: #fbbf24;
-  --lumi-warning-hover: #f59e0b;
   --lumi-warning-light: rgba(251, 191, 36, 0.12);
 
   --lumi-danger: #f87171;
@@ -442,7 +372,6 @@
 
   /* 扩展功能色 - 深色模式 */
   --lumi-amber: #fbbf24;
-  --lumi-amber-hover: #f59e0b;
   --lumi-amber-soft: rgba(251, 191, 36, 0.12);
   --lumi-amber-dark: #f59e0b;
   --lumi-amber-border: rgba(251, 191, 36, 0.30);
@@ -452,8 +381,6 @@
 
   --lumi-indigo: #818cf8;
   --lumi-emerald: #34d399;
-  --lumi-teal: #2dd4bf;
-  --lumi-teal-soft: rgba(45, 212, 191, 0.10);
 
   /* 中性色阶 - 深色模式 */
   --bg: #000000;
@@ -474,7 +401,6 @@
 
   /* 特殊颜色 - 深色模式 */
   --overlay-bg: rgba(0, 0, 0, 0.60);
-  --overlay-backdrop: rgba(0, 0, 0, 0.65);
   --overlay-subtle: rgba(0, 0, 0, 0.25);
 
   --glass-bg: rgba(17, 17, 17, 0.72);
@@ -494,31 +420,22 @@
 
   /* 渐变 - 深色模式 */
   --surface-gradient: linear-gradient(135deg, rgba(58,159,212,0.04) 0%, rgba(98,169,200,0.03) 50%, rgba(20,126,188,0.02) 100%);
-  --gradient-hero-soft: linear-gradient(135deg, rgba(58,159,212,0.10) 0%, rgba(98,169,200,0.06) 40%, rgba(20,126,188,0.04) 100%);
 
   /* 任务/状态颜色 - 深色模式 */
   --task-pink: #ec4899;
-  --task-pink-soft: rgba(236, 72, 153, 0.12);
-  --task-pink-bg: rgba(236, 72, 153, 0.08);
   --task-yellow: #eab308;
   --task-yellow-soft: rgba(234, 179, 8, 0.12);
-  --task-yellow-bg: rgba(234, 179, 8, 0.07);
   --task-blue: #3b82f6;
   --task-blue-soft: rgba(59, 130, 246, 0.12);
-  --task-blue-bg: rgba(59, 130, 246, 0.07);
   --task-sky: #38bdf8;
   --task-sky-soft: rgba(56, 189, 248, 0.12);
-  --task-sky-bg: rgba(14, 165, 233, 0.07);
-  --task-sky-light: #7dd3fc;
   --task-sky-border: rgba(56, 189, 248, 0.20);
   --task-green: #22c55e;
   --task-green-soft: rgba(34, 197, 94, 0.12);
-  --task-green-bg: rgba(34, 197, 94, 0.07);
   --task-green-border: rgba(34, 197, 94, 0.30);
   --task-red: #ef4444;
   --task-red-soft: rgba(239, 68, 68, 0.12);
   --task-red-border: rgba(239, 68, 68, 0.30);
-  --task-blue-border: rgba(59, 130, 246, 0.30);
 
   --surface-ghost: rgba(58, 159, 212, 0.05);
   --surface-ghost-hover: rgba(58, 159, 212, 0.12);
@@ -541,8 +458,6 @@
   --nav-item-hover-bg: var(--surface-hover);
 
   --lumi-secondary: #7BBCE4;
-  --lumi-secondary-hover: #8FC8EC;
-  --lumi-secondary-light: rgba(123, 188, 228, 0.12);
 
   /* ========== 深色模式背景覆盖层覆盖 ========== */
   --app-bg-ambient: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--lumi-brand) 14%, transparent) 0%, transparent 50%);
@@ -558,13 +473,6 @@
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 
   /* 皮肤强度变量在深色模式下保持由 JS 设置 */
-
-  /* ========== 系统级通知（Toast）反相高对比样式 ==========
-     暗色主题：白底黑字，确保在深色背景上醒目突出 */
-  --toast-bg: #ffffff;
-  --toast-fg: #1a1a1a;
-  --toast-border: rgba(0, 0, 0, 0.08);
-  --toast-shadow: 0 8px 24px rgba(0, 0, 0, 0.40), 0 2px 6px rgba(0, 0, 0, 0.24);
 }
 
 /* =========================================================
@@ -649,9 +557,6 @@
     .settings-card.settings-card,
     .lumi-settings-card.lumi-settings-card,
     .appearance-hero.appearance-hero,
-    .lumi-settings-hero.lumi-settings-hero,
-    .custom-bg-preview.custom-bg-preview,
-    .theme-placeholder-row.theme-placeholder-row,
     .lumi-settings-section__header.lumi-settings-section__header,
     .lumi-settings-tag.lumi-settings-tag,
     .settings-data-row.settings-data-row,
@@ -660,9 +565,7 @@
     .settings-row-control.settings-row-control,
     .lumi-settings-icon-wrap.lumi-settings-icon-wrap,
     .theme-preset-card.theme-preset-card,
-    .theme-custom-card.theme-custom-card,
     .background-option.background-option,
-    .theme-add-btn.theme-add-btn,
     .color-picker-swatch.color-picker-swatch,
     .theme-editor.theme-editor,
     .theme-editor__preview.theme-editor__preview
@@ -679,11 +582,8 @@
     .settings-card.settings-card,
     .lumi-settings-card.lumi-settings-card,
     .appearance-hero.appearance-hero,
-    .lumi-settings-hero.lumi-settings-hero,
     .theme-preset-card.theme-preset-card,
-    .theme-custom-card.theme-custom-card,
     .background-option.background-option,
-    .theme-add-btn.theme-add-btn,
     .settings-list-row.settings-list-row
   ):hover {
   background: var(--glass-surface-hover);
@@ -747,21 +647,6 @@
   -webkit-backdrop-filter: var(--glass-blur-strong);
   backdrop-filter: var(--glass-blur-strong);
   box-shadow: var(--glass-shadow);
-}
-
-/* 群聊输入区同样采用毛玻璃浮层 */
-:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .group-chat-input-bar {
-  background: color-mix(in srgb, var(--workspace-sidebar) 80%, transparent);
-  border-top-color: var(--glass-border);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
-}
-
-:is(.lumi-app.lumi-app--bg-active, .lumi-app.has-background, [data-lumi-background="active"] .lumi-app) .group-chat-input-bar .input-main {
-  background: var(--glass-surface);
-  border-color: var(--glass-border);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
 }
 
 /* ── 通用卡片 ── */

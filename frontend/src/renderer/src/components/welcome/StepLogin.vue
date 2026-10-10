@@ -483,7 +483,7 @@ onUnmounted(() => {
   border: 1px dashed var(--border-light);
   border-radius: var(--radius-md);
   background: var(--surface-hover);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-2xl);
   font-weight: var(--font-semibold);
   letter-spacing: 0.35em;

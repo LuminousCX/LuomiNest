@@ -1,0 +1,41 @@
+{
+  "toast": {
+    "close": "通知を閉じる",
+    "retry": "再試行",
+    "detail": "詳細：{message}",
+    "platform": {
+      "loadFailed": "プラットフォーム一覧の読み込みに失敗しました。バックエンドサービスが起動しているか確認してください",
+      "loadFailedDesc": "詳細：{message}",
+      "saveConfigFailed": "プラットフォーム設定の保存に失敗しました。変更は反映されていません",
+      "saveConfigFailedDesc": "バックエンドとの接続を確認して、もう一度保存してください。詳細：{message}",
+      "resetConfigFailed": "ペルソナ設定のリセットに失敗しました",
+      "resetConfigFailedDesc": "しばらくしてからもう一度お試しください。詳細：{message}"
+    },
+    "memory": {
+      "updateFailed": "記憶の更新に失敗しました。変更は保存されていません",
+      "updateFailedDesc": "バックエンドサービスが利用可能か確認して、もう一度お試しください。詳細：{message}",
+      "deleteFailed": "記憶の削除に失敗しました。該当項目は保持されています",
+      "deleteFailedDesc": "しばらくしてからもう一度お試しください。詳細：{message}",
+      "pinFailed": "記憶のピン留め状態の切り替えに失敗しました",
+      "pinFailedDesc": "しばらくしてからもう一度お試しください。詳細：{message}"
+    },
+    "chat": {
+      "loadConversationFailed": "会話履歴の読み込みに失敗しました",
+      "loadConversationFailedDesc": "後ほどこの会話を開き直してください。繰り返し失敗する場合はバックエンドサービスを確認してください。詳細：{message}",
+      "versionPersistFailed": "バージョンの切り替えが保存されませんでした",
+      "versionPersistFailedDesc": "会話を開き直すと元のバージョンが表示される場合があります。詳細：{message}"
+    },
+    "workflow": {
+      "confirmFailed": "実行の確認に失敗しました。ワークフローは確認待ちのままです",
+      "confirmFailedDesc": "もう一度お試しください。繰り返し失敗する場合はコンソールのログを確認してください。詳細：{message}",
+      "rejectFailed": "実行の拒否に失敗しました。ワークフローは確認待ちのままです",
+      "rejectFailedDesc": "もう一度お試しください。繰り返し失敗する場合はコンソールのログを確認してください。詳細：{message}",
+      "cancelFailed": "キャンセル要求の送信に失敗しました",
+      "cancelFailedDesc": "ワークフローは実行中の可能性があります。後ほどコンソールで状態を確認してください。詳細：{message}"
+    },
+    "market": {
+      "agentCreateFailed": "エージェントの自動作成に失敗しました",
+      "agentCreateFailedDesc": "マーケットの項目は正常にインストールされました。後ほどエージェントページから手動で作成できます。詳細：{message}"
+    }
+  }
+}

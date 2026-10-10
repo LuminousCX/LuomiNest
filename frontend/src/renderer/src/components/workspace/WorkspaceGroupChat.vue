@@ -21,6 +21,7 @@ import { useAgentStore } from '../../stores/agent'
 import type { GroupInfo, GroupMessage, CollaborationPhase, CollaborationSubTask, AgentProfile } from '../../types'
 import { useChatScroll } from '../../composables/useChatScroll'
 import { useChatWindow } from '../../composables/useChatWindow'
+import ThoughtLine from '../common/ThoughtLine.vue'
 import ChatThreadHeader from './chat-thread/ChatThreadHeader.vue'
 import ChatThreadBubble from './chat-thread/ChatThreadBubble.vue'
 import ChatThreadInputBar from './chat-thread/ChatThreadInputBar.vue'
@@ -222,14 +223,13 @@ defineExpose({ scrollToBottom })
       </div>
 
       <div v-if="agentsResponding && !collaborationActive" class="collab-progress-msg">
-        <div class="collab-progress-inner">
-          <Loader2 :size="14" class="spin-animation" />
-          <span class="collab-progress-text">
-            {{ respondingAgentNames.length > 0
-              ? t('workspace.agentsThinking', { names: respondingAgentNames.join('、') })
-              : t('workspace.agentResponding') }}
-          </span>
-        </div>
+        <ThoughtLine
+          working
+          :label="respondingAgentNames.length > 0
+            ? t('workspace.agentsThinking', { names: respondingAgentNames.join('、') })
+            : t('workspace.agentResponding')"
+          :font-size="13"
+        />
       </div>
 
       <div v-if="messages.length === 0 && !collaborationActive" class="chat-empty">

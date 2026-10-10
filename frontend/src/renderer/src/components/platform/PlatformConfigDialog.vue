@@ -12,11 +12,14 @@ import LumiModal from '../../components/common/LumiModal.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiInput from '../../components/common/LumiInput.vue'
 import { createLuomiNestRendererLogger } from '../../utils/logger'
+import { useToast } from '../../composables/useToast'
+import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('Platform')
 
 const store = usePlatformStore()
 const { t } = useI18n()
+const toast = useToast()
 
 const props = defineProps<{
   visible: boolean
@@ -147,7 +150,11 @@ const handleSaveConfig = async () => {
     closeConfigDialog()
     emit('saved')
   } catch (e: unknown) {
+    // 保存失败时对话框不关闭但无任何提示，用户不知道配置到底存没存上
     logger.error('Failed to update platform instance:', e)
+    toast.error(t('toast.platform.saveConfigFailed'), {
+      description: t('toast.platform.saveConfigFailedDesc', { message: toErrorMessage(e) }),
+    })
   }
 }
 
@@ -162,7 +169,11 @@ const handleResetModelConfig = async () => {
       systemPrompt: '',
     }
   } catch (e: unknown) {
+    // 重置人设失败无反馈，用户会以为已重置成功
     logger.error('Failed to reset model config:', e)
+    toast.error(t('toast.platform.resetConfigFailed'), {
+      description: t('toast.platform.resetConfigFailedDesc', { message: toErrorMessage(e) }),
+    })
   } finally {
     modelConfigSaving.value = false
   }
@@ -565,7 +576,7 @@ watch(() => props.instance, async (instance) => {
   padding: var(--space-3);
   margin-bottom: var(--space-4);
   background: var(--lumi-brand-light);
-  border: 1px solid var(--lumi-brand-border, rgba(59, 130, 246, 0.2));
+  border: 1px solid var(--lumi-brand-border);
   border-radius: var(--radius-md);
 }
 
@@ -612,7 +623,7 @@ watch(() => props.instance, async (instance) => {
 
 .platform-tip-card .tip-content {
   font-size: var(--text-xs);
-  color: var(--lumi-amber-text, #b45309);
+  color: var(--lumi-amber-dark);
   line-height: 1.4;
 }
 

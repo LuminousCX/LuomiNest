@@ -31,6 +31,7 @@
     "dompurify": "^3.4.14",
     "electron-log": "^5.4.4",
     "marked": "^18.0.11",
+    "motion-v": "^2.6.0",
     "pdfjs-dist": "^6.3.289",
     "pinia": "^4.0.3",
     "pixi-live2d-display-mulmotion": "0.5.0-mm-6",

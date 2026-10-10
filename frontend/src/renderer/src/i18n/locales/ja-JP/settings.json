@@ -975,7 +975,8 @@
         "fabric": "170+ の Pattern で AI タスク効率を高め、マルチプロバイダー統合に対応する AI Prompt オーケストレーションフレームワーク。",
         "hyperledgerFabric": "Execute-Order-Validate アーキテクチャを採用し、プラグ可能な合意形成とチャネルのプライバシー分離をサポートする、エンタープライズ級許可型ブロックチェーンプラットフォーム。",
         "stagehand": "自然言語によるブラウザ操作、構造化データ抽出、マルチモード AI Agent に対応した AI 駆動のブラウザ自動化フレームワーク。",
-        "loliMeow": "WordPress ブログテーマ。本ページの背景装飾とカードのビジュアルスタイルはその影響を受けています。"
+        "loliMeow": "WordPress ブログテーマ。本ページの背景装飾とカードのビジュアルスタイルはその影響を受けています。",
+        "vueBits": "MIT License · 思考アニメーション / トースト / セグメントタブなどの UI コンポーネントの提供元（ThoughtLine / ToastContainer / SegmentTabs / BranchedMenu はすべて同プロジェクトからの移植）。"
       },
       "special": {
         "description": "Live2D モデルの作成とレンダリングに使用する Live2D Cubism SDK。本プロジェクトは Cubism Core（専有ライセンス）と Cubism Components（オープンソースライセンス）を使用しています。",

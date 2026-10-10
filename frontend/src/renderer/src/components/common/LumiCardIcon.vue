@@ -159,7 +159,7 @@ const borderRadius = computed(() => `${Math.round((props.size + 24) * 0.25)}px`)
   50% { transform: scale(1.04); }
 }
 
-/* 与全局 animations.css 的 lumi-shimmer（background-position 扫光）同名异体，就地改名区分 */
+/* 组件内局部扫光动画（原与全局 lumi-shimmer 同名，全局版已删除，保留现名） */
 @keyframes lumi-icon-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.85; }

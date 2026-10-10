@@ -191,7 +191,7 @@ code {
   padding: 2px 6px;
   border-radius: var(--radius-xs);
   background: var(--surface-hover);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
 }
 
@@ -235,7 +235,7 @@ code {
   margin-top: var(--space-4);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  background: var(--lumi-primary-light, rgba(99, 102, 241, 0.1));
+  background: var(--lumi-primary-light);
   color: var(--lumi-primary);
   font-size: var(--text-sm);
   font-weight: var(--font-medium);

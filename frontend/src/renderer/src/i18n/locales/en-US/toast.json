@@ -1,0 +1,41 @@
+{
+  "toast": {
+    "close": "Dismiss notification",
+    "retry": "Retry",
+    "detail": "Details: {message}",
+    "platform": {
+      "loadFailed": "Failed to load platform list. Please make sure the backend service is running",
+      "loadFailedDesc": "Details: {message}",
+      "saveConfigFailed": "Failed to save platform settings. Your changes were not applied",
+      "saveConfigFailedDesc": "Check the connection to the backend and save again. Details: {message}",
+      "resetConfigFailed": "Failed to reset persona settings",
+      "resetConfigFailedDesc": "Please try again later. Details: {message}"
+    },
+    "memory": {
+      "updateFailed": "Failed to update memory. Your change was not saved",
+      "updateFailedDesc": "Make sure the backend service is available, then try again. Details: {message}",
+      "deleteFailed": "Failed to delete memory. The entry was kept",
+      "deleteFailedDesc": "Please try again later. Details: {message}",
+      "pinFailed": "Failed to toggle the pinned state of this memory",
+      "pinFailedDesc": "Please try again later. Details: {message}"
+    },
+    "chat": {
+      "loadConversationFailed": "Failed to load conversation history",
+      "loadConversationFailedDesc": "Please reopen this conversation later; if it keeps failing, check the backend service. Details: {message}",
+      "versionPersistFailed": "Version switch was not saved",
+      "versionPersistFailedDesc": "Reopening the conversation may show the original version. Details: {message}"
+    },
+    "workflow": {
+      "confirmFailed": "Failed to confirm execution. The workflow is still waiting for confirmation",
+      "confirmFailedDesc": "Please try again; if it keeps failing, check the console logs. Details: {message}",
+      "rejectFailed": "Failed to reject execution. The workflow is still waiting for confirmation",
+      "rejectFailedDesc": "Please try again; if it keeps failing, check the console logs. Details: {message}",
+      "cancelFailed": "Failed to send the cancel request",
+      "cancelFailedDesc": "The workflow may still be running. Check its status in the console later. Details: {message}"
+    },
+    "market": {
+      "agentCreateFailed": "Failed to create the agent automatically",
+      "agentCreateFailedDesc": "The marketplace item was installed successfully. You can create the agent manually later. Details: {message}"
+    }
+  }
+}

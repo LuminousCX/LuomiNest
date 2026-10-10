@@ -1,19 +1,21 @@
 <script setup lang="ts">
 /**
- * 统一日志页（/panel/logs）
+ * 统一日志面板（控制台"日志" Tab 内嵌）
  *
- * 数据源为主进程 log-hub 内存环形缓冲（1000 条，log:query 分页 + log:onAppended 实时尾随）。
- * 来源筛选（前端/主进程/后端/平台）+ 级别筛选 + 搜索 + 级别着色；支持清空、导出、
- * 上传（诊断日志手动上传，需辰汐通行证登录态）、打开日志目录、日志分割文件列表抽屉。
- * 分页渲染（每页 200 条）避免 1000 条裸渲染卡顿；尾随模式固定展示最新一页。
+ * 数据源为主进程 log-hub 内存环形缓冲（1000 条，log:query 分页 + log:onAppended 实时尾随），
+ * 覆盖 前端(renderer) / 主进程(main) / 后端(backend) / 平台(platform) 四路来源。
+ * 来源小号 sub-tab + 级别筛选 + 搜索 + 尾随/翻页 + 清空/导出/上传/日志目录/分割文件。
+ * 由原独立"应用日志"页（LogsView）整体迁入，随日志集成进控制台（2026-10）。
  */
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { formatTime as formatClockTime } from '@/utils/format'
 import { debounce } from '@/utils/debounce'
 import { useI18n } from 'vue-i18n'
+import SegmentTabs from '@/components/common/SegmentTabs.vue'
+import type { SegmentTabOption } from '@/components/common/SegmentTabs.vue'
 import {
   Search, Trash2, Download, Upload, FolderOpen, Files, X,
-  ChevronLeft, ChevronRight, Pause, Play, ArrowDownToLine,
+  ChevronLeft, ChevronRight, Pause, Play, ArrowDownToLine, RefreshCw,
 } from 'lucide-vue-next'
 import type {
   CloudAuthStatus,
@@ -25,7 +27,7 @@ import type {
   LogUploadResult,
 } from '@shared/ipc-types'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 
 type SourceFilter = LogSource | 'all'
 type LevelFilter = LogLevel | 'all'
@@ -64,6 +66,11 @@ const sourceOptions: Array<{ value: SourceFilter; labelKey: string }> = [
   { value: 'backend', labelKey: 'log.source.backend' },
   { value: 'platform', labelKey: 'log.source.platform' },
 ]
+
+/** 来源分段器（SegmentTabs sm 档）选项 */
+const sourceTabs = computed<SegmentTabOption<SourceFilter>[]>(() =>
+  sourceOptions.map((opt) => ({ value: opt.value, label: t(opt.labelKey) }))
+)
 
 const levelOptions: Array<{ value: LevelFilter; labelKey: string }> = [
   { value: 'all', labelKey: 'log.level.all' },
@@ -264,7 +271,49 @@ const formatTime = (ts: string): string => {
   return formatClockTime(ts, { seconds: true })
 }
 
-const formatFullTime = (ts: string): string => ts.replace('T', ' ').replace('Z', '')
+/** 本地时区日期键（用于跨日比较），解析失败返回空串 */
+const localDayKey = (ts: string): string => {
+  const date = new Date(ts)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+}
+
+/** 分隔行展示的本地日期（跨年时补年份），按界面语言格式化 */
+const formatDayLabel = (ts: string): string => {
+  const date = new Date(ts)
+  if (Number.isNaN(date.getTime())) return ts
+  const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' }
+  if (date.getFullYear() !== new Date().getFullYear()) options.year = 'numeric'
+  return new Intl.DateTimeFormat(locale.value, options).format(date)
+}
+
+/** 日志行视图模型：相邻条目本地日期不同时插入日期分隔行 */
+interface LogRow {
+  key: string
+  entry?: LogEntry
+  day?: string
+}
+
+const logRows = computed<LogRow[]>(() => {
+  const rows: LogRow[] = []
+  let lastDay = ''
+  for (const entry of entries.value) {
+    const day = localDayKey(entry.ts)
+    if (day && day !== lastDay) {
+      rows.push({ key: `day-${day}`, day: formatDayLabel(entry.ts) })
+      lastDay = day
+    }
+    rows.push({ key: `seq-${entry.seq}`, entry })
+  }
+  return rows
+})
+
+const formatFullTime = (ts: string): string => {
+  const date = new Date(ts)
+  if (Number.isNaN(date.getTime())) return ts
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
 
 const formatSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`
@@ -289,6 +338,17 @@ const formatData = (entry: LogEntry): string => {
     return ''
   }
 }
+
+/* ── 供控制台页头"复制"/终端 refresh/clear 命令调用 ─────────────────────── */
+
+const getCopyText = (): string =>
+  entries.value.map(e =>
+    `[${e.ts}] [${e.level.toUpperCase()}] [${e.source}] [${e.scope}] ${e.message}${formatData(e) ? ` ${formatData(e)}` : ''}`
+  ).join('\n')
+
+const clearAll = (): Promise<void> => handleClear()
+
+defineExpose({ getCopyText, clearAll, reload: load })
 
 /* ── 实时尾随订阅 ───────────────────────────────────────────────────────── */
 
@@ -331,71 +391,70 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="logs-view">
-    <div class="page-header">
-      <div class="header-text">
-        <h1 class="page-title">{{ t('log.title') }}</h1>
-        <p class="page-desc">{{ t('log.desc') }}</p>
+  <div class="unified-log-panel">
+    <div class="panel-toolbar">
+      <div class="toolbar-left">
+        <SegmentTabs
+          v-model="sourceFilter"
+          :options="sourceTabs"
+          size="sm"
+          :aria-label="t('log.title')"
+          @update:model-value="onFilterChange"
+        />
+        <select v-model="levelFilter" class="level-select" @change="onFilterChange">
+          <option v-for="opt in levelOptions" :key="opt.value" :value="opt.value">
+            {{ t(opt.labelKey) }}
+          </option>
+        </select>
+        <div class="search-box">
+          <Search :size="13" class="search-icon" />
+          <input
+            v-model="searchInput"
+            type="text"
+            class="search-input"
+            :placeholder="t('log.searchPlaceholder')"
+            @input="onSearchInput"
+          />
+        </div>
       </div>
-      <div class="header-actions">
-        <button class="action-btn" :title="t('log.follow')" @click="toggleFollow">
-          <Pause v-if="follow" :size="15" />
-          <Play v-else :size="15" />
-          <span>{{ follow ? t('log.following') : t('log.paused') }}</span>
+      <div class="toolbar-right">
+        <button
+          class="icon-action"
+          :class="{ 'is-on': follow }"
+          :title="follow ? t('log.following') : t('log.paused')"
+          :aria-label="t('log.follow')"
+          @click="toggleFollow"
+        >
+          <Pause v-if="follow" :size="14" />
+          <Play v-else :size="14" />
         </button>
-        <button class="action-btn" :title="t('log.segments')" @click="toggleSegments">
-          <Files :size="15" />
-          <span>{{ t('log.segments') }}</span>
+        <button class="icon-action" :title="t('log.segments')" :aria-label="t('log.segments')" @click="toggleSegments">
+          <Files :size="14" />
         </button>
-        <button class="action-btn" :title="t('log.openDir')" @click="handleOpenDir">
-          <FolderOpen :size="15" />
-          <span>{{ t('log.openDir') }}</span>
+        <button class="icon-action" :title="t('log.openDir')" :aria-label="t('log.openDir')" @click="handleOpenDir">
+          <FolderOpen :size="14" />
         </button>
         <button
-          class="action-btn"
+          class="icon-action"
           :disabled="!isCloudLoggedIn || isUploading"
           :title="isCloudLoggedIn ? t('log.upload') : t('log.uploadNeedLoginHint')"
+          :aria-label="t('log.upload')"
           @click="handleUpload"
         >
-          <Upload :size="15" />
-          <span>{{ isUploading ? t('log.uploading') : t('log.upload') }}</span>
+          <Upload :size="14" />
         </button>
-        <button class="action-btn" :title="t('log.export')" @click="handleExport">
-          <Download :size="15" />
-          <span>{{ t('log.export') }}</span>
+        <button class="icon-action" :title="t('log.export')" :aria-label="t('log.export')" @click="handleExport">
+          <Download :size="14" />
         </button>
-        <button class="action-btn danger" :title="t('log.clear')" @click="handleClear">
-          <Trash2 :size="15" />
-          <span>{{ t('log.clear') }}</span>
-        </button>
-      </div>
-    </div>
-
-    <div class="toolbar">
-      <div class="source-tabs">
         <button
-          v-for="opt in sourceOptions"
-          :key="opt.value"
-          :class="['source-tab', { active: sourceFilter === opt.value }]"
-          @click="sourceFilter = opt.value; onFilterChange()"
+          class="icon-action danger"
+          :title="t('log.clear')"
+          :aria-label="t('log.clear')"
+          @click="handleClear"
         >
-          {{ t(opt.labelKey) }}
+          <RefreshCw v-if="loading" :size="14" class="spin" />
+          <Trash2 v-else :size="14" />
         </button>
-      </div>
-      <select v-model="levelFilter" class="level-select" @change="onFilterChange">
-        <option v-for="opt in levelOptions" :key="opt.value" :value="opt.value">
-          {{ t(opt.labelKey) }}
-        </option>
-      </select>
-      <div class="search-box">
-        <Search :size="14" class="search-icon" />
-        <input
-          v-model="searchInput"
-          type="text"
-          class="search-input"
-          :placeholder="t('log.searchPlaceholder')"
-          @input="onSearchInput"
-        />
       </div>
     </div>
 
@@ -403,18 +462,22 @@ onBeforeUnmount(() => {
       <div v-if="entries.length === 0 && !loading" class="log-empty">
         {{ t('log.empty') }}
       </div>
-      <div
-        v-for="entry in entries"
-        :key="entry.seq"
-        :class="['log-row', levelClass(entry.level)]"
-        :title="formatFullTime(entry.ts)"
-      >
-        <span class="log-time">{{ formatTime(entry.ts) }}</span>
-        <span class="log-source" :class="`src-${entry.source}`">{{ t(`log.source.${entry.source}`) }}</span>
-        <span class="log-level" :class="levelClass(entry.level)">{{ entry.level.toUpperCase() }}</span>
-        <span class="log-scope">[{{ entry.scope }}]</span>
-        <span class="log-message">{{ entry.message }}<template v-if="formatData(entry)"> <span class="log-data">{{ formatData(entry) }}</span></template></span>
-      </div>
+      <template v-for="row in logRows" :key="row.key">
+        <div v-if="row.day" class="log-day-divider" role="separator">
+          <span>{{ row.day }}</span>
+        </div>
+        <div
+          v-else-if="row.entry"
+          :class="['log-row', levelClass(row.entry.level)]"
+          :title="formatFullTime(row.entry.ts)"
+        >
+          <span class="log-time">{{ formatTime(row.entry.ts) }}</span>
+          <span class="log-source">[{{ t(`log.source.${row.entry.source}`) }}]</span>
+          <span class="log-level" :class="levelClass(row.entry.level)">{{ row.entry.level.toUpperCase() }}</span>
+          <span class="log-scope">[{{ row.entry.scope }}]</span>
+          <span class="log-message">{{ row.entry.message }}<template v-if="formatData(row.entry)"> <span class="log-data">{{ formatData(row.entry) }}</span></template></span>
+        </div>
+      </template>
     </div>
 
     <div class="list-footer">
@@ -471,180 +534,171 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.logs-view {
-  height: 100%;
+.unified-log-panel {
+  position: relative;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: var(--space-4, 16px);
-  gap: var(--space-3, 12px);
-  position: relative;
-  overflow: hidden;
-  color: var(--text-primary, inherit);
+  gap: var(--space-2);
 }
 
-.page-header {
+.panel-toolbar {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--space-3, 12px);
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  row-gap: var(--space-2);
   flex-shrink: 0;
 }
 
-.page-title {
-  margin: 0;
-  font-size: var(--text-xl, 20px);
-  font-weight: var(--font-bold, 700);
-}
-
-.page-desc {
-  margin: var(--space-1, 4px) 0 0;
-  font-size: var(--text-sm, 13px);
-  color: var(--text-secondary, inherit);
-  opacity: 0.8;
-}
-
-.header-actions {
-  display: flex;
-  gap: var(--space-2, 8px);
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1, 4px);
-  padding: var(--space-1, 4px) var(--space-2, 8px);
-  border: 1px solid var(--border-light);
-  background: var(--surface-hover, transparent);
-  border-radius: var(--radius-md, 8px);
-  color: var(--text-secondary, inherit);
-  font-size: var(--text-xs, 12px);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.action-btn:hover:not(:disabled) {
-  background: var(--surface-active);
-  color: var(--text-primary, inherit);
-}
-
-.action-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.action-btn.danger:hover:not(:disabled) {
-  color: var(--lumi-danger);
-  border-color: var(--lumi-danger);
-}
-
-.toolbar {
+.toolbar-left {
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   flex-wrap: wrap;
-  flex-shrink: 0;
-}
-
-.source-tabs {
-  display: inline-flex;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md, 8px);
-  overflow: hidden;
-}
-
-.source-tab {
-  padding: var(--space-1, 4px) var(--space-3, 12px);
-  border: none;
-  background: transparent;
-  color: var(--text-secondary, inherit);
-  font-size: var(--text-xs, 12px);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.source-tab:hover {
-  background: var(--surface-hover);
-}
-
-.source-tab.active {
-  background: var(--nav-item-active-bg, var(--lumi-brand));
-  color: var(--nav-item-active-color, var(--text-primary));
-  font-weight: var(--font-semibold, 600);
 }
 
 .level-select {
-  height: 28px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  background: var(--surface);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-md, 8px);
-  background: var(--surface, transparent);
-  color: var(--text-primary, inherit);
-  font-size: var(--text-xs, 12px);
-  padding: 0 var(--space-2, 8px);
   cursor: pointer;
+  transition: all var(--transition-fast);
 }
 
-.search-box {
-  position: relative;
-  flex: 1;
-  min-width: 160px;
-  max-width: 320px;
-}
-
-.search-icon {
-  position: absolute;
-  left: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted, inherit);
-  opacity: 0.7;
-  pointer-events: none;
-}
-
-.search-input {
-  width: 100%;
-  height: 28px;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md, 8px);
-  background: var(--surface, transparent);
-  color: var(--text-primary, inherit);
-  font-size: var(--text-xs, 12px);
-  padding: 0 var(--space-2, 8px) 0 28px;
-  outline: none;
-}
-
-.search-input:focus {
+.level-select:hover {
   border-color: var(--lumi-brand);
 }
 
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  transition: border-color var(--transition-fast);
+}
+
+.search-box:focus-within {
+  border-color: var(--lumi-brand);
+}
+
+.search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.search-input {
+  width: 180px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: var(--text-xs);
+  color: var(--text);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ===== 右侧图标动作组（尾随/文件/目录/上传/导出/清空） ===== */
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.icon-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.icon-action:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.icon-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.icon-action.is-on {
+  color: var(--lumi-brand);
+}
+
+.icon-action.danger:hover:not(:disabled) {
+  color: var(--lumi-danger);
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* ===== 日志列表 ===== */
 .log-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
   border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg, 10px);
-  background: var(--surface, transparent);
-  font-family: 'JetBrains Mono', 'Cascadia Mono', Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.6;
+  border-radius: var(--radius-lg);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-relaxed);
 }
 
 .log-empty {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-muted, inherit);
-  opacity: 0.7;
+  padding: var(--space-6) 0;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-family: var(--font-sans);
 }
 
 .log-row {
   display: flex;
   align-items: baseline;
-  gap: var(--space-2, 8px);
-  padding: 1px var(--space-2, 8px);
-  white-space: pre-wrap;
-  word-break: break-all;
+  gap: var(--space-2);
+  padding: 1px 0;
+  white-space: nowrap;
+}
+
+/* 跨日分隔行：hairline + 本地日期小字 */
+.log-day-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-1) 0;
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  font-family: var(--font-sans);
+  user-select: none;
+}
+
+.log-day-divider::before,
+.log-day-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-light);
 }
 
 .log-row:hover {
@@ -657,71 +711,58 @@ onBeforeUnmount(() => {
 }
 
 .log-source {
+  color: var(--text-muted);
   flex-shrink: 0;
-  min-width: 40px;
-  text-align: center;
-  font-size: 10px;
-  padding: 0 4px;
-  border-radius: var(--radius-full, 999px);
-  border: 1px solid currentColor;
-  opacity: 0.85;
 }
-
-.src-renderer { color: var(--lumi-sky); }
-.src-main { color: var(--lumi-indigo); }
-.src-backend { color: var(--lumi-emerald); }
-.src-platform { color: var(--lumi-amber); }
 
 .log-level {
   flex-shrink: 0;
-  min-width: 42px;
-  font-weight: 600;
+  font-weight: var(--font-semibold);
 }
 
 .level-debug .log-level { color: var(--text-muted); }
-.level-info .log-level { color: var(--lumi-brand); }
-.level-warn .log-level { color: var(--lumi-accent); }
+.level-info .log-level { color: var(--text-secondary); }
+.level-warn .log-level { color: var(--lumi-warning); }
 .level-error .log-level { color: var(--lumi-danger); }
 
 .level-error .log-message { color: var(--lumi-danger); }
-.level-warn .log-message { color: var(--lumi-accent); }
+.level-warn .log-message { color: var(--lumi-warning); }
 
 .log-scope {
-  color: var(--text-secondary);
+  color: var(--text-muted);
   flex-shrink: 0;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .log-message {
-  flex: 1;
-  color: var(--text-primary, inherit);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .log-data {
-  opacity: 0.65;
-  font-size: 11px;
+  color: var(--text-muted);
 }
 
+/* ===== 底部：计数 / 状态 / 分页 ===== */
 .list-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3, 12px);
+  gap: var(--space-2);
   flex-shrink: 0;
-  font-size: var(--text-xs, 12px);
-  color: var(--text-secondary, inherit);
 }
 
 .count-label {
-  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 .status-label {
-  flex: 1;
-  text-align: center;
-  color: var(--lumi-brand);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: var(--text-xs);
+  color: var(--lumi-success);
 }
 
 .status-label.error {
@@ -729,156 +770,178 @@ onBeforeUnmount(() => {
 }
 
 .pagination {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: var(--space-1, 4px);
-  flex-shrink: 0;
+  gap: var(--space-1);
+  margin-left: auto;
 }
 
-.page-btn,
 .jump-latest {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  border: 1px solid var(--border-light);
+  gap: var(--space-1);
+  margin-right: var(--space-2);
+  padding: 2px var(--space-2);
+  border: none;
   background: transparent;
-  color: var(--text-secondary, inherit);
-  border-radius: var(--radius-sm, 6px);
-  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  color: var(--lumi-brand);
   cursor: pointer;
-  font-size: var(--text-xs, 12px);
 }
 
-.page-btn:hover:not(:disabled),
 .jump-latest:hover {
   background: var(--surface-hover);
 }
 
+.page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-xs);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
 .page-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .page-label {
-  padding: 0 var(--space-1, 4px);
-  white-space: nowrap;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  min-width: 64px;
+  text-align: center;
 }
 
-/* 日志段抽屉 */
+/* ===== 分割文件抽屉 ===== */
 .segments-drawer {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
   width: 320px;
-  background: var(--surface);
-  border-left: 1px solid var(--border-light);
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.12);
+  z-index: var(--z-sticky);
   display: flex;
   flex-direction: column;
-  z-index: 30;
+  background: var(--surface);
+  border-left: 1px solid var(--border-light);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  box-shadow: var(--shadow-lg);
 }
 
 .drawer-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--space-3, 12px);
-  border-bottom: 1px solid var(--divider-horizontal);
-  flex-shrink: 0;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .drawer-title {
-  font-weight: var(--font-semibold, 600);
-  font-size: var(--text-sm, 13px);
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text);
 }
 
 .drawer-close {
+  display: inline-flex;
   border: none;
   background: transparent;
-  color: var(--text-secondary, inherit);
+  color: var(--text-muted);
   cursor: pointer;
-  padding: 4px;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-xs);
+  padding: 2px;
 }
 
 .drawer-close:hover {
+  color: var(--text);
   background: var(--surface-hover);
 }
 
 .drawer-body {
   flex: 1;
   overflow-y: auto;
-  padding: var(--space-2, 8px);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2, 8px);
+  padding: var(--space-2) var(--space-3);
 }
 
 .drawer-empty {
+  padding: var(--space-6) 0;
   text-align: center;
-  color: var(--text-muted, inherit);
-  opacity: 0.7;
-  padding: var(--space-4, 16px);
-  font-size: var(--text-xs, 12px);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
 }
 
 .segment-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2, 8px);
-  padding: var(--space-2, 8px);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md, 8px);
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 1px solid var(--border-light);
 }
 
 .segment-info {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
 .segment-name {
-  font-family: Consolas, monospace;
-  font-size: 12px;
+  font-size: var(--text-xs);
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .segment-meta {
-  font-size: 11px;
-  color: var(--text-muted, inherit);
-  opacity: 0.8;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 .segment-open {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  border: 1px solid var(--border-light);
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: none;
   background: transparent;
-  color: var(--text-secondary, inherit);
-  border-radius: var(--radius-sm, 6px);
-  padding: 3px 8px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
   cursor: pointer;
-  font-size: 11px;
   flex-shrink: 0;
 }
 
 .segment-open:hover {
   background: var(--surface-hover);
+  color: var(--text);
 }
 
 .drawer-enter-active,
 .drawer-leave-active {
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition: transform var(--duration-normal) var(--ease-in-out), opacity var(--duration-normal) var(--ease-in-out);
 }
 
 .drawer-enter-from,
 .drawer-leave-to {
   transform: translateX(100%);
   opacity: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

@@ -36,7 +36,8 @@ function speakWithWebAPI(text: string, messageId: string): boolean {
 
   window.speechSynthesis.cancel()
   const utterance = new SpeechSynthesisUtterance(text)
-  utterance.lang = 'zh-CN'
+  // 跟随系统语言（Web Speech 要求 BCP47；navigator.language 本身即该形式）
+  utterance.lang = navigator.language || 'zh-CN'
   utterance.rate = 1.0
 
   utterance.onstart = () => {

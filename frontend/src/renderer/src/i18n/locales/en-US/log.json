@@ -1,11 +1,5 @@
 {
   "log": {
-    "nav": {
-      "title": "App Logs"
-    },
-    "route": {
-      "title": "App Logs - LuomiNest"
-    },
     "title": "App Logs",
     "desc": "Unified viewer for renderer / main / backend / platform logs",
     "source": {

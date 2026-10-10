@@ -61,7 +61,8 @@ const formatTime = (dateStr: string, options?: { seconds?: boolean }): string =>
 const formatDateTime = (dateStr: string): string => {
   const date = new Date(dateStr)
   if (!isValidDate(date)) return '—'
-  return `${date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })} ${formatTime(dateStr)}`
+  // 月份短语随界面语言（原硬编码 'zh-CN'，en-US 下会显示中文日期）
+  return `${date.toLocaleDateString(i18n.global.locale.value, { month: 'short', day: 'numeric' })} ${formatTime(dateStr)}`
 }
 
 const formatShortDateTime = (dateStr: string): string => {

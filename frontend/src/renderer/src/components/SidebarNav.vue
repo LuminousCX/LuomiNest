@@ -12,7 +12,6 @@ import {
   Palette,
   BarChart3,
   Terminal,
-  ScrollText,
   CheckSquare,
   CalendarDays,
   Home,
@@ -98,7 +97,6 @@ const navGroups = computed<NavGroup[]>(() => [
       { id: '/memory', label: t('nav.memoryHub'), icon: Brain },
       { id: '/market', label: t('nav.market'), icon: Package },
       { id: '/panel/console', label: t('nav.console'), icon: Terminal },
-      { id: '/panel/logs', label: t('log.nav.title'), icon: ScrollText },
     ],
   },
   {

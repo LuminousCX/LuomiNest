@@ -30,7 +30,8 @@ import SuggestedQuestions from '../../components/SuggestedQuestions.vue'
 import SkillsPicker from '../common/SkillsPicker.vue'
 import LumiButton from '../common/LumiButton.vue'
 import LumiEmptyState from '../common/LumiEmptyState.vue'
-import { renderMarkdown, renderMarkdownThrottled } from '../../utils/markdown'
+import ThoughtLine from '../common/ThoughtLine.vue'
+import { renderMarkdownThrottled } from '../../utils/markdown'
 import { getFileIcon } from '../../utils/file'
 import type { ChatMessage, ProviderLogo, AgentProfile } from '../../types'
 import { useAutoResizeTextarea } from '../../composables/useAutoResizeTextarea'
@@ -55,7 +56,6 @@ const props = defineProps<{
   contextPercent: number
   contextTokens: number
   copiedId: string | null
-  showReasoning: Record<string, boolean>
   currentSuggestionMessageId: string | null
   isTtsSpeaking: boolean
   ttsSpeakingMsgId: string | null
@@ -67,7 +67,6 @@ const emit = defineEmits<{
   'check-backend': []
   'go-settings': []
   'scroll-to-bottom': [force?: boolean]
-  'toggle-reasoning': [msgId: string]
   'copy-message': [msgId: string, content: string]
   'quote-message': [msg: ChatMessage]
   'tts-speak': [content: string, msgId: string]
@@ -91,7 +90,6 @@ const messagesContainer = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const { autoResize, resetTextareaHeight } = useAutoResizeTextarea(textareaRef)
 const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
-const reasoningScrollRefs = ref<HTMLElement | HTMLElement[] | null>(null)
 const isNearBottom = ref(true)
 const showScrollToBottomBtn = ref(false)
 
@@ -153,14 +151,6 @@ const focusTextarea = () => {
   if (textareaRef.value) textareaRef.value.focus()
 }
 
-const renderReasoningMarkdown = (msg: ChatMessage): string => {
-  // 流式期间按消息缓存 + 节流重解析，完成后精确渲染（最终 HTML 与全量渲染一致）
-  // 与工作台对齐：思考过程原样渲染，不做中文标点重排（避免英文思考被乱切）
-  return renderMarkdownThrottled(`reasoning:${msg.id}`, msg.reasoningContent || '', !!msg.done, (text) =>
-    renderMarkdown(text)
-  )
-}
-
 const renderMessageHtml = (msg: ChatMessage): string =>
   renderMarkdownThrottled(`content:${msg.id}`, msg.content, !!msg.done)
 
@@ -175,18 +165,26 @@ const getVersionIndex = (msg: ChatMessage): number => {
 
 const isLastAssistantMessage = (msgId: string) => checkLastAssistantMessage(props.messages, msgId)
 
-watch(() => props.messages, async () => {
-  await nextTick()
-  const scrollEls = reasoningScrollRefs.value
-  if (scrollEls) {
-    const els = Array.isArray(scrollEls) ? scrollEls : [scrollEls]
-    for (const el of els) {
-      if (el && el.scrollHeight > el.clientHeight) {
-        el.scrollTop = el.scrollHeight
-      }
-    }
-  }
-}, { deep: true, immediate: true })
+// 标记本会话内"亲眼见过流式思考"的消息 id：这类消息 settle 后展示"思考了 X.Xs"；
+// 历史加载的思考没有计时数据，只展示"思考完成"、不带计时（ThoughtLine 内部 collapse 自管）
+const liveThinking = ref<Record<string, boolean>>({})
+watch(
+  () => {
+    const last = props.messages[props.messages.length - 1]
+    return last && last.role === 'assistant' && !last.done && !last.content ? last.id : null
+  },
+  (id) => {
+    if (id && !liveThinking.value[id]) liveThinking.value = { ...liveThinking.value, [id]: true }
+  },
+  { immediate: true }
+)
+
+// reasoning 原文 → 思考步骤列表：按行拆分并剥离行首 markdown 修饰
+const reasoningSteps = (msg: ChatMessage): string[] =>
+  (msg.reasoningContent || '')
+    .split('\n')
+    .map((line) => line.trim().replace(/^[-*>#]+\s*/, '').replace(/\*\*/g, '').trim())
+    .filter(Boolean)
 
 watch(() => props.isLoadingCurrentConv, (loading) => {
   if (loading) {
@@ -259,26 +257,16 @@ defineExpose({
                 <div class="message-sender lumi-chat-message-sender" v-if="msg.role === 'assistant'">{{ agent?.name || 'LuomiNest' }}</div>
                 <div
                   v-if="msg.role === 'assistant' && (msg.reasoningContent !== undefined || (!msg.done && msg.id === messages[messages.length - 1].id && !msg.content))"
-                  class="reasoning-section"
+                  class="thought-section"
                 >
-                  <div class="reasoning-header" @click="emit('toggle-reasoning', msg.id)">
-                    <Loader2 v-if="!msg.done && !msg.content && !msg.reasoningContent" :size="12" class="spin-animation" />
-                    <Wand2 v-else :size="12" />
-                    <span>
-                      <template v-if="!msg.done && !msg.content && !msg.reasoningContent">{{ t('chat.waitingModel') }}</template>
-                      <template v-else-if="!msg.done && !msg.content && msg.reasoningContent">{{ t('chat.thinking') }}</template>
-                      <template v-else-if="msg.reasoningContent && msg.reasoningContent.length > 0">{{ showReasoning[msg.id] ? t('chat.thinkingProcess') : t('chat.thinkingCollapsed') }}</template>
-                      <template v-else>{{ t('chat.thinkingDone') }}</template>
-                    </span>
-                    <ChevronDown :size="12" class="reasoning-chevron lumi-chat-reasoning-chevron" :class="{ rotated: !showReasoning[msg.id] }" />
-                  </div>
-                  <div
-                    v-show="showReasoning[msg.id] !== false"
-                    class="reasoning-content reasoning-markdown"
-                    ref="reasoningScrollRefs"
-                  >
-                    <div v-html="renderReasoningMarkdown(msg)"></div>
-                  </div>
+                  <ThoughtLine
+                    :working="!msg.done && !msg.content"
+                    :label="!msg.done && !msg.content && !msg.reasoningContent ? t('chat.waitingModel') : t('chat.thinkingLabel')"
+                    :done-label="liveThinking[msg.id] ? t('chat.thoughtFor') : t('chat.thinkingDone')"
+                    :show-timer="!!liveThinking[msg.id]"
+                    :steps="reasoningSteps(msg)"
+                    :font-size="13"
+                  />
                 </div>
 
                 <!-- AI消息内容 -->
@@ -770,7 +758,7 @@ defineExpose({
 }
 
 .message-file-item:hover {
-  background: var(--lumi-brand-bg);
+  background: var(--lumi-brand-subtle);
   border-color: var(--lumi-brand);
   color: var(--lumi-brand);
 }
@@ -1497,87 +1485,8 @@ defineExpose({
   white-space: nowrap;
 }
 
-.reasoning-section {
+.thought-section {
   margin-bottom: 10px;
-  border: 1px solid var(--task-sky-border);
-  border-radius: var(--radius-md);
-  background: var(--task-sky-soft);
-  overflow: hidden;
-}
-
-.reasoning-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: var(--space-2) var(--space-3);
-  cursor: pointer;
-  user-select: none;
-  font-size: var(--text-sm);
-  color: var(--task-sky);
-  transition: background var(--transition-fast);
-}
-
-.reasoning-header:hover {
-  background: var(--task-sky-soft);
-}
-
-.reasoning-chevron {
-  margin-left: auto;
-  transition: transform var(--duration-leave) var(--ease-default);
-}
-
-.reasoning-content {
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--text-base);
-  line-height: 1.6;
-  color: var(--text-muted);
-  border-top: 1px solid var(--divider-soft);
-  border-left: var(--space-1) solid var(--task-sky-border);
-  border-radius: 0 4px 4px 0;
-  background: var(--task-sky-soft);
-  word-break: break-word;
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.reasoning-markdown :deep(p) {
-  margin: 0 0 10px;
-  line-height: 1.8;
-  position: relative;
-}
-
-.reasoning-markdown :deep(p:last-child) {
-  margin-bottom: 0;
-}
-
-.reasoning-markdown :deep(strong) {
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.reasoning-markdown :deep(em) {
-  color: var(--text-muted);
-  font-style: italic;
-}
-
-.reasoning-markdown :deep(code) {
-  padding: 1px var(--space-1);
-  border-radius: 3px;
-  font-size: var(--text-xs);
-  background: var(--task-sky-soft);
-  color: var(--task-sky);
-  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-}
-
-.reasoning-markdown :deep(ul),
-.reasoning-markdown :deep(ol) {
-  margin: var(--space-1) 0 10px;
-  padding-left: var(--space-5);
-}
-
-.reasoning-markdown :deep(li) {
-  margin: 2px 0;
-  line-height: 1.7;
 }
 
 .msg-appear-enter-active {

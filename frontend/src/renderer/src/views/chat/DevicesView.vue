@@ -9,6 +9,8 @@ import LumiCard from '../../components/common/LumiCard.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
 import LumiPageHeader from '../../components/common/LumiPageHeader.vue'
+import SegmentTabs from '../../components/common/SegmentTabs.vue'
+import type { SegmentTabOption } from '../../components/common/SegmentTabs.vue'
 
 interface Device {
   id: string
@@ -59,8 +61,15 @@ const PROTOCOL_MAP: Record<string, string> = {
 }
 
 const searchQuery = ref('')
-const activeTab = ref<'devices' | 'groups'>('devices')
 const { t } = useI18n()
+type DeviceTabKey = 'devices' | 'groups'
+const activeTab = ref<DeviceTabKey>('devices')
+
+/** 设备 / 群组主 tab（SegmentTabs lg 档） */
+const tabOptions = computed<SegmentTabOption<DeviceTabKey>[]>(() => [
+  { value: 'devices', label: t('smartHome.devices.tabDevices'), icon: Wifi },
+  { value: 'groups', label: t('smartHome.devices.tabGroups'), icon: Users },
+])
 
 // 搜索过滤（此前仅有输入框而无过滤逻辑）
 const filteredDevices = computed(() => {
@@ -141,16 +150,7 @@ onMounted(() => {
       </template>
     </LumiPageHeader>
 
-    <div class="tab-bar">
-      <button :class="['tab-btn', { active: activeTab === 'devices' }]" @click="activeTab = 'devices'">
-        <Wifi :size="14" />
-        {{ t('smartHome.devices.tabDevices') }}
-      </button>
-      <button :class="['tab-btn', { active: activeTab === 'groups' }]" @click="activeTab = 'groups'">
-        <Users :size="14" />
-        {{ t('smartHome.devices.tabGroups') }}
-      </button>
-    </div>
+    <SegmentTabs v-model="activeTab" :options="tabOptions" size="lg" />
 
     <div class="devices-content">
       <div class="main-panel">
@@ -290,39 +290,7 @@ onMounted(() => {
   overflow-y: auto;
 }
 
-/* header → LumiPageHeader */
-
-.tab-bar {
-  display: flex;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
-  width: fit-content;
-}
-
-.tab-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-5);
-  border-radius: var(--radius-sm);
-  font-size: var(--text-base);
-  font-weight: var(--font-medium);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.tab-btn.active {
-  background: var(--surface);
-  color: var(--lumi-brand);
-  box-shadow: var(--shadow-xs);
-}
-
-.tab-btn:hover:not(.active) {
-  color: var(--text-secondary);
-}
+/* header → LumiPageHeader；tab 行 → SegmentTabs（lg） */
 
 .devices-content {
   flex: 1;

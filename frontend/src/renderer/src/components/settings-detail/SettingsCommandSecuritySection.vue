@@ -312,7 +312,7 @@ onMounted(async () => {
   padding: 2px var(--space-2);
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   line-height: 1.6;
 }
 
@@ -327,8 +327,8 @@ onMounted(async () => {
 }
 
 .command-tag--blacklist {
-  background: color-mix(in srgb, var(--lumi-danger, #e5484d) 12%, transparent);
-  color: var(--lumi-danger, #e5484d);
+  background: color-mix(in srgb, var(--lumi-danger) 12%, transparent);
+  color: var(--lumi-danger);
 }
 
 .command-tag--empty {
@@ -353,7 +353,7 @@ onMounted(async () => {
 }
 
 .settings-form-error {
-  color: var(--lumi-danger, #e5484d);
+  color: var(--lumi-danger);
   font-size: var(--text-sm);
   margin-top: var(--space-1);
 }

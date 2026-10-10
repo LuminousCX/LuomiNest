@@ -28,10 +28,6 @@
   object-fit: cover;
 }
 
-.lumi-chat-reasoning-chevron.rotated {
-  transform: rotate(-90deg);
-}
-
 .lumi-chat-search-highlight {
   animation: lumi-chat-search-pulse var(--duration-slow) var(--ease-out-expo);
 }

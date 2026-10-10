@@ -3,6 +3,7 @@
     "skip": "跳过",
     "delete": "删除",
     "empty": "暂无数据",
+    "segmentedControl": "分段选择器",
     "time": {
       "justNow": "刚刚",
       "minutesAgo": "{n} 分钟前",

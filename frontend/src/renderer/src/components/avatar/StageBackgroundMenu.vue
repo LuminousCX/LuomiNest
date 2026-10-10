@@ -259,7 +259,7 @@ async function handleImageClick() {
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-light);
-  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.12));
+  box-shadow: var(--shadow-md);
   transition:
     opacity var(--duration-normal) var(--ease-in-out),
     transform var(--duration-normal) var(--ease-in-out);
@@ -283,7 +283,7 @@ async function handleImageClick() {
   position: relative;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.16);
   transition:
-    transform var(--duration-normal) var(--ease-out-expo, cubic-bezier(0.16, 1, 0.3, 1)),
+    transform var(--duration-normal) var(--ease-out-expo),
     opacity var(--duration-normal) var(--ease-in-out),
     box-shadow var(--duration-fast) var(--ease-in-out);
 }

@@ -186,13 +186,9 @@
 }
 
 /* -------------------------------------------------------
-   9. Hero 卡片 — 保留品牌渐变，增加蓝色阴影
-   ------------------------------------------------------- */
-.about-view .about-hero,
-.license-view .license-hero,
-
-/* -------------------------------------------------------
-   10. 项目卡片（about-project-card）独立美化
+   9/10. 项目卡片（about-project-card）独立美化
+   注意：.about-hero / .license-hero 不在此覆盖——它们的品牌渐变
+   由各自 view css（about-view.css / license-view.css）提供，保持原样。
    ------------------------------------------------------- */
 .about-view .about-project-card {
   background: #fff;

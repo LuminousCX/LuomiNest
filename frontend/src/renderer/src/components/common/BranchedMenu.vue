@@ -86,7 +86,7 @@ const FOLD_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 const MARK = 16
 
 const ink = computed(() => props.color || 'var(--text-primary)')
-const accent = computed(() => props.accentColor || 'var(--nav-item-active-color, var(--lumi-brand))')
+const accent = computed(() => props.accentColor || 'var(--nav-item-active-color)')
 const line = computed(() => props.lineColor || 'var(--border)')
 
 const isLeaf = (item: BranchedMenuItem): boolean => !item.children?.length
@@ -420,7 +420,7 @@ const rootStyle = computed(() => ({
 }
 
 .bm-section + .bm-section {
-  margin-top: var(--space-1, 4px);
+  margin-top: var(--space-1);
 }
 
 /* ===== 分组头 / 顶层叶子 ===== */
@@ -428,9 +428,9 @@ const rootStyle = computed(() => ({
   width: 100%;
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   height: var(--bm-row-h);
-  padding: 0 var(--space-2, 8px) 0 calc(var(--bm-trunk) + 8px);
+  padding: 0 var(--space-2) 0 calc(var(--bm-trunk) + 8px);
   border: none;
   background: transparent;
   border-radius: var(--bm-radius);
@@ -438,17 +438,17 @@ const rootStyle = computed(() => ({
   color: inherit;
   font: inherit;
   text-align: left;
-  transition: background var(--transition-fast, 150ms) ease;
+  transition: background var(--transition-fast) ease;
 }
 
 .bm-header:hover {
-  background: var(--nav-item-hover-bg, var(--surface-hover));
+  background: var(--nav-item-hover-bg);
 }
 
 .bm-header .bm-label {
   color: color-mix(in srgb, var(--bm-ink) 62%, transparent);
-  font-weight: var(--font-semibold, 600);
-  transition: color var(--transition-fast, 150ms) ease;
+  font-weight: var(--font-semibold);
+  transition: color var(--transition-fast) ease;
 }
 
 /* 展开的分组头提亮为墨色（与官方 open 态一致） */
@@ -465,7 +465,7 @@ const rootStyle = computed(() => ({
   margin-left: auto;
   flex-shrink: 0;
   opacity: 0.45;
-  transition: transform var(--transition-fast, 150ms) ease, opacity var(--transition-fast, 150ms) ease;
+  transition: transform var(--transition-fast) ease, opacity var(--transition-fast) ease;
 }
 
 .bm-header:hover .bm-chevron {
@@ -487,9 +487,9 @@ const rootStyle = computed(() => ({
   width: 100%;
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
+  gap: var(--space-2);
   height: var(--bm-row-h);
-  padding: 0 var(--space-2, 8px) 0 var(--bm-indent);
+  padding: 0 var(--space-2) 0 var(--bm-indent);
   border: none;
   background: transparent;
   border-radius: var(--bm-radius);
@@ -497,7 +497,7 @@ const rootStyle = computed(() => ({
   color: inherit;
   font: inherit;
   text-align: left;
-  transition: background var(--transition-fast, 150ms) ease, color var(--transition-fast, 150ms) ease;
+  transition: background var(--transition-fast) ease, color var(--transition-fast) ease;
 }
 
 .bm-row .bm-label {
@@ -505,11 +505,11 @@ const rootStyle = computed(() => ({
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: color var(--transition-fast, 150ms) ease;
+  transition: color var(--transition-fast) ease;
 }
 
 .bm-row:hover {
-  background: var(--nav-item-hover-bg, var(--surface-hover));
+  background: var(--nav-item-hover-bg);
 }
 
 .bm-row:hover .bm-label {
@@ -518,7 +518,7 @@ const rootStyle = computed(() => ({
 
 .bm-row.active .bm-label {
   color: var(--bm-accent);
-  font-weight: var(--font-semibold, 600);
+  font-weight: var(--font-semibold);
 }
 
 .bm-row.active .bm-icon {
@@ -573,13 +573,13 @@ const rootStyle = computed(() => ({
 .bm-pending {
   position: absolute;
   top: 50%;
-  right: var(--space-2, 8px);
+  right: var(--space-2);
   transform: translateY(-50%);
   width: 5px;
   height: 5px;
   border-radius: 50%;
   background: var(--bm-accent);
-  box-shadow: 0 0 0 2px var(--surface, transparent);
+  box-shadow: 0 0 0 2px var(--surface);
   animation: bm-pending-pulse 1.6s ease-in-out infinite;
 }
 
@@ -607,13 +607,13 @@ const rootStyle = computed(() => ({
 }
 
 .bm-row--leaf.active {
-  background: var(--nav-item-active-bg, transparent);
+  background: var(--nav-item-active-bg);
 }
 
 /* 焦点可见性 */
 .bm-header:focus-visible,
 .bm-row:focus-visible {
-  outline: 2px solid var(--focus-ring, var(--lumi-brand));
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 

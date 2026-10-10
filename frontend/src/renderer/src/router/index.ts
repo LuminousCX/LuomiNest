@@ -113,11 +113,10 @@ const routes: RouteRecordRaw[] = [
     component: () => import('../views/panel/ConsoleView.vue'),
     meta: { titleKey: 'route.console', icon: 'Terminal' }
   },
+  // 应用日志已集成进控制台（日志 tab），保留 redirect 防止外部链接失效
   {
     path: '/panel/logs',
-    name: 'PanelLogs',
-    component: () => import('../views/panel/LogsView.vue'),
-    meta: { titleKey: 'log.route.title', icon: 'ScrollText' }
+    redirect: '/panel/console'
   },
   {
     path: '/tasks',

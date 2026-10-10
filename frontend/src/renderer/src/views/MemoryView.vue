@@ -24,6 +24,8 @@ import { useMemoryStore, categoryLabel, CATEGORY_COLORS, FACT_CATEGORIES } from 
 import type { FactItem, FactCategory, MemoryAgent, MemoryTrackType } from '../stores/memory'
 import { useToast } from '../composables/useToast'
 import LumiButton from '../components/common/LumiButton.vue'
+import SegmentTabs from '../components/common/SegmentTabs.vue'
+import type { SegmentTabOption } from '../components/common/SegmentTabs.vue'
 import ConfirmDialog from '../components/common/ConfirmDialog.vue'
 import SearchInput from '../components/common/SearchInput.vue'
 import MemoryLayerNav from '../components/memory/MemoryLayerNav.vue'
@@ -59,6 +61,13 @@ const layerTabs = computed<LayerTab[]>(() => [
 ])
 
 const activeTab = ref('profile')
+
+/** 3 轨道切换（SegmentTabs lg 档：博主 / 粉丝 / 群聊，badge 保留实体计数） */
+const trackTabs = computed<SegmentTabOption<MemoryTrackType>[]>(() => [
+  { value: 'owner', label: t('memory.tracks.owner'), icon: Sparkles },
+  { value: 'users', label: t('memory.tracks.users'), icon: User, badge: memoryStore.memoryUsers.length },
+  { value: 'groups', label: t('memory.tracks.groups'), icon: Users, badge: memoryStore.memoryGroups.length },
+])
 
 const isEditingKnowledge = ref(false)
 const editKnowledgeContent = ref('')
@@ -701,35 +710,15 @@ window.addEventListener('click', closeMenu)
         <h1 class="memory-title lumi-page-title">{{ t('memory.title') }}</h1>
         <p class="memory-desc lumi-page-desc">{{ t('memory.desc') }}</p>
 
-        <!-- 3-Track switcher tabs: Owner / Users (Fans) / Groups -->
-        <div class="memory-track-nav">
-          <button
-            class="track-tab-btn"
-            :class="{ active: memoryStore.currentTrack === 'owner' }"
-            @click="handleSelectTrack('owner')"
-          >
-            <Sparkles :size="14" />
-            <span>{{ t('memory.tracks.owner') }}</span>
-          </button>
-          <button
-            class="track-tab-btn"
-            :class="{ active: memoryStore.currentTrack === 'users' }"
-            @click="handleSelectTrack('users')"
-          >
-            <User :size="14" />
-            <span>{{ t('memory.tracks.users') }}</span>
-            <span v-if="memoryStore.memoryUsers.length > 0" class="track-badge">{{ memoryStore.memoryUsers.length }}</span>
-          </button>
-          <button
-            class="track-tab-btn"
-            :class="{ active: memoryStore.currentTrack === 'groups' }"
-            @click="handleSelectTrack('groups')"
-          >
-            <Users :size="14" />
-            <span>{{ t('memory.tracks.groups') }}</span>
-            <span v-if="memoryStore.memoryGroups.length > 0" class="track-badge">{{ memoryStore.memoryGroups.length }}</span>
-          </button>
-        </div>
+        <!-- 3-Track switcher (SegmentTabs lg): Owner / Users (Fans) / Groups -->
+        <SegmentTabs
+          class="memory-track-switcher"
+          size="lg"
+          :options="trackTabs"
+          :model-value="memoryStore.currentTrack"
+          :aria-label="t('memory.title')"
+          @update:model-value="handleSelectTrack"
+        />
 
         <!-- Track entity selector triggers -->
         <div v-if="memoryStore.currentTrack === 'owner'" class="memory-agent-picker">
@@ -1093,53 +1082,9 @@ window.addEventListener('click', closeMenu)
   flex-direction: column;
 }
 
-.memory-track-nav {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: 3px;
+/* 3 轨道切换器：SegmentTabs lg（样式由全局组件承担） */
+.memory-track-switcher {
   margin-top: var(--space-3);
-  width: fit-content;
-}
-
-.track-tab-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: var(--radius-sm);
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.track-tab-btn:hover {
-  color: var(--text);
-  background: var(--surface-hover);
-}
-
-.track-tab-btn.active {
-  background: var(--lumi-brand);
-  color: #fff;
-  font-weight: var(--font-semibold);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--lumi-brand) 30%, transparent);
-}
-
-.track-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1px 6px;
-  font-size: 11px;
-  border-radius: 999px;
-  background: color-mix(in srgb, currentColor 20%, transparent);
 }
 
 .quick-pill-bar {
@@ -1291,20 +1236,20 @@ window.addEventListener('click', closeMenu)
   letter-spacing: -0.01em;
 }
 
+/* 单滚动：.memory-body 是页面唯一垂直滚动容器，两栏高度随内容自适应 */
 .memory-body {
   display: flex;
   flex: 1;
   min-height: 0;
   gap: var(--space-4);
   padding: var(--space-4);
-  overflow: hidden;
+  overflow-y: auto;
+  align-items: flex-start;
 }
 
 .memory-detail {
   flex: 1;
-  min-height: 0;
   padding: var(--space-4) var(--space-6);
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
@@ -1330,10 +1275,12 @@ window.addEventListener('click', closeMenu)
 
   .memory-body {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .memory-detail {
     padding: var(--space-4);
+    flex: none;
   }
 }
 </style>

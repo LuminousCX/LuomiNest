@@ -24,6 +24,8 @@ import { useTaskStreamStore } from './taskStream'
 import { useMemoryStore } from './memory'
 import { generateId } from '../utils/id'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { useToast } from '../composables/useToast'
+import { toErrorMessage } from '@/utils/error'
 import { i18n } from '../i18n'
 import type { WorkflowTemplate, SaveAsTemplateRequest } from '../types/workflow'
 
@@ -127,6 +129,7 @@ export interface WorkflowSessionState {
 
 export const useWorkflowStore = defineStore('workflow', () => {
   const { apiSseStream, apiPost, apiGet, apiDelete } = useApi()
+  const toast = useToast()
 
   // 当前活跃的工作流会话
   const currentSession = ref<WorkflowSessionState | null>(null)
@@ -622,7 +625,11 @@ export const useWorkflowStore = defineStore('workflow', () => {
         timestamp: Date.now(),
       })
     } catch (err) {
+      // 取消请求失败时工作流仍在跑，用户需要知道该状态并知道去哪确认
       logger.error('取消工作流失败:', err)
+      toast.error(i18n.global.t('toast.workflow.cancelFailed'), {
+        description: i18n.global.t('toast.workflow.cancelFailedDesc', { message: toErrorMessage(err) }),
+      })
     }
   }
 
@@ -647,7 +654,11 @@ export const useWorkflowStore = defineStore('workflow', () => {
         timestamp: Date.now(),
       })
     } catch (err) {
+      // 确认失败时 UI 已乐观清空待确认卡片，用户会以为工作流卡死，必须告知真实状态
       logger.error('确认计划失败:', err)
+      toast.error(i18n.global.t('toast.workflow.confirmFailed'), {
+        description: i18n.global.t('toast.workflow.confirmFailedDesc', { message: toErrorMessage(err) }),
+      })
     }
   }
 
@@ -672,7 +683,11 @@ export const useWorkflowStore = defineStore('workflow', () => {
         timestamp: Date.now(),
       })
     } catch (err) {
+      // 拒绝失败时 UI 已乐观清空待确认卡片，工作流实际仍在等待，必须告知
       logger.error('拒绝计划失败:', err)
+      toast.error(i18n.global.t('toast.workflow.rejectFailed'), {
+        description: i18n.global.t('toast.workflow.rejectFailedDesc', { message: toErrorMessage(err) }),
+      })
     }
   }
 

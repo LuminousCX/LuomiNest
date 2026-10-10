@@ -138,7 +138,7 @@ const { t } = useI18n()
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   text-align: left;
-  transition: background var(--transition-fast, 0.15s ease-in-out);
+  transition: background var(--transition-fast);
   cursor: pointer;
   margin-bottom: var(--space-1);
 }
@@ -176,7 +176,7 @@ const { t } = useI18n()
 }
 
 .session-item-icon.stale {
-  color: var(--lumi-warning, #f59e0b);
+  color: var(--lumi-warning);
 }
 
 .session-item-info {

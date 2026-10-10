@@ -421,7 +421,7 @@ const handleRemoveProvider = async (providerId: string) => {
 }
 
 .key-prefix-text {
-  font-family: var(--font-mono, 'Courier New', monospace);
+  font-family: var(--font-mono);
 }
 
 .provider-item-actions {

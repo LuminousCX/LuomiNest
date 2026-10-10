@@ -236,7 +236,7 @@ defineExpose({
 }
 
 .status-tag {
-  border-color: var(--lumi-success-border, var(--lumi-success));
+  border-color: var(--lumi-success);
   color: var(--lumi-success);
 }
 </style>

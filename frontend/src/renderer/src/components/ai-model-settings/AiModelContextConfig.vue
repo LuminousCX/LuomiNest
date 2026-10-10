@@ -388,8 +388,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
 }
 
 .section-icon--model {
-  background: var(--lumi-emerald-light, rgba(16, 185, 129, 0.12));
-  color: var(--lumi-emerald, #10b981);
+  background: color-mix(in srgb, var(--lumi-emerald) 12%, transparent);
+  color: var(--lumi-emerald);
 }
 
 .section-count {
@@ -451,7 +451,7 @@ watch(() => modelStore.modelConfig, (cfg) => {
 }
 
 .value-recommended {
-  color: var(--lumi-emerald, #10b981);
+  color: var(--lumi-emerald);
 }
 
 .form-number-input {
@@ -484,7 +484,7 @@ watch(() => modelStore.modelConfig, (cfg) => {
 }
 
 .recommended-badge {
-  color: var(--lumi-emerald, #10b981);
+  color: var(--lumi-emerald);
   font-weight: 600;
 }
 
@@ -655,8 +655,8 @@ watch(() => modelStore.modelConfig, (cfg) => {
 }
 
 .model-card:hover {
-  border-color: var(--workspace-border-hover, var(--lumi-primary-border));
-  box-shadow: 0 2px 8px var(--workspace-shadow, rgba(0, 0, 0, 0.04));
+  border-color: var(--lumi-primary-border);
+  box-shadow: var(--shadow-xs);
 }
 
 .model-card.disabled {
