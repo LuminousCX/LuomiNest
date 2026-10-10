@@ -536,7 +536,6 @@
       "selectModel": "请选择模型",
       "precise": "精确",
       "creative": "创意",
-      "noModels": "暂无模型列表",
       "fetch": "获取",
       "modelMismatch": "当前供应商可能不支持此模型，请求时可能报错",
       "errSelectProvider": "请选择供应商",
@@ -546,9 +545,9 @@
       "saveFailed": "保存失败",
       "saveConfig": "保存配置",
       "unknownError": "未知错误",
-      "fetchSuccess": "已获取 {count} 个模型",
+      "modelsUnknownHint": "该供应商的模型列表未知，点击右侧刷新按钮获取（未配置 API Key 时无法获取）",
       "fetchEmpty": "未获取到模型，请检查供应商配置或网络连接",
-      "fetchFailed": "获取模型列表失败：{message}"
+      "fetchFailedTitle": "模型列表获取失败，请检查 API Key 与网络后重试"
     },
     "main": {
       "title": "快速响应模型（主模型）",

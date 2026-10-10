@@ -329,9 +329,13 @@ const rootStyle = computed(
 .tl-root {
   --tl-done: 0.55;
   --tl-timer: 1;
-  display: inline-flex;
+  /* 占满消息列宽度：inline-flex 收缩到内容宽会让 .tl-tray 的百分比 min-width
+     与根宽形成循环约束（根被头部行宽钉死 → 步骤列表被压成细竖条）。
+     根宽改由父容器决定，头部行靠 align-items: flex-start 保持内容宽。 */
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
+  width: 100%;
   max-width: 100%;
   font-weight: 500;
   line-height: 1.2;
@@ -475,11 +479,12 @@ const rootStyle = computed(
   transform: rotate(180deg);
 }
 
-/* 可折叠步骤列表：grid-template-rows 0fr→1fr 实现高度折叠动画 */
+/* 可折叠步骤列表：grid-template-rows 0fr→1fr 实现高度折叠动画。
+   width: 100% 而非 width:0 + min-width:100%：后者在根宽未定时百分比参与不进来，
+   会把列表宽度钉死在头部行宽；width:100% 在根宽定下后即整列宽度。 */
 .tl-tray {
   display: grid;
-  width: 0;
-  min-width: 100%;
+  width: 100%;
   grid-template-rows: 0fr;
   transition: grid-template-rows var(--tl-settle) cubic-bezier(0.23, 1, 0.32, 1);
 }

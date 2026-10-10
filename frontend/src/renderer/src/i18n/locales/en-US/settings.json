@@ -536,7 +536,6 @@
       "selectModel": "Select a model",
       "precise": "Precise",
       "creative": "Creative",
-      "noModels": "No model list yet",
       "fetch": "Fetch",
       "modelMismatch": "The current provider may not support this model; requests may fail",
       "errSelectProvider": "Please select a provider",
@@ -546,9 +545,9 @@
       "saveFailed": "Save failed",
       "saveConfig": "Save Configuration",
       "unknownError": "Unknown error",
-      "fetchSuccess": "Fetched {count} models",
+      "modelsUnknownHint": "The model list for this provider is unknown. Click the refresh button on the right to fetch it (an API key is required)",
       "fetchEmpty": "No models fetched. Please check the provider configuration or network connection",
-      "fetchFailed": "Failed to fetch the model list: {message}"
+      "fetchFailedTitle": "Failed to fetch the model list. Check the API key and network, then try again"
     },
     "main": {
       "title": "Fast Response Model (Main)",

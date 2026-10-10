@@ -11,12 +11,9 @@ import {
 } from 'lucide-vue-next'
 import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
+import { useProviderModelFetch } from './useProviderModelFetch'
 import AiModelProviderList from './AiModelProviderList.vue'
 import type { MainModelConfig } from './types'
-import { createLuomiNestRendererLogger } from '../../utils/logger'
-import { toErrorMessage } from '@/utils/error'
-
-const logger = createLuomiNestRendererLogger('AiModel')
 
 const emit = defineEmits<{
   (e: 'add-provider'): void
@@ -41,14 +38,12 @@ const mainModelConfig = ref<MainModelConfig>({
 const saveValidationError = ref('')
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
-const mainAvailableModels = computed(() => {
-  const provider = providers.value.find(p => p.id === mainModelConfig.value.selectedProvider)
-  if (!provider) return []
-  if (provider.selectedModels.length > 0) {
-    return provider.selectedModels.map(id => ({ id, name: id }))
-  }
-  return provider.models
-})
+const {
+  availableModels: mainAvailableModels,
+  modelsUnknown: mainModelsUnknown,
+  isFetching: isMainFetching,
+  fetchModels,
+} = useProviderModelFetch(computed(() => mainModelConfig.value.selectedProvider))
 
 const mainConfigValid = computed(() => {
   if (!mainModelConfig.value.selectedProvider) {
@@ -63,20 +58,6 @@ const mainConfigValid = computed(() => {
 const onMainProviderChange = () => {
   saveValidationError.value = ''
   mainModelConfig.value.model = ''
-}
-
-const handleFetchModels = async (providerId: string) => {
-  try {
-    const models = await modelStore.fetchProviderModels(providerId)
-    if (models.length > 0) {
-      toast.success(t('aiModel.common.fetchSuccess', { count: models.length }))
-    } else {
-      toast.warning(t('aiModel.common.fetchEmpty'))
-    }
-  } catch (e: unknown) {
-    logger.error('Failed to fetch models:', e)
-    toast.error(t('aiModel.common.fetchFailed', { message: toErrorMessage(e) || t('aiModel.common.unknownError') }))
-  }
 }
 
 const handleSaveMainConfig = async () => {
@@ -166,20 +147,27 @@ onMounted(() => {
           {{ t('aiModel.common.model') }}
           <span class="required-mark">*</span>
         </label>
-        <div class="form-select-wrap">
-          <select v-model="mainModelConfig.model" class="form-select">
-            <option value="">{{ t('aiModel.common.selectModel') }}</option>
-            <option v-for="m in mainAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
-          </select>
-          <ChevronRight :size="14" class="select-icon" />
-        </div>
-        <div v-if="mainModelConfig.selectedProvider && mainAvailableModels.length === 0" class="fetch-models-row">
-          <span class="form-hint">{{ t('aiModel.common.noModels') }}</span>
-          <button class="fetch-btn" @click="handleFetchModels(mainModelConfig.selectedProvider)">
-            <RefreshCw :size="12" />
-            {{ t('aiModel.common.fetch') }}
+        <div class="model-field-row">
+          <div class="form-select-wrap model-select-wrap">
+            <select v-model="mainModelConfig.model" class="form-select" :disabled="mainModelsUnknown">
+              <option value="">{{ t('aiModel.common.selectModel') }}</option>
+              <option v-for="m in mainAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+            </select>
+            <ChevronRight :size="14" class="select-icon" />
+          </div>
+          <button
+            class="refresh-models-btn"
+            :disabled="!mainModelConfig.selectedProvider || isMainFetching(mainModelConfig.selectedProvider)"
+            :title="t('aiModel.common.fetch')"
+            :aria-label="t('aiModel.common.fetch')"
+            @click="fetchModels(mainModelConfig.selectedProvider)"
+          >
+            <RefreshCw :size="14" :class="{ 'spin-animation': isMainFetching(mainModelConfig.selectedProvider) }" />
           </button>
         </div>
+        <span v-if="mainModelsUnknown" class="form-hint">
+          {{ t('aiModel.common.modelsUnknownHint') }}
+        </span>
         <span v-if="mainModelConfig.model && mainAvailableModels.length > 0 && !mainAvailableModels.find(m => m.id === mainModelConfig.model)" class="form-hint hint-warn">
           {{ t('aiModel.common.modelMismatch') }}
         </span>

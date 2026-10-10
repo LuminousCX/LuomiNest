@@ -536,7 +536,6 @@
       "selectModel": "モデルを選択してください",
       "precise": "正確",
       "creative": "創造",
-      "noModels": "モデルリストがありません",
       "fetch": "取得",
       "modelMismatch": "現在のプロバイダーはこのモデルに対応していない可能性があり、リクエスト時にエラーが発生する場合があります",
       "errSelectProvider": "プロバイダーを選択してください",
@@ -546,9 +545,9 @@
       "saveFailed": "保存に失敗しました",
       "saveConfig": "設定を保存",
       "unknownError": "不明なエラー",
-      "fetchSuccess": "{count} 件のモデルを取得しました",
+      "modelsUnknownHint": "このプロバイダーのモデルリストは不明です。右の更新ボタンで取得してください（API キーが必要です）",
       "fetchEmpty": "モデルを取得できませんでした。プロバイダー設定またはネットワーク接続を確認してください",
-      "fetchFailed": "モデルリストの取得に失敗しました：{message}"
+      "fetchFailedTitle": "モデルリストの取得に失敗しました。API キーとネットワークを確認して再試行してください"
     },
     "main": {
       "title": "高速応答モデル（メイン）",

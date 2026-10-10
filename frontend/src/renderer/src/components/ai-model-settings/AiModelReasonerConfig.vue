@@ -11,11 +11,8 @@ import {
 } from 'lucide-vue-next'
 import { useModelStore } from '../../stores/model'
 import { useToast } from '../../composables/useToast'
+import { useProviderModelFetch } from './useProviderModelFetch'
 import type { ReasonerModelConfig } from './types'
-import { createLuomiNestRendererLogger } from '../../utils/logger'
-import { toErrorMessage } from '@/utils/error'
-
-const logger = createLuomiNestRendererLogger('AiModel')
 
 const modelStore = useModelStore()
 const toast = useToast()
@@ -41,14 +38,12 @@ const effortOptions = computed(() => [
 ])
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
-const reasonerAvailableModels = computed(() => {
-  const provider = providers.value.find(p => p.id === reasonerModelConfig.value.selectedProvider)
-  if (!provider) return []
-  if (provider.selectedModels.length > 0) {
-    return provider.selectedModels.map(id => ({ id, name: id }))
-  }
-  return provider.models
-})
+const {
+  availableModels: reasonerAvailableModels,
+  modelsUnknown: reasonerModelsUnknown,
+  isFetching: isReasonerFetching,
+  fetchModels,
+} = useProviderModelFetch(computed(() => reasonerModelConfig.value.selectedProvider))
 
 const reasonerConfigValid = computed(() => {
   if (!reasonerModelConfig.value.selectedProvider) {
@@ -63,20 +58,6 @@ const reasonerConfigValid = computed(() => {
 const onReasonerProviderChange = () => {
   saveValidationError.value = ''
   reasonerModelConfig.value.model = ''
-}
-
-const handleFetchModels = async (providerId: string) => {
-  try {
-    const models = await modelStore.fetchProviderModels(providerId)
-    if (models.length > 0) {
-      toast.success(t('aiModel.common.fetchSuccess', { count: models.length }))
-    } else {
-      toast.warning(t('aiModel.common.fetchEmpty'))
-    }
-  } catch (e: unknown) {
-    logger.error('Failed to fetch models:', e)
-    toast.error(t('aiModel.common.fetchFailed', { message: toErrorMessage(e) || t('aiModel.common.unknownError') }))
-  }
 }
 
 const handleSaveReasonerConfig = async () => {
@@ -161,20 +142,27 @@ onMounted(() => {
       </div>
       <div class="form-group">
         <label class="form-label">{{ t('aiModel.common.model') }}</label>
-        <div class="form-select-wrap">
-          <select v-model="reasonerModelConfig.model" class="form-select">
-            <option value="">{{ t('aiModel.common.selectModel') }}</option>
-            <option v-for="m in reasonerAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
-          </select>
-          <ChevronRight :size="14" class="select-icon" />
-        </div>
-        <div v-if="reasonerModelConfig.selectedProvider && reasonerAvailableModels.length === 0" class="fetch-models-row">
-          <span class="form-hint">{{ t('aiModel.common.noModels') }}</span>
-          <button class="fetch-btn" @click="handleFetchModels(reasonerModelConfig.selectedProvider)">
-            <RefreshCw :size="12" />
-            {{ t('aiModel.common.fetch') }}
+        <div class="model-field-row">
+          <div class="form-select-wrap model-select-wrap">
+            <select v-model="reasonerModelConfig.model" class="form-select" :disabled="reasonerModelsUnknown">
+              <option value="">{{ t('aiModel.common.selectModel') }}</option>
+              <option v-for="m in reasonerAvailableModels" :key="m.id" :value="m.id">{{ m.name }}</option>
+            </select>
+            <ChevronRight :size="14" class="select-icon" />
+          </div>
+          <button
+            class="refresh-models-btn"
+            :disabled="!reasonerModelConfig.selectedProvider || isReasonerFetching(reasonerModelConfig.selectedProvider)"
+            :title="t('aiModel.common.fetch')"
+            :aria-label="t('aiModel.common.fetch')"
+            @click="fetchModels(reasonerModelConfig.selectedProvider)"
+          >
+            <RefreshCw :size="14" :class="{ 'spin-animation': isReasonerFetching(reasonerModelConfig.selectedProvider) }" />
           </button>
         </div>
+        <span v-if="reasonerModelsUnknown" class="form-hint">
+          {{ t('aiModel.common.modelsUnknownHint') }}
+        </span>
         <span v-if="reasonerModelConfig.model && reasonerAvailableModels.length > 0 && !reasonerAvailableModels.find(m => m.id === reasonerModelConfig.model)" class="form-hint hint-warn">
           {{ t('aiModel.common.modelMismatch') }}
         </span>
