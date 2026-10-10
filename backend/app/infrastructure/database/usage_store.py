@@ -42,8 +42,13 @@ class UsageFacade:
     def get_records(self, days: Optional[int] = None) -> list[dict]:
         return self._repo.get_records(days)
 
-    def get_summary(self, days: Optional[int] = None) -> dict:
-        return self._repo.get_summary(days)
+    def get_summary(
+        self,
+        days: Optional[int] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> dict:
+        return self._repo.get_summary(days, start=start, end=end)
 
     def trim(self, max_records: int) -> int:
         """保留最新 max_records 条记录，删除超出的旧记录。"""
@@ -61,8 +66,13 @@ class UsageFacade:
     async def get_records_async(self, days: Optional[int] = None) -> list[dict]:
         return await asyncio.to_thread(self.get_records, days)
 
-    async def get_summary_async(self, days: Optional[int] = None) -> dict:
-        return await asyncio.to_thread(self.get_summary, days)
+    async def get_summary_async(
+        self,
+        days: Optional[int] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> dict:
+        return await asyncio.to_thread(self.get_summary, days, start=start, end=end)
 
     async def trim_async(self, max_records: int) -> int:
         return await asyncio.to_thread(self.trim, max_records)

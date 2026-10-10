@@ -21,9 +21,42 @@ _MODEL_ROOT = resolve_model_dir(
     "stt", "LUOMINEST_STT_MODEL_DIR", require_nonempty_builtin=True
 )
 
-# 默认模型大小（可通过 STT_MODEL_SIZE 环境变量覆盖）
-# 默认从 large-v3 (~1.5GB) 改为 medium (~500MB)，降低内存占用
-_DEFAULT_MODEL_SIZE = os.getenv("STT_MODEL_SIZE", "medium")
+
+def _default_model_size() -> str:
+    """默认模型大小（惰性求值：首次构造 provider 时才读 env / 探测硬件）.
+
+    优先级：STT_MODEL_SIZE 环境变量覆盖 > 低端机 "base" > "medium"。
+    （从 import 期读 env 改为惰性：避免测试/工具脚本在 import 时被 env 钉死，
+    且低端机降级依赖 hardware 单例探测，不宜提前触发。）
+    """
+    env_size = os.getenv("STT_MODEL_SIZE", "").strip()
+    if env_size:
+        return env_size
+    try:
+        from app.core.hardware import is_low_end_device
+
+        if is_low_end_device():
+            return "base"
+    except Exception:
+        pass
+    # 默认从 large-v3 (~1.5GB) 改为 medium (~500MB)，降低内存占用
+    return "medium"
+
+
+def _resolve_num_threads() -> int:
+    """CPU 推理线程数自适应（与 sherpa-onnx 侧同一模式）.
+
+    基准 min(4, os.cpu_count())；低端机减半（下限 1）。
+    """
+    threads = min(4, os.cpu_count() or 2)
+    try:
+        from app.core.hardware import is_low_end_device
+
+        if is_low_end_device():
+            threads = max(1, threads // 2)
+    except Exception:
+        pass
+    return threads
 
 # 模型大小到描述的映射
 MODEL_SIZES = {
@@ -67,16 +100,24 @@ class FasterWhisperSTTProvider(BaseSTTProvider):
 
     def __init__(
         self,
-        model_size: str = _DEFAULT_MODEL_SIZE,
+        model_size: str | None = None,
         download_root: str | Path | None = None,
-        language: str = "zh",
+        language: str | None = None,
         device: str = "auto",
         compute_type: str = "int8",
-        num_threads: int = 2,
+        num_threads: int | None = None,
         prompt: str | None = None,
     ):
-        # 如果模型已加载且大小没变，跳过
+        # 默认值惰性求值（env 覆盖 > 低端机 base > medium；线程数按硬件自适应）
+        model_size = model_size or _default_model_size()
+        if num_threads is None:
+            num_threads = _resolve_num_threads()
+
+        # language 是轻量运行时参数：即使模型已加载（单例早退路径）也要刷新，
+        # 否则透传进来的语言会被单例吞掉
         if self._model is not None and self._current_model_size == model_size:
+            self._language = language
+            self._prompt = prompt
             return
 
         from faster_whisper import WhisperModel

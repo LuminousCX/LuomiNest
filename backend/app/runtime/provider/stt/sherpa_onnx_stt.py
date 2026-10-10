@@ -105,6 +105,9 @@ class SherpaOnnxSTTProvider(BaseSTTProvider):
     ):
         # 单例：仅首次调用时保存参数
         if getattr(self, "_initialized", False):
+            # language 是运行时参数：已初始化的单例也要刷新透传值
+            # （recognizer 未加载时下次加载生效；已加载时该值不再参与配置）
+            self._language = language
             return
         self._initialized = True
 

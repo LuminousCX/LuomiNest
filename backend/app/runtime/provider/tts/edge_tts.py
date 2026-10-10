@@ -2,6 +2,7 @@ import io
 import os
 import edge_tts
 from app.core.constants.voice import DEFAULT_EDGE_VOICE
+from app.core.system_locale import system_lang_key
 from app.runtime.provider.engine_capabilities import EngineCapabilities
 from app.runtime.provider.tts.ports import TTSProvider
 
@@ -57,7 +58,9 @@ class EdgeTTSProvider(TTSProvider):
         from app.core.config import settings
 
         if voice == "default" or not voice:
-            voice = self.DEFAULT_VOICES.get("zh", DEFAULT_EDGE_VOICE)
+            # "default" 占位符的运行时兜底：跟随系统语言选默认音色
+            # （不碰 DEFAULT_VOICE_CONFIG 存量语义；键缺失仍回落中文晓晓）
+            voice = self.DEFAULT_VOICES.get(system_lang_key(), DEFAULT_EDGE_VOICE)
         # Allow callers to pass a language code ('zh'/'ja'/'en') instead of a full voice name.
         elif voice in self.DEFAULT_VOICES:
             voice = self.DEFAULT_VOICES[voice]

@@ -21,7 +21,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from loguru import logger
 
 from app.core.config import settings
-from app.core.utils import utc_now
+from app.core.utils import utc_now, local_tz
 from app.core.scheduler.models import (
     LuomiTaskStatus,
     LuomiTaskType,
@@ -81,7 +81,8 @@ class LuomiSchedulerManager:
             return
 
         self._scheduler = AsyncIOScheduler(
-            timezone="Asia/Shanghai",
+            # 跟随本机系统时区（用户在 OS 里设什么时区，"每天 9 点"就是本地 9 点）
+            timezone=local_tz(),
             job_defaults={"coalesce": True, "max_instances": 1},
         )
         self._scheduler.start()

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterator
 from zoneinfo import ZoneInfo
 
+from app.core.utils import local_tz
 from loguru import logger
 from sqlalchemy import create_engine, delete, select
 from sqlalchemy.engine import Engine
@@ -47,8 +48,8 @@ _MEMORY_TABLES = [
     MemoryVector.__table__,
 ]
 
-# 每日记录展示时区
-_TZ = ZoneInfo("Asia/Shanghai")
+# 每日记录展示时区：跟随本机系统时区设置（读 OS，进程内缓存）
+_TZ = local_tz()
 
 
 class MemoryStoreLoadError(RuntimeError):

@@ -3,7 +3,8 @@
 import asyncio
 import json
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone, tzinfo
+from functools import lru_cache
 from typing import Any
 
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -18,6 +19,40 @@ def utc_now() -> str:
 def utc_now_dt() -> datetime:
     """返回当前 UTC 时间的 datetime 对象（用于时间运算）。"""
     return datetime.now(timezone.utc)
+
+
+@lru_cache(maxsize=1)
+def local_tz() -> tzinfo:
+    """本机系统时区——读取操作系统时区设置（用户级，无需管理员权限），进程内缓存。"""
+    return datetime.now().astimezone().tzinfo
+
+
+def now_local() -> datetime:
+    """当前本机本地时间（跟随操作系统时区设置，与用户看到的时间一致）。"""
+    return datetime.now(local_tz())
+
+
+def local_tz_label() -> str:
+    """本机时区的展示标签，如 "UTC+08:00"。"""
+    offset = now_local().utcoffset() or timedelta(0)
+    total_minutes = int(offset.total_seconds()) // 60
+    sign = "+" if total_minutes >= 0 else "-"
+    total_minutes = abs(total_minutes)
+    return f"UTC{sign}{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+
+def local_date_to_utc_boundary(day: date) -> str:
+    """本地日历日 day 的 0 点，换算为 UTC ISO 边界串（按本机系统时区）。
+
+    用于"按本地日期过滤 UTC 时间戳"的场景——与存储的 "+00:00" UTC 串做
+    字典序比较，边界必须同为 UTC 格式。注：按当前系统时区偏移换算，跨
+    夏令时切换的历史日期误差 ≤1 小时（中国时区无此问题）。
+    """
+    return (
+        datetime(day.year, day.month, day.day)
+        .astimezone(timezone.utc)
+        .isoformat()
+    )
 
 
 def extract_llm_text(result: Any) -> str:

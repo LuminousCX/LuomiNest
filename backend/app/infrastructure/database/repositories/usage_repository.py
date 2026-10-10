@@ -3,12 +3,12 @@
 聚合统计用 SQL GROUP BY（替代 Python 全表扫描）。
 """
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import delete as sa_delete, func, select
 
-from app.core.utils import utc_now, utc_now_dt
+from app.core.utils import local_date_to_utc_boundary, utc_now, utc_now_dt
 from app.infrastructure.database.models.usage_record import UsageRecord
 from app.infrastructure.database.session import sync_session_factory
 
@@ -102,11 +102,56 @@ class UsageRepository:
             session.commit()
             return result.rowcount or 0
 
-    def get_summary(self, days: Optional[int] = None) -> dict:
-        """SQL GROUP BY 聚合统计。"""
-        cutoff = None
+    @staticmethod
+    def _resolve_time_range(
+        days: Optional[int],
+        start: Optional[str],
+        end: Optional[str],
+    ) -> tuple[Optional[str], Optional[str]]:
+        """解析查询窗口：返回 (下界 cutoff, 互斥上界 end_exclusive)。
+
+        - start/end 为 "YYYY-MM-DD" 的**本地日历日**闭区间（用户在界面上选的
+          "今天/昨天/上个月"即本地日期），按本机系统时区换算成 UTC 边界过滤；
+          给出时优先于 days；
+        - days 为"最近 N 天"，滚动窗口与时区无关，行为与历史版本一致。
+        """
+        if start is not None or end is not None:
+            cutoff = None
+            end_exclusive = None
+            if start is not None:
+                cutoff = local_date_to_utc_boundary(
+                    datetime.strptime(start, "%Y-%m-%d").date()
+                )
+            if end is not None:
+                end_exclusive = local_date_to_utc_boundary(
+                    datetime.strptime(end, "%Y-%m-%d").date() + timedelta(days=1)
+                )
+            return cutoff, end_exclusive
         if days is not None:
-            cutoff = (utc_now_dt() - timedelta(days=days)).isoformat()
+            return (utc_now_dt() - timedelta(days=days)).isoformat(), None
+        return None, None
+
+    def get_summary(
+        self,
+        days: Optional[int] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> dict:
+        """SQL GROUP BY 聚合统计。
+
+        days 与 start/end 二选一（start/end 优先，见 _resolve_time_range）；
+        返回新增 tokens_by_day（按天 token 求和），by_day 结构保持 {day: count} 不变。
+        按天聚合使用**本机系统时区**（SQLite localtime 修饰符），与前端
+        "今天/昨天"等本地日期口径一致；历史版本按 UTC 日期前缀分组。
+        """
+        cutoff, end_exclusive = self._resolve_time_range(days, start, end)
+
+        def _in_range(stmt):
+            if cutoff is not None:
+                stmt = stmt.where(UsageRecord.timestamp >= cutoff)
+            if end_exclusive is not None:
+                stmt = stmt.where(UsageRecord.timestamp < end_exclusive)
+            return stmt
 
         with sync_session_factory() as session:
             # 汇总
@@ -116,8 +161,7 @@ class UsageRepository:
                 func.sum(UsageRecord.completion_tokens).label("total_completion"),
                 func.sum(UsageRecord.total_tokens).label("total_tokens"),
             )
-            if cutoff:
-                total_stmt = total_stmt.where(UsageRecord.timestamp >= cutoff)
+            total_stmt = _in_range(total_stmt)
             total = session.execute(total_stmt).one()
 
             # 按 provider 聚合
@@ -128,24 +172,27 @@ class UsageRepository:
                 func.sum(UsageRecord.completion_tokens).label("completion_tokens"),
                 func.sum(UsageRecord.total_tokens).label("total_tokens"),
             ).group_by(UsageRecord.provider)
-            if cutoff:
-                provider_stmt = provider_stmt.where(UsageRecord.timestamp >= cutoff)
+            provider_stmt = _in_range(provider_stmt)
             provider_rows = session.execute(provider_stmt).all()
 
-            # 按天聚合
+            # 按天聚合（同一条 GROUP BY 同时求每天 count 与 token 求和）。
+            # timestamp 存的是 UTC ISO 串，datetime(..., 'localtime') 按本机系统时区
+            # 转换后再取日期，保证"哪一天的用量"与用户本地日历一致。
+            local_day = func.substr(
+                func.datetime(UsageRecord.timestamp, "localtime"), 1, 10
+            )
             day_stmt = select(
-                func.substr(UsageRecord.timestamp, 1, 10).label("day"),
+                local_day.label("day"),
                 func.count().label("count"),
-            ).group_by("day")
-            if cutoff:
-                day_stmt = day_stmt.where(UsageRecord.timestamp >= cutoff)
+                func.sum(UsageRecord.total_tokens).label("tokens"),
+            ).group_by(local_day)
+            day_stmt = _in_range(day_stmt)
             day_rows = session.execute(day_stmt).all()
 
             # 最近记录：最近 20 条，按时间倒序（最新在前）
             # 注：原 UsageStore 用 recent[-20:] 实为取最旧 20 条，与"最近"语义矛盾，此处修正
             recent_stmt = select(UsageRecord).order_by(UsageRecord.timestamp.desc()).limit(20)
-            if cutoff:
-                recent_stmt = recent_stmt.where(UsageRecord.timestamp >= cutoff)
+            recent_stmt = _in_range(recent_stmt)
             recent_objs = session.execute(recent_stmt).scalars().all()
             recent_list = list(recent_objs)
 
@@ -165,6 +212,7 @@ class UsageRepository:
                     for r in provider_rows
                 ],
                 "by_day": {r.day: r.count for r in day_rows},
+                "tokens_by_day": {r.day: (r.tokens or 0) for r in day_rows},
                 "recent": [
                     {
                         "timestamp": r.timestamp,
@@ -185,8 +233,13 @@ class UsageRepository:
     async def get_records_async(self, days: Optional[int] = None) -> list[dict]:
         return await asyncio.to_thread(self.get_records, days)
 
-    async def get_summary_async(self, days: Optional[int] = None) -> dict:
-        return await asyncio.to_thread(self.get_summary, days)
+    async def get_summary_async(
+        self,
+        days: Optional[int] = None,
+        start: Optional[str] = None,
+        end: Optional[str] = None,
+    ) -> dict:
+        return await asyncio.to_thread(self.get_summary, days, start, end)
 
     async def clear_all_async(self) -> int:
         return await asyncio.to_thread(self.clear_all)

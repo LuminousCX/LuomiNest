@@ -5,10 +5,7 @@
 """
 
 from loguru import logger
-from app.runtime.provider.tts.tts_registry import (  # noqa: F401
-    LuomiNestTTSRegistry,
-    LuminousChenXiTTSRegistry,  # 旧品牌别名（兼容外部引用）
-)
+from app.runtime.provider.tts.tts_registry import LuomiNestTTSRegistry  # noqa: F401
 
 # === 本地引擎（依赖可选包） ===
 
@@ -59,5 +56,4 @@ except ImportError as e:
 
 __all__ = [
     "LuomiNestTTSRegistry",
-    "LuminousChenXiTTSRegistry",  # 旧品牌别名（兼容外部引用）
 ]

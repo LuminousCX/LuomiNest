@@ -14,15 +14,14 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
-from zoneinfo import ZoneInfo
-
 from loguru import logger
 
 from app.core.tools.registry import ToolBase, ToolResult
+from app.core.utils import local_tz
 from app.engines.memory.models import FACT_CATEGORY_LABELS
 
-# 每日记录展示时区（与 store.MemoryStore._TZ 一致）
-_TZ = ZoneInfo("Asia/Shanghai")
+# 每日记录展示时区（与 store.MemoryStore._TZ 一致，跟随本机系统时区）
+_TZ = local_tz()
 
 _DATE_RE = __import__("re").compile(r"^\d{4}-\d{2}-\d{2}$")
 

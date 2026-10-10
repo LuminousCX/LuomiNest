@@ -12,6 +12,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.core.tools.registry import ToolBase, ToolResult
+from app.core.utils import local_tz, local_tz_label
 
 
 class GetCurrentTimeTool(ToolBase):
@@ -35,19 +36,24 @@ class GetCurrentTimeTool(ToolBase):
             "properties": {
                 "timezone": {
                     "type": "string",
-                    "description": "目标时区（如 'Asia/Shanghai', 'UTC', 'America/New_York'），默认为 'Asia/Shanghai'",
-                    "default": "Asia/Shanghai",
+                    "description": "目标时区（如 'Asia/Shanghai', 'UTC', 'America/New_York'），不传则使用用户本机系统时区",
                 },
             },
         }
 
     async def execute(self, arguments: dict[str, Any]) -> ToolResult:
-        tz_name = (arguments.get("timezone") or "Asia/Shanghai").strip()
-        try:
-            tz = ZoneInfo(tz_name)
-        except Exception:
-            tz = ZoneInfo("Asia/Shanghai")
-            tz_name = "Asia/Shanghai"
+        requested_tz = (arguments.get("timezone") or "").strip()
+        tz_name = requested_tz
+        if not requested_tz:
+            # 未指定时区：跟随用户本机系统时区设置
+            tz = local_tz()
+            tz_name = local_tz_label()
+        else:
+            try:
+                tz = ZoneInfo(requested_tz)
+            except Exception:
+                tz = local_tz()
+                tz_name = local_tz_label()
 
         now = datetime.now(tz)
         weekdays_zh = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]

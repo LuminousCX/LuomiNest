@@ -94,6 +94,8 @@ class FunASRSTTProvider(BaseSTTProvider):
     ):
         # 如果模型已加载且名称没变，跳过
         if self._model is not None and self._current_model_name == model_name:
+            # language 在每次 generate() 时读取：刷新透传值（修复单例吞参数）
+            self._language = language
             return
 
         from funasr import AutoModel

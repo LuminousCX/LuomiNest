@@ -2,7 +2,6 @@ import asyncio
 import re
 import time
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from loguru import logger
 
 from app.core.domain_policy import (
@@ -18,7 +17,7 @@ from app.core.domain_policy import (
 )
 from app.infrastructure.database.json_store import agents_store
 from app.core.context import get_context_manager
-from app.core.utils import AsyncKeyLocks, extract_text_from_content
+from app.core.utils import AsyncKeyLocks, extract_text_from_content, local_tz_label, now_local
 from app.engines.memory import get_memory_engine, get_track_engine
 from app.engines.memory.memory_engine import (
     _CORRECTION_HINT,
@@ -180,13 +179,13 @@ class ContextService:
 
     @staticmethod
     def inject_timestamp_prompt(messages: list[dict]) -> list[dict]:
-        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+        now = now_local()
         weekday_names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
         current_date = now.strftime("%Y年%m月%d日")
         current_weekday = weekday_names[now.weekday()]
         current_time = now.strftime("%H:%M")
         date_prompt = (
-            f"当前时间：{current_date} {current_weekday} {current_time} (Asia/Shanghai)。"
+            f"当前时间：{current_date} {current_weekday} {current_time} ({local_tz_label()})。"
             "请基于这个时间回答用户的问题。"
         )
 

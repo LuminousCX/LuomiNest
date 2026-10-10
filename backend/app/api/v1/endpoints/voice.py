@@ -34,6 +34,40 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 voice_router = APIRouter(prefix="/voice", tags=["voice"])
 
 
+# ---------------------------------------------------------------------------
+# local TTS 引擎音色枚举缓存（进程生命周期内一次；失败不缓存，下次重试）
+# ---------------------------------------------------------------------------
+
+# pyttsx3 枚举系统语音走 COM（Windows SAPI），单次可达数百 ms 且每次请求重复
+# 枚举结果在进程内不变，故做模块级一次性缓存。仅用于 /tts/engines 端点路径，
+# synthesize 主路径不经过此处。
+_local_engine_voices_cache: dict | None = None
+
+
+def _get_local_engine_voices(provider_class) -> dict:
+    """枚举 local 引擎的系统音色列表（带模块级缓存）.
+
+    Args:
+        provider_class: local 引擎的 Provider 类（来自 TTS Registry）
+
+    Returns:
+        {"voices_dynamic": [...], "lang_map": {...}}；枚举失败返回空 dict
+        且不写缓存（下次请求重试）。
+    """
+    global _local_engine_voices_cache
+    if _local_engine_voices_cache is None:
+        try:
+            provider = provider_class()
+            _local_engine_voices_cache = {
+                "voices_dynamic": provider.list_voices(),
+                "lang_map": provider.get_lang_map(),
+            }
+        except Exception as lv_err:
+            logger.debug(f"[API] TTS local voice enumeration failed: {lv_err}")
+            return {}
+    return _local_engine_voices_cache
+
+
 class TTSRequest(BaseModel):
     text: str = Field(..., max_length=2000)
     voice: str = Field(default="default")
@@ -158,14 +192,9 @@ async def tts_engines():
             if default_voices:
                 engine_info["default_voices"] = default_voices
 
-            # 本地引擎枚举系统语音列表
+            # 本地引擎枚举系统语音列表（模块级缓存，COM 枚举昂贵）
             if engine_id == "local":
-                try:
-                    provider = provider_class()
-                    engine_info["voices_dynamic"] = provider.list_voices()
-                    engine_info["lang_map"] = provider.get_lang_map()
-                except Exception as lv_err:
-                    logger.debug(f"[API] TTS local voice enumeration failed: {lv_err}")
+                engine_info.update(_get_local_engine_voices(provider_class))
 
         engines.append(engine_info)
 
@@ -188,11 +217,13 @@ async def tts_engines():
 # STT (Speech-to-Text) endpoints
 # ---------------------------------------------------------------------------
 
-def _get_stt_provider(engine_id: str | None = None):
+def _get_stt_provider(engine_id: str | None = None, language: str | None = None):
     """根据引擎 ID 获取 STT Provider，支持自动降级.
 
     Args:
         engine_id: 用户指定的引擎 ID，None 时按优先级自动选择
+        language: 识别语言（auto/zh/en/ja/ko 等）；None 时由各 provider
+            使用自身构造默认值（与旧行为一致）
 
     Returns:
         (provider, engine_id) 元组
@@ -204,8 +235,15 @@ def _get_stt_provider(engine_id: str | None = None):
     import app.runtime.provider.stt  # noqa: F401
     from app.runtime.provider.stt.stt_registry import LuomiNestSTTRegistry
 
+    # language 透传到 provider 构造链（修复断链：此前 Form 参数被丢弃）；
+    # "auto" 由各 provider 自行解释（sherpa/funasr 原生支持 auto，
+    # faster-whisper 将 auto 映射为模型自动检测）
+    config: dict = {}
+    if language:
+        config["language"] = language
+
     # 通过注册表解析引擎，支持自动降级（降级顺序见 STT_FALLBACK_ORDER）
-    return LuomiNestSTTRegistry.resolve(engine_id)
+    return LuomiNestSTTRegistry.resolve(engine_id, **config)
 
 
 @router.post("/stt/transcribe")
@@ -237,7 +275,7 @@ async def stt_transcribe(
             format_hint = ext
 
     try:
-        provider, used_engine = _get_stt_provider(engine)
+        provider, used_engine = _get_stt_provider(engine, language=language)
     except RuntimeError as e:
         raise VoiceEngineUnavailableError(str(e)) from e
 
