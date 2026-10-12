@@ -36,6 +36,27 @@ def _save_model_config(config: dict):
         logger.error(f"[ModelConfig] Failed to save: {e}")
 
 
+def _apply_eco_config(saved: dict) -> None:
+    """应用生态打通 W2 五键（fast_brain/slow_brain/avatar_*）到 settings 运行时值。
+
+    消费方：context_service（快脑提示词注入判定）、app/core/tags 解析器
+    （工具开关 / motion 注册表 / 映射覆盖表）。空值语义见 config.py 注释。
+    """
+    if "fast_brain" in saved:
+        settings.FAST_BRAIN = str(saved.get("fast_brain") or "").strip()
+    if "slow_brain" in saved:
+        settings.SLOW_BRAIN = str(saved.get("slow_brain") or "").strip()
+    if saved.get("avatar_tools_enabled") is not None:
+        settings.AVATAR_TOOLS_ENABLED = bool(saved["avatar_tools_enabled"])
+    if saved.get("avatar_motion_registry") is not None:
+        registry = saved["avatar_motion_registry"]
+        settings.AVATAR_MOTION_REGISTRY = (
+            [str(x) for x in registry] if isinstance(registry, list) else []
+        )
+    if "avatar_translation_override" in saved:
+        settings.AVATAR_TRANSLATION_OVERRIDE = str(saved.get("avatar_translation_override") or "").strip()
+
+
 def apply_model_config_from_db():
     """从 DB 应用 model_config 到运行时（settings + llm_adapter.default_provider + reasoner_*）。
 
@@ -62,6 +83,8 @@ def apply_model_config_from_db():
         settings.LLM_DEFAULT_TOP_P = saved["default_top_p"]
     # 应用推理模型路由配置到 adapter 内存
     adapter.apply_reasoner_config(saved)
+    # 应用生态打通 W2 五键到 settings 运行时值
+    _apply_eco_config(saved)
     logger.info(f"[ModelConfig] Applied saved config: provider={saved.get('default_provider')}, model={saved.get('default_model')}")
 
 
@@ -148,6 +171,13 @@ class ModelConfigUpdate(BaseModel):
     reasoner_temperature: float | None = Field(alias="reasonerTemperature", default=None, ge=0.0, le=2.0)
     reasoner_max_tokens: int | None = Field(alias="reasonerMaxTokens", default=None, ge=1, le=128_000)
     reasoner_effort: str | None = Field(alias="reasonerEffort", default=None)
+    # 辰汐生态打通 W2（分册 08 §15 / 分册 10 §18）：快慢脑寻址与皮套工具配置。
+    # fast_brain / slow_brain = "provider_id/model_id"，空 = 模式关闭（优雅降级）。
+    fast_brain: str | None = None
+    slow_brain: str | None = None
+    avatar_tools_enabled: bool | None = None
+    avatar_motion_registry: list[str] | None = None
+    avatar_translation_override: str | None = None
     tts_provider: str | None = Field(alias="ttsProvider", default=None)
     tts_model: str | None = Field(alias="ttsModel", default=None)
     tts_voice: str | None = Field(alias="ttsVoice", default=None)
@@ -478,46 +508,59 @@ async def remove_provider(provider_id: str, adapter=Depends(get_llm_adapter)):
 
 @router.get("/providers/{provider_id}/models")
 async def list_provider_models(provider_id: str, adapter=Depends(get_llm_adapter)):
+    """列出供应商可用模型。
+
+    返回负载：{"models": [...], "source": "live" | "db_fallback", "warning"?: str}
+    - source="live"：在线拉取 {base_url}/models 成功（此时才会持久化到 DB）；
+    - source="db_fallback"：在线拉取失败/为空，回退数据库中上次保存的列表，
+      附带机器可判定的 warning 文本；前端据此向用户弹警告，替代旧的静默回退。
+    models 数组键始终存在，向后兼容。
+    """
     logger.info(f"[API] GET /models/providers/{provider_id}/models - Listing models")
     start_time = time.time()
+
+    def _load_db_models() -> list[dict]:
+        db_models = _get_provider_model_repo().get_by_provider(provider_id)
+        return [
+            {
+                "id": m["model_id"],
+                "name": m.get("name") or m["model_id"],
+                "enabled": m.get("enabled", True),
+                "max_context_tokens": m.get("max_context_tokens", 0),
+            }
+            for m in db_models
+        ]
+
     try:
         fetched = await adapter.list_models(provider_id)
         if fetched:
             _persist_provider_models(provider_id, fetched, provider_name=provider_id)
             models = _merge_models_with_db(provider_id, fetched)
+            payload: dict = {"models": models, "source": "live"}
         else:
             # 远端未返回模型时，回退到数据库中已保存的列表
-            db_models = _get_provider_model_repo().get_by_provider(provider_id)
-            models = [
-                {
-                    "id": m["model_id"],
-                    "name": m.get("name") or m["model_id"],
-                    "enabled": m.get("enabled", True),
-                    "max_context_tokens": m.get("max_context_tokens", 0),
-                }
-                for m in db_models
-            ]
+            models = _load_db_models()
+            payload = {
+                "models": models,
+                "source": "db_fallback",
+                "warning": f"Provider [{provider_id}] returned no models; serving the previously saved list",
+            }
         elapsed = time.time() - start_time
-        logger.success(f"[API] GET /models/providers/{provider_id}/models - Success: {len(models)} models, elapsed={elapsed:.2f}s")
-        return ok(models)
+        logger.success(
+            f"[API] GET /models/providers/{provider_id}/models - Success: "
+            f"{len(models)} models, source={payload['source']}, elapsed={elapsed:.2f}s"
+        )
+        return ok(payload)
     except Exception as e:
         elapsed = time.time() - start_time
         logger.error(f"[API] GET /models/providers/{provider_id}/models - Failed: elapsed={elapsed:.2f}s, error={e}")
-        # 拉取失败时返回 DB 中已保存的模型，避免前端崩溃
-        try:
-            db_models = _get_provider_model_repo().get_by_provider(provider_id)
-            models = [
-                {
-                    "id": m["model_id"],
-                    "name": m.get("name") or m["model_id"],
-                    "enabled": m.get("enabled", True),
-                    "max_context_tokens": m.get("max_context_tokens", 0),
-                }
-                for m in db_models
-            ]
-            return ok(models)
-        except Exception:
-            raise
+        # 拉取失败时返回 DB 中已保存的模型，避免前端崩溃；source 标记回退，供前端提示
+        db_models = _load_db_models()
+        return ok({
+            "models": db_models,
+            "source": "db_fallback",
+            "warning": f"Provider [{provider_id}] online fetch failed ({e}); serving the previously saved list",
+        })
 
 
 @router.post("/providers/test")
@@ -669,7 +712,10 @@ async def get_model_config(adapter=Depends(get_llm_adapter)):
                    "tts_model", "tts_voice", "tts_speed", "stt_provider",
                    "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay",
                    "stt_engine", "context_window_size", "compression_threshold",
-                   "compression_ratio", "llm_compress_enabled"]:
+                   "compression_ratio", "llm_compress_enabled",
+                   # 生态打通 W2 五键（快慢脑寻址 + 皮套工具配置）
+                   "fast_brain", "slow_brain", "avatar_tools_enabled",
+                   "avatar_motion_registry", "avatar_translation_override"]:
         if field in saved:
             config[field] = saved[field]
     # 上下文配置也可从 settings 读取默认值
@@ -683,6 +729,17 @@ async def get_model_config(adapter=Depends(get_llm_adapter)):
             }.get(field)
             if settings_key:
                 config[field] = getattr(settings, settings_key)
+    # 生态打通 W2 五键缺省时回读 settings 默认值（空 = 关闭）
+    eco_defaults = {
+        "fast_brain": "FAST_BRAIN",
+        "slow_brain": "SLOW_BRAIN",
+        "avatar_tools_enabled": "AVATAR_TOOLS_ENABLED",
+        "avatar_motion_registry": "AVATAR_MOTION_REGISTRY",
+        "avatar_translation_override": "AVATAR_TRANSLATION_OVERRIDE",
+    }
+    for field, settings_key in eco_defaults.items():
+        if field not in config:
+            config[field] = getattr(settings, settings_key)
     logger.success(f"[API] GET /models/config - Success: provider={config['default_provider']}, model={config['default_model']}")
     return ok(config)
 
@@ -751,6 +808,22 @@ async def update_model_config(request: ModelConfigUpdate, adapter=Depends(get_ll
     if request.llm_compress_enabled is not None:
         settings.LLM_COMPRESS_ENABLED = request.llm_compress_enabled
         updated_fields.append("llm_compress_enabled")
+    # 生态打通 W2 五键：写入 settings 运行时值（空 fast_brain = 关闭快脑模式）
+    if request.fast_brain is not None:
+        settings.FAST_BRAIN = request.fast_brain.strip()
+        updated_fields.append("fast_brain")
+    if request.slow_brain is not None:
+        settings.SLOW_BRAIN = request.slow_brain.strip()
+        updated_fields.append("slow_brain")
+    if request.avatar_tools_enabled is not None:
+        settings.AVATAR_TOOLS_ENABLED = request.avatar_tools_enabled
+        updated_fields.append("avatar_tools_enabled")
+    if request.avatar_motion_registry is not None:
+        settings.AVATAR_MOTION_REGISTRY = [str(x) for x in request.avatar_motion_registry]
+        updated_fields.append("avatar_motion_registry")
+    if request.avatar_translation_override is not None:
+        settings.AVATAR_TRANSLATION_OVERRIDE = request.avatar_translation_override.strip()
+        updated_fields.append("avatar_translation_override")
 
     existing_config = _load_model_config()
     # 摘要模型字段已废弃（全局模型统一：压缩/摘要统一走主模型），顺带清除历史遗留
@@ -769,7 +842,10 @@ async def update_model_config(request: ModelConfigUpdate, adapter=Depends(get_ll
                    "tts_model", "tts_voice", "tts_speed", "stt_provider",
                    "stt_model", "stt_language", "stt_auto_send", "stt_auto_send_delay",
                    "stt_engine", "context_window_size", "compression_threshold",
-                   "compression_ratio", "llm_compress_enabled"]:
+                   "compression_ratio", "llm_compress_enabled",
+                   # 生态打通 W2 五键
+                   "fast_brain", "slow_brain", "avatar_tools_enabled",
+                   "avatar_motion_registry", "avatar_translation_override"]:
         val = getattr(request, field, None)
         if val is not None:
             config_to_save[field] = val
@@ -779,6 +855,8 @@ async def update_model_config(request: ModelConfigUpdate, adapter=Depends(get_ll
 
     # 应用 reasoner_* 到 adapter 内存（路由决策依赖）
     adapter.apply_reasoner_config(config_to_save)
+    # 应用生态打通 W2 五键到 settings 运行时值（含本次未传字段的既有值回填）
+    _apply_eco_config(config_to_save)
 
     logger.success(f"[API] PATCH /models/config - Updated fields: {updated_fields}")
     invalidate_context_cache()  # 清空所有缓存（可能改了默认 provider/model）

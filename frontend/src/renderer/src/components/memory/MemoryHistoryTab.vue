@@ -37,7 +37,7 @@ function getWeekday(dateStr: string): string {
 
 <template>
   <div class="detail-header">
-    <Calendar :size="22" :style="{ color: 'var(--lumi-amber)' }" />
+    <Calendar :size="22" class="detail-icon" />
     <h3>{{ t('memory.history.title') }}</h3>
   </div>
 
@@ -92,7 +92,7 @@ function getWeekday(dateStr: string): string {
         </div>
         <div v-else class="memo-items">
           <div v-for="(line, idx) in dailyLines" :key="idx" class="memo-item">
-            <div class="memo-dot" :style="{ background: line.startsWith('-') ? 'var(--lumi-amber)' : 'var(--task-sky)' }"></div>
+            <div class="memo-dot"></div>
             <div class="memo-content">
               <p class="memo-text">{{ line.replace(/^-\s*/, '').replace(/^#+\s*/, '') }}</p>
             </div>
@@ -124,6 +124,12 @@ function getWeekday(dateStr: string): string {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 标题裸图标：中性色（无彩色） */
+.detail-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .detail-header h3 {
@@ -210,7 +216,8 @@ function getWeekday(dateStr: string): string {
 }
 
 .daily-date-item:hover { background: var(--surface-hover); color: var(--text); }
-.daily-date-item.active { background: var(--lumi-sky-soft); color: var(--lumi-sky); font-weight: 600; }
+/* 选中态：控制台式弱底色 + 主色文字 */
+.daily-date-item.active { background: var(--lumi-brand-light); color: var(--lumi-brand); font-weight: 600; }
 
 .daily-count {
   font-size: var(--text-2xs);
@@ -265,6 +272,8 @@ function getWeekday(dateStr: string): string {
   border-radius: var(--radius-full);
   margin-top: 7px;
   flex-shrink: 0;
+  background: var(--text-muted);
+  opacity: 0.4;
 }
 
 .memo-content { flex: 1; min-width: 0; }
@@ -296,7 +305,7 @@ function getWeekday(dateStr: string): string {
   outline: none;
 }
 
-.add-daily-input:focus { border-color: var(--lumi-amber); }
+.add-daily-input:focus { border-color: var(--lumi-brand); }
 
 @media (max-width: 768px) {
   .daily-layout {

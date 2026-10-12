@@ -720,8 +720,6 @@
     "conversationDetail": "Conversation details",
     "groupChat": "Group chat",
     "conversationCount": "{n} conversations",
-    "creating": "Creating...",
-    "newConversation": "New Conversation",
     "noConversations": "No conversations yet",
     "noConversationsDesc": "This platform has not pushed any conversations",
     "unnamedConversation": "Untitled conversation",
@@ -746,6 +744,7 @@
     "start": "Start",
     "config": "Configure",
     "delete": "Delete",
+    "scanQr": "Scan QR code to log in",
     "emptyTitle": "No platform instances",
     "add": "Add Platform",
     "addTitle": "Add Platform",
@@ -828,7 +827,6 @@
       "mainAgentLoadFailed": "Failed to load main Agent config: {msg}. Please check the AI model settings.",
       "mainAgentUpdated": "Main Agent config updated",
       "updateFailed": "Update failed: {msg}",
-      "createConversationFailed": "Failed to create conversation: {msg}",
       "unknownError": "Unknown error"
     },
     "globalModelHint": "The model follows the global setting (Settings → AI Model). All platforms share the global fast-response model; below you can only customize this platform's persona prompt."

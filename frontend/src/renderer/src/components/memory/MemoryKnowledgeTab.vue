@@ -25,7 +25,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="detail-header">
-    <FileText :size="22" :style="{ color: 'var(--lumi-sky)' }" />
+    <FileText :size="22" class="detail-icon" />
     <h3>{{ t('memory.knowledge.title') }}</h3>
     <div class="detail-actions">
       <button v-if="!isEditingKnowledge" class="h-btn primary" @click="emit('startEditKnowledge')">
@@ -57,9 +57,8 @@ const emit = defineEmits<{
       <p class="empty-hint">{{ t('memory.knowledge.emptyHint') }}</p>
     </div>
     <template v-else>
-      <div v-for="(section, idx) in knowledgeSectionCards" :key="idx" class="memory-section-card" :style="{ '--ms-color': 'var(--lumi-sky)' }">
+      <div v-for="(section, idx) in knowledgeSectionCards" :key="idx" class="memory-section-card">
         <div class="ms-header">
-          <div class="ms-dot"></div>
           <span class="ms-label">{{ section.title }}</span>
           <span class="ms-count">{{ section.content.split('\n').filter((l: string) => l.trim()).length }} {{ t('memory.knowledge.itemCountSuffix') }}</span>
         </div>
@@ -90,6 +89,12 @@ const emit = defineEmits<{
   gap: var(--space-2);
 }
 
+/* 标题裸图标：中性色（无彩色） */
+.detail-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
 /* editor-section / memory-editor / editor-hint 见 memory-shared.css */
 
 .markdown-preview { flex: 1; }
@@ -100,12 +105,12 @@ const emit = defineEmits<{
   background: var(--surface);
   border: 1px solid var(--border);
   margin-bottom: 10px;
-  transition: all var(--transition-slow);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .memory-section-card:hover {
-  border-color: var(--ms-color);
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--ms-color) 8%, transparent);
+  border-color: var(--border);
+  box-shadow: var(--shadow-xs);
 }
 
 .ms-header {
@@ -113,14 +118,6 @@ const emit = defineEmits<{
   align-items: center;
   gap: var(--space-2);
   margin-bottom: 10px;
-}
-
-.ms-dot {
-  width: var(--space-2);
-  height: var(--space-2);
-  border-radius: var(--radius-full);
-  background: var(--ms-color);
-  flex-shrink: 0;
 }
 
 .ms-label {

@@ -28,13 +28,10 @@ const emit = defineEmits<{
       v-for="tab in layerTabs"
       :key="tab.id"
       :class="['nav-card', { active: activeTab === tab.id }]"
-      :style="{ '--tab-color': tab.color }"
       @click="emit('switchTab', tab.id)"
     >
       <div class="nav-top">
-        <div class="nav-icon-wrap" :style="{ background: `color-mix(in srgb, ${tab.color} 10%, transparent)` }">
-          <component :is="tab.icon" :size="20" :style="{ color: tab.color }" />
-        </div>
+        <component :is="tab.icon" :size="18" class="nav-icon" />
         <div class="nav-meta">
           <span class="nav-name">{{ tab.name }}</span>
           <span class="nav-sub">{{ tab.desc }}</span>
@@ -81,7 +78,7 @@ const emit = defineEmits<{
           <div class="cat-bar-wrap">
             <div
               class="cat-bar-fill"
-              :style="{ width: `${(cat.count / Math.max(memoryStats.totalFacts, 1)) * 100}%`, background: cat.color }"
+              :style="{ width: `${(cat.count / Math.max(memoryStats.totalFacts, 1)) * 100}%` }"
             ></div>
           </div>
           <span class="cat-count">{{ cat.count }}</span>
@@ -178,6 +175,7 @@ const emit = defineEmits<{
 .cat-bar-fill {
   height: 100%;
   border-radius: var(--radius-xs);
+  background: var(--text-muted);
   transition: width var(--transition-slow);
 }
 
@@ -194,19 +192,22 @@ const emit = defineEmits<{
   border: 1px solid var(--border-light);
   background: var(--bg-secondary);
   cursor: pointer;
-  transition: all var(--transition-normal);
+  transition: all var(--transition-fast);
 }
 
 .nav-card:hover {
-  border-color: var(--tab-color);
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--tab-color) 8%, transparent);
-  transform: translateX(2px);
+  border-color: var(--border);
+  background: var(--surface-hover);
 }
 
+/* 选中态：控制台式弱底色 + 主色文字 */
 .nav-card.active {
-  border-color: var(--tab-color);
-  background: color-mix(in srgb, var(--tab-color) 6%, transparent);
-  box-shadow: 0 2px 16px color-mix(in srgb, var(--tab-color) 12%, transparent);
+  border-color: var(--lumi-brand);
+  background: var(--lumi-brand-light);
+}
+
+.nav-card.active .nav-name {
+  color: var(--lumi-brand);
 }
 
 .nav-top {
@@ -216,14 +217,14 @@ const emit = defineEmits<{
   margin-bottom: var(--space-2);
 }
 
-.nav-icon-wrap {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* 中性裸图标（无彩色底块） */
+.nav-icon {
+  color: var(--text-muted);
   flex-shrink: 0;
+}
+
+.nav-card.active .nav-icon {
+  color: var(--lumi-brand);
 }
 
 .nav-meta { flex: 1; min-width: 0; }

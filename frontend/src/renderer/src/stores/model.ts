@@ -13,6 +13,21 @@ const unwrapData = <T>(result: T | { data: T }): T => {
   return result as T
 }
 
+/** GET /models/providers/{id}/models 的返回负载（信封已由 useApi 解包） */
+export interface ProviderModelsPayload {
+  models: ModelInfo[]
+  /** 数据来源：live=在线拉取；db_fallback=在线失败回退已存列表；旧后端可能缺省 */
+  source?: 'live' | 'db_fallback'
+  /** 回退时后端附带的人类可读说明（文案展示由前端 i18n 出） */
+  warning?: string
+}
+
+/** fetchProviderModels 的归一化结果：models + 机器可判定的来源标记 */
+export interface ProviderModelsFetchResult {
+  models: ModelInfo[]
+  source: 'live' | 'db_fallback' | 'unknown'
+}
+
 const LOCAL_TEMPLATES: Array<Omit<ProviderTemplate, 'description'>> = [
   {
     id: 'openai',
@@ -461,6 +476,17 @@ interface RawModelConfig {
   compression_ratio?: number
   llmCompressEnabled?: boolean
   llm_compress_enabled?: boolean
+  // 辰汐生态打通 W2 五键（后端返回 snake_case，兼容 camelCase）
+  fastBrain?: string
+  fast_brain?: string
+  slowBrain?: string
+  slow_brain?: string
+  avatarToolsEnabled?: boolean
+  avatar_tools_enabled?: boolean
+  avatarMotionRegistry?: string[]
+  avatar_motion_registry?: string[]
+  avatarTranslationOverride?: string
+  avatar_translation_override?: string
 }
 
 /** 各引擎默认模型（模型 ID，非用户可见文案） */
@@ -495,6 +521,12 @@ export const useModelStore = defineStore('model', () => {
     reasonerTemperature: undefined,
     reasonerMaxTokens: undefined,
     reasonerEffort: '',
+    // 辰汐生态打通 W2 五键默认值（空 = 关闭）
+    fastBrain: '',
+    slowBrain: '',
+    avatarToolsEnabled: false,
+    avatarMotionRegistry: [],
+    avatarTranslationOverride: '',
   })
   const ttsConfig = ref<TTSConfig>({
     provider: '',
@@ -813,14 +845,41 @@ export const useModelStore = defineStore('model', () => {
     return data
   }
 
-  const fetchProviderModels = async (providerId: string) => {
-    const result = await apiGet<ModelInfo[] | { data: ModelInfo[] }>(`/models/providers/${providerId}/models`)
-    const models = unwrapData<ModelInfo[]>(result)
+  /**
+   * 拉取供应商模型列表（GET /models/providers/{id}/models）。
+   *
+   * 返回体兼容三种形状（向后旧后端）：
+   * - 新：{ models: ModelInfo[], source: 'live' | 'db_fallback', warning? }
+   * - 旧：裸 ModelInfo[]（无 source，标记为 unknown）
+   * - 更旧：{ data: ModelInfo[] } 双层嵌套
+   *
+   * source 语义：live=在线拉取成功；db_fallback=在线失败/为空，回退上次保存的列表；
+   * unknown=旧后端未带标记。调用方（useProviderModelFetch）据 db_fallback 弹警告，
+   * 替代旧的"静默回退导致刷了没变化"。
+   */
+  const fetchProviderModels = async (providerId: string): Promise<ProviderModelsFetchResult> => {
+    const result = await apiGet<ProviderModelsPayload | ModelInfo[] | { data: ModelInfo[] }>(`/models/providers/${providerId}/models`)
+    let models: ModelInfo[]
+    let source: ProviderModelsFetchResult['source']
+    if (Array.isArray(result)) {
+      models = result
+      source = 'unknown'
+    } else if (
+      result && typeof result === 'object' && 'data' in result &&
+      Array.isArray((result as { data: unknown }).data)
+    ) {
+      models = (result as { data: ModelInfo[] }).data
+      source = 'unknown'
+    } else {
+      const obj = result as ProviderModelsPayload
+      models = obj.models ?? []
+      source = obj.source ?? 'unknown'
+    }
     const provider = providers.value.find(p => p.id === providerId)
     if (provider) {
       provider.models = models
     }
-    return models
+    return { models, source }
   }
 
   const fetchContextOverrides = async () => {
@@ -890,6 +949,12 @@ export const useModelStore = defineStore('model', () => {
           compressionThreshold: config.compressionThreshold ?? config.compression_threshold ?? 0.70,
           compressionRatio: config.compressionRatio ?? config.compression_ratio ?? 40,
           llmCompressEnabled: config.llmCompressEnabled ?? config.llm_compress_enabled ?? false,
+          // 生态打通 W2 五键回显（空 = 关闭）
+          fastBrain: config.fastBrain || config.fast_brain || '',
+          slowBrain: config.slowBrain || config.slow_brain || '',
+          avatarToolsEnabled: config.avatarToolsEnabled ?? config.avatar_tools_enabled ?? false,
+          avatarMotionRegistry: config.avatarMotionRegistry ?? config.avatar_motion_registry ?? [],
+          avatarTranslationOverride: config.avatarTranslationOverride || config.avatar_translation_override || '',
         }
       }
     } catch {
@@ -928,6 +993,12 @@ export const useModelStore = defineStore('model', () => {
       if (config.compressionThreshold !== undefined) body.compressionThreshold = config.compressionThreshold
       if (config.compressionRatio !== undefined) body.compressionRatio = config.compressionRatio
       if (config.llmCompressEnabled !== undefined) body.llmCompressEnabled = config.llmCompressEnabled
+      // 生态打通 W2 五键（后端 ModelConfigUpdate 无别名，按 snake_case 传输）
+      if (config.fastBrain !== undefined) body.fast_brain = config.fastBrain
+      if (config.slowBrain !== undefined) body.slow_brain = config.slowBrain
+      if (config.avatarToolsEnabled !== undefined) body.avatar_tools_enabled = config.avatarToolsEnabled
+      if (config.avatarMotionRegistry !== undefined) body.avatar_motion_registry = config.avatarMotionRegistry
+      if (config.avatarTranslationOverride !== undefined) body.avatar_translation_override = config.avatarTranslationOverride
 
       try {
         await apiPatch('/models/config', body)

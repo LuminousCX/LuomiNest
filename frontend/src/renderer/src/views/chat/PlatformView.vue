@@ -62,20 +62,6 @@ const handleSelectConversation = (conversationId: string) => {
   store.selectConversation(conversationId)
 }
 
-const creatingConversation = ref(false)
-const handleCreateConversation = async () => {
-  if (!store.selectedInstanceId || creatingConversation.value) return
-  creatingConversation.value = true
-  try {
-    const newId = await store.createNewConversation(store.selectedInstanceId)
-    if (newId) {
-      store.selectConversation(newId)
-    }
-  } finally {
-    creatingConversation.value = false
-  }
-}
-
 const formatMessageTime = (ts: string) => (ts ? formatShortDateTime(ts) : '')
 
 onMounted(() => {
@@ -99,22 +85,22 @@ onMounted(() => {
     </LumiPageHeader>
 
     <div class="platform-stats">
-      <LumiCard class="stat-card" :style="{ animationDelay: '0.05s' }" padding="md">
-        <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--brand"><Server :size="18" /></div>
+      <LumiCard class="stat-card" padding="md">
+        <Server :size="18" class="stat-icon" />
         <div class="stat-info">
           <span class="stat-value lumi-title-2xl">{{ store.stats.totalPlatforms }}</span>
           <span class="stat-label">{{ t('platform.stat.platforms') }}</span>
         </div>
       </LumiCard>
-      <LumiCard class="stat-card" :style="{ animationDelay: '0.10s' }" padding="md">
-        <div class="lumi-icon-wrap lumi-icon-wrap--md stat-active"><Zap :size="18" /></div>
+      <LumiCard class="stat-card" padding="md">
+        <Zap :size="18" class="stat-icon" />
         <div class="stat-info">
           <span class="stat-value lumi-title-2xl">{{ store.stats.activeConnections }}</span>
           <span class="stat-label">{{ t('platform.stat.active') }}</span>
         </div>
       </LumiCard>
-      <LumiCard class="stat-card" :style="{ animationDelay: '0.15s' }" padding="md">
-        <div class="lumi-icon-wrap lumi-icon-wrap--md lumi-icon-wrap--brand"><Shield :size="18" /></div>
+      <LumiCard class="stat-card" padding="md">
+        <Shield :size="18" class="stat-icon" />
         <div class="stat-info">
           <span class="stat-value lumi-title-2xl">{{ store.stats.totalMessages }}</span>
           <span class="stat-label">{{ t('platform.stat.messages') }}</span>
@@ -206,14 +192,6 @@ onMounted(() => {
                 <span>{{ store.selectedInstance.name }}</span>
                 <span class="conv-section-count">{{ t('platform.conversationCount', { n: store.selectedConversations.length }) }}</span>
               </div>
-              <button
-                class="conv-new-btn"
-                :disabled="creatingConversation"
-                @click="handleCreateConversation"
-              >
-                <Plus :size="13" />
-                <span>{{ creatingConversation ? t('platform.creating') : t('platform.newConversation') }}</span>
-              </button>
               <div class="conv-list">
                 <div v-if="store.selectedConversations.length === 0" class="conv-list-empty-wrap">
                   <LumiEmptyState
@@ -296,12 +274,12 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  animation: lumi-content-fade-up var(--duration-enter) var(--ease-default) both;
 }
 
-.stat-active {
-  background: var(--task-green-soft);
-  color: var(--lumi-success);
+/* 统计卡裸图标：中性色（无彩色底块） */
+.stat-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .stat-value {
@@ -365,34 +343,6 @@ onMounted(() => {
   font-weight: var(--font-medium);
 }
 
-.conv-new-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  width: calc(100% - var(--space-4));
-  margin: var(--space-2) auto;
-  padding: var(--space-1) var(--space-3);
-  border: 1px dashed var(--lumi-brand);
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--lumi-brand);
-  font-size: var(--text-xs);
-  font-weight: var(--font-medium);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-
-.conv-new-btn:hover:not(:disabled) {
-  background: var(--lumi-brand-light);
-}
-
-.conv-new-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .conv-list {
   flex: 1;
   overflow-y: auto;
@@ -422,10 +372,9 @@ onMounted(() => {
 
 .conv-item:hover {
   background: var(--surface-hover);
-  border-left: 2px solid var(--lumi-brand);
-  padding-left: calc(var(--space-3) - 2px);
 }
 
+/* 选中态：控制台式弱底色 + 主色 */
 .conv-item.active {
   background: var(--lumi-brand-light);
   border-left: 2px solid var(--lumi-brand);
@@ -434,7 +383,7 @@ onMounted(() => {
 
 .conv-item-platform {
   font-size: var(--text-2xs);
-  color: var(--lumi-brand);
+  color: var(--text-muted);
   font-weight: var(--font-medium);
   display: flex;
   align-items: center;

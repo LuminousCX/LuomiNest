@@ -243,6 +243,16 @@
       "clearedLocally": "ローカルのログイン状態をクリアしました（サーバー側のログアウトに失敗）",
       "noAuthTip": "デスクトップ版はデフォルトでローカル無認証モード（LUOMINEST_NO_AUTH）が有効です。このセクションはローカルアカウントの登録に使用します。NO_AUTH を無効にすると JWT 認証が強制され、すべての API 呼び出しに Access Token が必要になります。"
     },
+    "notifications": {
+      "desktopNotify": "デスクトップ通知を有効化",
+      "desktopNotifyDesc": "マスタースイッチ：オフにするとすべての通知が停止します",
+      "dndRange": "おやすみ時間帯",
+      "dndRangeDesc": "この時間帯は通知がミュートになります",
+      "soundAlert": "通知サウンド",
+      "soundAlertDesc": "新着メッセージ時に効果音を再生します",
+      "messagePreview": "メッセージプレビュー",
+      "messagePreviewDesc": "通知バナーにメッセージ内容を表示します"
+    },
     "cloud": {
       "loading": "クラウドのログイン状態を取得中...",
       "loggedOutTitle": "パスポートログイン",
@@ -515,6 +525,10 @@
         "label": "推論モデル",
         "tag": "複雑タスク"
       },
+      "dualbrain": {
+        "label": "デュアルブレイン",
+        "tag": "エコシステム"
+      },
       "context": {
         "label": "詳細設定",
         "tag": "コンテキスト"
@@ -547,7 +561,9 @@
       "unknownError": "不明なエラー",
       "modelsUnknownHint": "このプロバイダーのモデルリストは不明です。右の更新ボタンで取得してください（API キーが必要です）",
       "fetchEmpty": "モデルを取得できませんでした。プロバイダー設定またはネットワーク接続を確認してください",
-      "fetchFailedTitle": "モデルリストの取得に失敗しました。API キーとネットワークを確認して再試行してください"
+      "fetchFailedTitle": "モデルリストの取得に失敗しました。API キーとネットワークを確認して再試行してください",
+      "fetchFallbackTitle": "前回保存したモデルリストを表示しています",
+      "fetchFallbackDesc": "プロバイダーにオンラインで接続してモデルリストを取得できませんでした（API Key が未設定・無効、またはサービスがモデルリストAPIに対応していない可能性があります）。現在表示されているのは前回保存したリストです。"
     },
     "main": {
       "title": "高速応答モデル（メイン）",
@@ -569,6 +585,36 @@
       "effortHigh": "高",
       "savedToast": "推論モデル設定を保存しました",
       "saveErrorToast": "推論モデル設定の保存に失敗しました"
+    },
+    "dualBrain": {
+      "title": "デュアルブレインルーティング",
+      "tag": "エコシステム",
+      "info": "高速脳はメイン会話とアバター駆動を担い、低速脳は高速脳が振り分けた複雑タスク（ツールループ）を実行します。両スロットとも、微調整済みローカルモデルやクラウド API を含む任意のモデルを選択できます。",
+      "infoTip": "低速脳が未設定の場合、振り分けタスクは推論スロットにフォールバックし、それも未設定ならクラウドのデフォルトモデルを使用します。",
+      "fastBrainLabel": "高速脳（メイン会話）",
+      "fastBrainHint": "高速脳はメイン会話とアバター駆動に使用されます。ローカルの微調整モデルでもクラウド API でも任意のモデルを選べます。",
+      "slowBrainLabel": "低速脳（振り分け推論）",
+      "slowBrainHint": "高速脳が振り分けた複雑タスクのツールループを低速脳が実行します。空欄の場合は推論スロット / クラウド既定に自動フォールバックします。",
+      "slotOff": "オフ（デフォルトモデルに従う）",
+      "missingGroup": "現在の設定",
+      "noModelsHint": "利用可能なモデルがありません。まずプロバイダーを追加・有効化すると、モデル一覧は自動的に取得されます。",
+      "avatarToolsLabel": "アバターツール注入",
+      "avatarToolsHint": "有効にすると、アバター制御ツール（モーション発火など）が会話に注入され、高速脳がアバターを駆動できます。",
+      "motionRegistryLabel": "モーションレジストリ",
+      "motionRegistryPlaceholder": "例：wave, nod, shake_head",
+      "motionRegistryHint": "カンマ区切りのモーション名リスト。登録されたモーションのみモデルから呼び出せます。",
+      "advancedTitle": "詳細設定",
+      "translationOverrideLabel": "翻訳マッピング上書きファイルパス",
+      "translationOverridePlaceholder": "例：D:/path/to/override.json（空欄 = デフォルト）",
+      "translationOverrideHint": "内蔵のモーション翻訳マッピングを上書きするカスタム JSON ファイルの絶対パス。空欄の場合はデフォルトを使用します。",
+      "savedToast": "デュアルブレイン設定を保存しました",
+      "saveErrorToast": "デュアルブレイン設定の保存に失敗しました",
+      "trustedModeLabel": "完全信頼モード（全ツール確認なし）",
+      "trustedModeHint": "有効にすると、エージェントはすべてのツール呼び出しを即座に実行します。コマンド実行やファイル書き込みなどの危険な操作でも確認を求めません。",
+      "trustedModeWarn": "危険：有効にするとコマンド実行・ファイル書き込み等の高危険操作が確認なしで実行されます。個人デバイスでのみ有効にすることを推奨します。",
+      "trustedModeOnToast": "完全信頼モードを有効にしました（即時反映）",
+      "trustedModeOffToast": "完全信頼モードを無効にしました",
+      "trustedModePersistWarn": "信頼モードは有効ですが、永続化に失敗しました：アプリ再起動後はオフに戻ります"
     },
     "context": {
       "title": "コンテキストと圧縮",

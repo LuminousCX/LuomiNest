@@ -87,8 +87,15 @@ const saveSelectedModels = async (providerId: string) => {
 
 const handleFetchModels = async (providerId: string) => {
   try {
-    await modelStore.fetchProviderModels(providerId)
-    toast.info(t('aiModel.providerList.refreshedToast'))
+    const { source } = await modelStore.fetchProviderModels(providerId)
+    if (source === 'db_fallback') {
+      // 在线拉取失败回退旧数据：明确告知，避免用户误以为刷新已生效
+      toast.warning(t('aiModel.common.fetchFallbackTitle'), {
+        description: t('aiModel.common.fetchFallbackDesc'),
+      })
+    } else {
+      toast.info(t('aiModel.providerList.refreshedToast'))
+    }
   } catch (e: unknown) {
     logger.error('Failed to fetch models:', e)
     toast.error(t('aiModel.providerList.fetchFailedToast', { message: toErrorMessage(e) || t('aiModel.common.unknownError') }))

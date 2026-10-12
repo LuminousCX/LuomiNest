@@ -702,8 +702,6 @@
     "conversationDetail": "会話詳細",
     "groupChat": "グループチャット",
     "conversationCount": "{n} 件の会話",
-    "creating": "作成中...",
-    "newConversation": "会話を新規作成",
     "noConversations": "会話記録はありません",
     "noConversationsDesc": "このプラットフォームからはまだ会話が届いていません",
     "unnamedConversation": "無題の会話",
@@ -728,6 +726,7 @@
     "start": "起動",
     "config": "設定",
     "delete": "削除",
+    "scanQr": "QRコードをスキャンしてログイン",
     "emptyTitle": "プラットフォームインスタンスはありません",
     "add": "プラットフォームを追加",
     "addTitle": "プラットフォームを追加",
@@ -810,7 +809,6 @@
       "mainAgentLoadFailed": "メイン Agent 設定の読み込みに失敗しました：{msg}。設定で AI モデルの設定を確認してください。",
       "mainAgentUpdated": "メイン Agent 設定を更新しました",
       "updateFailed": "更新に失敗しました：{msg}",
-      "createConversationFailed": "会話の作成に失敗しました：{msg}",
       "unknownError": "不明なエラー"
     },
     "globalModelHint": "モデルはグローバル設定（設定 → モデル設定）に従います。すべてのプラットフォームはグローバル高速応答モデルを使用し、以下ではこのプラットフォーム専用のペルソナプロンプトのみ設定できます。"

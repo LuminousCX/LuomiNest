@@ -720,8 +720,6 @@
     "conversationDetail": "对话详情",
     "groupChat": "群聊",
     "conversationCount": "{n} 个对话",
-    "creating": "创建中...",
-    "newConversation": "新建对话",
     "noConversations": "暂无对话记录",
     "noConversationsDesc": "该平台暂未推送任何对话",
     "unnamedConversation": "未命名对话",
@@ -746,6 +744,7 @@
     "start": "启动",
     "config": "配置",
     "delete": "删除",
+    "scanQr": "微信扫码登录",
     "emptyTitle": "暂无平台实例",
     "add": "添加平台",
     "addTitle": "添加平台",
@@ -828,7 +827,6 @@
       "mainAgentLoadFailed": "主 Agent 配置加载失败：{msg}。请在设置中检查 AI 模型配置。",
       "mainAgentUpdated": "主 Agent 配置已更新",
       "updateFailed": "更新失败：{msg}",
-      "createConversationFailed": "创建对话失败：{msg}",
       "unknownError": "未知错误"
     },
     "globalModelHint": "模型跟随全局设置（设置 → 模型设置），所有平台统一使用全局快速响应模型；下方仅可为本平台自定义人格提示词。"

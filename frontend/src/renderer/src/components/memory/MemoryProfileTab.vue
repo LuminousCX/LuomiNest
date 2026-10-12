@@ -13,7 +13,6 @@ interface Props {
   isSaving: boolean
   summaryHasChanges: boolean
   summarySectionNames: readonly string[]
-  summarySectionColors: Record<string, string>
   hasSummary: boolean
   summarySections: SummarySections
 }
@@ -30,7 +29,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="detail-header">
-    <Globe :size="22" :style="{ color: 'var(--task-sky)' }" />
+    <Globe :size="22" class="detail-icon" />
     <h3>{{ t('memory.profile.title') }}</h3>
     <div class="detail-actions">
       <button v-if="!isEditingSummary" class="h-btn primary" @click="emit('startEditSummary')">
@@ -82,10 +81,8 @@ const emit = defineEmits<{
       v-for="sectionName in summarySectionNames"
       :key="sectionName"
       class="distilled-section-card"
-      :style="{ '--section-color': summarySectionColors[sectionName] }"
     >
       <div class="distilled-section-header">
-        <div class="section-dot" :style="{ background: summarySectionColors[sectionName] }"></div>
         <span class="section-title-text">{{ sectionName }}</span>
       </div>
       <div class="distilled-section-body">
@@ -112,6 +109,12 @@ const emit = defineEmits<{
   gap: 10px;
 }
 
+/* 标题裸图标：中性色（无彩色） */
+.detail-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
 .detail-header h3 {
   font-size: var(--text-2xl);
   font-weight: 600;
@@ -127,7 +130,7 @@ const emit = defineEmits<{
 .profile-card {
   padding: var(--space-4);
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--task-sky-soft), var(--lumi-sky-soft));
+  background: var(--surface);
   border: 1px solid var(--border);
 }
 
@@ -141,8 +144,8 @@ const emit = defineEmits<{
   width: var(--space-8);
   height: var(--space-8);
   border-radius: var(--radius-md);
-  background: var(--lumi-accent-glow);
-  color: var(--task-sky);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -189,13 +192,13 @@ const emit = defineEmits<{
 }
 
 .profile-tag.static {
-  background: var(--lumi-success-light);
-  color: var(--lumi-success);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
 }
 
 .profile-tag.dynamic {
-  background: var(--lumi-info-light);
-  color: var(--lumi-info);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
 }
 
 /* editor-section / memory-editor / editor-hint 见 memory-shared.css */
@@ -205,12 +208,12 @@ const emit = defineEmits<{
   border-radius: var(--radius-md);
   background: var(--surface);
   border: 1px solid var(--border);
-  transition: all var(--transition-slow);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .distilled-section-card:hover {
-  border-color: var(--section-color);
-  box-shadow: 0 2px 12px color-mix(in srgb, var(--section-color) 8%, transparent);
+  border-color: var(--border);
+  box-shadow: var(--shadow-xs);
 }
 
 .distilled-section-header {
@@ -218,13 +221,6 @@ const emit = defineEmits<{
   align-items: center;
   gap: var(--space-2);
   margin-bottom: 10px;
-}
-
-.section-dot {
-  width: var(--space-2);
-  height: var(--space-2);
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
 }
 
 .section-title-text {

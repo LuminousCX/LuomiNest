@@ -83,14 +83,14 @@ watch(() => props.visible, (visible) => {
           class="adapter-type-card"
           @click="openAddDialog(at)"
         >
-          <div class="atc-icon" :class="at.category">
+          <div class="atc-icon">
             <component :is="getIcon(at.icon)" :size="20" />
           </div>
           <div class="atc-info">
             <span class="atc-name">{{ at.displayName }}</span>
             <span class="atc-desc">{{ at.description }}</span>
           </div>
-          <span class="atc-category" :class="at.category">{{ at.category === 'social' ? t('platform.category.social') : at.category === 'iot' ? t('platform.category.iot') : t('platform.category.general') }}</span>
+          <span class="atc-category">{{ at.category === 'social' ? t('platform.category.social') : at.category === 'iot' ? t('platform.category.iot') : t('platform.category.general') }}</span>
         </button>
       </div>
     </div>
@@ -167,26 +167,17 @@ watch(() => props.visible, (visible) => {
   box-shadow: var(--shadow-glow-sm);
 }
 
+/* 图标底块：中性化（无彩色） */
 .atc-icon {
   width: var(--space-8);
   height: var(--space-8);
   border-radius: var(--radius-sm);
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-.atc-icon.social {
-  background: var(--task-sky-soft);
-  color: var(--task-sky);
-}
-
-.atc-icon.iot {
-  background: var(--task-green-soft);
-  color: var(--lumi-success);
 }
 
 .atc-info {
@@ -219,19 +210,9 @@ watch(() => props.visible, (visible) => {
   flex-shrink: 0;
 }
 
-.atc-category.social {
-  background: var(--task-sky-soft);
-  color: var(--task-sky);
-}
-
-.atc-category.iot {
-  background: var(--task-green-soft);
-  color: var(--lumi-success);
-}
-
-.atc-category.general {
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
+.atc-category {
+  background: var(--bg-secondary);
+  color: var(--text-muted);
 }
 
 .form-group {

@@ -16,7 +16,9 @@ import { toErrorMessage } from '@/utils/error'
  *   引导用户点击刷新按钮获取。
  *
  * 反馈策略：成功不弹 toast（下拉从禁用变可用本身即反馈）；
- * 空列表 warning；失败 error（摘要 + 技术细节 description）。
+ * 空列表 warning；后端标记 db_fallback（在线拉取失败回退旧数据）warning——
+ * 此时不提示用户会误以为"刷新不生效"，实际展示的是上次保存的列表；
+ * 失败 error（摘要 + 技术细节 description）。
  */
 export function useProviderModelFetch(selectedProviderId: Ref<string>) {
   const modelStore = useModelStore()
@@ -47,9 +49,14 @@ export function useProviderModelFetch(selectedProviderId: Ref<string>) {
     if (!providerId || fetchingProviderId.value) return
     fetchingProviderId.value = providerId
     try {
-      const models = await modelStore.fetchProviderModels(providerId)
+      const { models, source } = await modelStore.fetchProviderModels(providerId)
       if (!models || models.length === 0) {
+        // 空列表已有 fetchEmpty 提示，覆盖了"连不上"的情形，不再叠加回退提示
         toast.warning(t('aiModel.common.fetchEmpty'))
+      } else if (source === 'db_fallback') {
+        toast.warning(t('aiModel.common.fetchFallbackTitle'), {
+          description: t('aiModel.common.fetchFallbackDesc'),
+        })
       }
     } catch (e: unknown) {
       logger.error('Failed to fetch models:', e)

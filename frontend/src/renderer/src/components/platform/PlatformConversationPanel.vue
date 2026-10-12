@@ -127,7 +127,6 @@ const { handleScroll } = useChatScroll({
   display: flex;
   gap: var(--space-2);
   max-width: 85%;
-  animation: lumi-content-fade-up var(--duration-fast) var(--ease-out-expo) both;
 }
 
 .msg-row.user {

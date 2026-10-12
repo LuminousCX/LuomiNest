@@ -32,7 +32,7 @@
 }
 
 .memory-editor:focus {
-  border-color: var(--task-sky);
+  border-color: var(--lumi-brand);
 }
 
 /* 编辑器下方提示 */

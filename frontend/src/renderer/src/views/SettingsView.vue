@@ -2,30 +2,12 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import {
-  ChevronRight,
-  Palette,
-  Bell,
-  Bot,
-  Brain,
-  Shield,
-  MessageCircle,
-  Puzzle,
-  User,
-  LogIn,
-  Cloud,
-  Languages
-} from 'lucide-vue-next'
-import type { Component } from 'vue'
-import LumiCard from '../components/common/LumiCard.vue'
-import LumiButton from '../components/common/LumiButton.vue'
+import { ChevronRight, User } from 'lucide-vue-next'
 
 interface SettingItem {
   label: string
   desc: string
   route: string
-  icon: Component
-  iconColor: string
 }
 
 interface SettingGroup {
@@ -41,30 +23,31 @@ const router = useRouter()
 const { t } = useI18n()
 
 // 标签走 vue-i18n，语言切换时 computed 重新求值
+// 视觉取向：纯文字行（无图标 chip、无彩色点缀），层次靠留白与 hover 弱底色
 const settingGroups = computed<SettingGroup[]>(() => [
   {
     title: t('settings.groupPreferences'),
     items: [
-      { label: t('settings.language'), desc: t('settings.languageDesc'), route: '/settings/language', icon: Languages, iconColor: 'var(--lumi-info)' },
-      { label: t('settings.appearance'), desc: t('settings.appearanceDesc'), route: '/settings/appearance', icon: Palette, iconColor: 'var(--lumi-brand)' },
-      { label: t('settings.notifications'), desc: t('settings.notificationsDesc'), route: '/settings/notifications', icon: Bell, iconColor: 'var(--lumi-warning)' }
+      { label: t('settings.language'), desc: t('settings.languageDesc'), route: '/settings/language' },
+      { label: t('settings.appearance'), desc: t('settings.appearanceDesc'), route: '/settings/appearance' },
+      { label: t('settings.notifications'), desc: t('settings.notificationsDesc'), route: '/settings/notifications' }
     ]
   },
   {
     title: t('settings.groupSystem'),
     items: [
-      { label: t('settings.mainAgent'), desc: t('settings.mainAgentDesc'), route: '/settings/main-agent', icon: Bot, iconColor: 'var(--lumi-primary)' },
-      { label: t('settings.aiModel'), desc: t('settings.aiModelDesc'), route: '/settings/ai-model', icon: Brain, iconColor: 'var(--lumi-accent)' },
-      { label: t('settings.auth'), desc: t('settings.authDesc'), route: '/settings/auth', icon: LogIn, iconColor: 'var(--lumi-warning)' },
-      { label: t('settings.cloud'), desc: t('settings.cloudDesc'), route: '/settings/cloud', icon: Cloud, iconColor: 'var(--lumi-secondary)' },
-      { label: t('settings.privacy'), desc: t('settings.privacyDesc'), route: '/settings/privacy', icon: Shield, iconColor: 'var(--lumi-danger)' }
+      { label: t('settings.mainAgent'), desc: t('settings.mainAgentDesc'), route: '/settings/main-agent' },
+      { label: t('settings.aiModel'), desc: t('settings.aiModelDesc'), route: '/settings/ai-model' },
+      { label: t('settings.auth'), desc: t('settings.authDesc'), route: '/settings/auth' },
+      { label: t('settings.cloud'), desc: t('settings.cloudDesc'), route: '/settings/cloud' },
+      { label: t('settings.privacy'), desc: t('settings.privacyDesc'), route: '/settings/privacy' }
     ]
   },
   {
     title: t('settings.groupConnection'),
     items: [
-      { label: t('settings.platforms'), desc: t('settings.platformsDesc'), route: '/settings/platforms', icon: MessageCircle, iconColor: 'var(--lumi-secondary)' },
-      { label: t('settings.plugins'), desc: t('settings.pluginsDesc'), route: '/settings/plugins', icon: Puzzle, iconColor: 'var(--lumi-brand)' }
+      { label: t('settings.platforms'), desc: t('settings.platformsDesc'), route: '/settings/platforms' },
+      { label: t('settings.plugins'), desc: t('settings.pluginsDesc'), route: '/settings/plugins' }
     ]
   }
 ])
@@ -106,46 +89,40 @@ const navigateTo = (route: string) => {
           class="setting-group animate-slide-up"
           :style="{ animationDelay: `${gIdx * 80}ms` }"
         >
-          <div class="group-header">
-            <span class="group-header__dot" />
-            <h3 class="group-header__title">{{ group.title }}</h3>
-          </div>
-          <LumiCard class="setting-items" padding="none">
+          <h3 class="group-header__title">{{ group.title }}</h3>
+          <div class="setting-items">
             <button
               v-for="item in group.items"
               :key="item.label"
               class="setting-item"
               @click="navigateTo(item.route)"
             >
-              <div class="setting-item__icon" :style="{ color: item.iconColor }">
-                <component :is="item.icon" :size="20" />
-              </div>
               <div class="setting-item__info lumi-item-info">
                 <span class="setting-item__label">{{ item.label }}</span>
                 <span class="setting-item__desc">{{ item.desc }}</span>
               </div>
               <ChevronRight :size="16" class="setting-item__arrow" />
             </button>
-          </LumiCard>
+          </div>
         </div>
       </div>
 
-      <div class="settings-footer">
+      <footer class="settings-footer">
         <div class="footer-brand">
           <span v-if="version" class="version-text">LuomiNest v{{ version }} · LuminousChenXi</span>
         </div>
-        <div class="footer-links">
-          <LumiButton
+        <nav class="footer-links">
+          <button
             v-for="link in footerLinks"
             :key="link.label"
-            variant="ghost"
-            size="sm"
+            type="button"
+            class="footer-links__link"
             @click="navigateTo(link.route)"
           >
             {{ link.label }}
-          </LumiButton>
-        </div>
-      </div>
+          </button>
+        </nav>
+      </footer>
     </div>
   </div>
 </template>
@@ -229,150 +206,11 @@ const navigateTo = (route: string) => {
   background: var(--border-light);
 }
 
-/* ── Body ── */
-.setting-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.group-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-left: var(--space-1);
-}
-
-.group-header__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--lumi-brand);
-}
-
-.group-header__title {
-  font-size: var(--text-xs);
-  font-weight: var(--font-semibold);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text-muted);
-}
-
-.setting-items {
-  overflow: hidden;
-  border: 1px solid var(--border-light);
-  box-shadow: var(--shadow-sm);
-  transition: box-shadow var(--transition-fast);
-}
-
-.setting-items:hover {
-  box-shadow: var(--shadow-md);
-}
-
-/* ── Item ── */
-.setting-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  width: 100%;
-  padding: var(--space-4) var(--space-4);
-  text-align: left;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  transition: background-color var(--transition-fast);
-  position: relative;
-}
-
-.setting-item::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 64px;
-  right: var(--space-4);
-  height: 1px;
-  background: var(--divider-soft);
-}
-
-.setting-item:last-child::after {
-  display: none;
-}
-
-.setting-item:hover {
-  background: var(--surface-hover);
-}
-
-.setting-item:focus-visible {
-  outline: none;
-  background: var(--surface-hover);
-  box-shadow: inset 0 0 0 1px var(--focus-ring);
-}
-
-.setting-item__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, currentColor 12%, transparent);
-  flex-shrink: 0;
-  transition: transform var(--transition-fast);
-}
-
-.setting-item:hover .setting-item__icon {
-  transform: scale(1.05);
-}
-
-.setting-item__label {
-  font-size: var(--text-base);
-  font-weight: var(--font-semibold);
-  color: var(--text);
-}
-
-.setting-item__desc {
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-.setting-item__arrow {
-  color: var(--text-muted);
-  flex-shrink: 0;
-  opacity: 0.5;
-  transition: transform var(--transition-fast), opacity var(--transition-fast), color var(--transition-fast);
-}
-
-.setting-item:hover .setting-item__arrow {
-  transform: translateX(var(--space-1));
-  opacity: 1;
-  color: var(--lumi-brand);
-}
-
-/* ── Footer ── */
-.settings-footer {
-  margin-top: auto;
-  padding-top: var(--space-6);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.footer-brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.version-text {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-}
-
-.footer-links {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
+/* ── Body ──
+   分组列表 / 条目行 / footer 的样式统一收敛到
+   styles/views/settings-shared.css（.setting-group 等），此处只留页面壳。 */
+.settings-body {
+  padding-bottom: var(--space-6);
 }
 
 /* ── 响应式 ── */
@@ -389,15 +227,6 @@ const navigateTo = (route: string) => {
   .settings-hero__line {
     display: none;
   }
-
-  .setting-item {
-    padding: var(--space-3);
-  }
-
-  .setting-item__icon {
-    width: 36px;
-    height: 36px;
-  }
 }
 
 @media (max-width: 480px) {
@@ -412,10 +241,6 @@ const navigateTo = (route: string) => {
 
   .settings-hero__title {
     font-size: var(--text-xl);
-  }
-
-  .setting-item__desc {
-    display: none;
   }
 }
 </style>

@@ -243,6 +243,16 @@
       "clearedLocally": "Local login state cleared (server-side logout failed)",
       "noAuthTip": "The desktop app enables local no-authentication mode (LUOMINEST_NO_AUTH) by default. This section is used to register a local account; once NO_AUTH is turned off, JWT authentication is enforced and all API calls must carry an Access Token."
     },
+    "notifications": {
+      "desktopNotify": "Enable desktop notifications",
+      "desktopNotifyDesc": "Master switch: all reminders stay silent when off",
+      "dndRange": "Do not disturb",
+      "dndRangeDesc": "Notifications are muted during this period",
+      "soundAlert": "Notification sound",
+      "soundAlertDesc": "Play a chime when a new message arrives",
+      "messagePreview": "Message preview",
+      "messagePreviewDesc": "Show message content in notification banners"
+    },
     "cloud": {
       "loading": "Fetching cloud sign-in status...",
       "loggedOutTitle": "Passport Sign-In",
@@ -515,6 +525,10 @@
         "label": "Reasoning Model",
         "tag": "Complex tasks"
       },
+      "dualbrain": {
+        "label": "Dual-Brain Routing",
+        "tag": "Ecosystem"
+      },
       "context": {
         "label": "Advanced Settings",
         "tag": "Context"
@@ -547,7 +561,9 @@
       "unknownError": "Unknown error",
       "modelsUnknownHint": "The model list for this provider is unknown. Click the refresh button on the right to fetch it (an API key is required)",
       "fetchEmpty": "No models fetched. Please check the provider configuration or network connection",
-      "fetchFailedTitle": "Failed to fetch the model list. Check the API key and network, then try again"
+      "fetchFailedTitle": "Failed to fetch the model list. Check the API key and network, then try again",
+      "fetchFallbackTitle": "Showing the previously saved model list",
+      "fetchFallbackDesc": "Could not fetch models from the provider online (the API Key may be missing or invalid, or the service may not support the model list endpoint). The list shown is the last saved one."
     },
     "main": {
       "title": "Fast Response Model (Main)",
@@ -569,6 +585,36 @@
       "effortHigh": "High",
       "savedToast": "Reasoning model configuration saved",
       "saveErrorToast": "Failed to save reasoning model configuration"
+    },
+    "dualBrain": {
+      "title": "Dual-Brain Routing",
+      "tag": "Ecosystem",
+      "info": "The fast brain drives main conversations and the avatar, while the slow brain executes complex tasks dispatched by the fast brain (tool loops). Both slots accept any model from any provider, including fine-tuned local models or cloud APIs.",
+      "infoTip": "If the slow brain is empty, dispatched tasks fall back to the reasoner slot; if that is unset too, the cloud default model is used.",
+      "fastBrainLabel": "Fast brain (main chat)",
+      "fastBrainHint": "The fast brain handles main conversations and avatar driving. Any model works — fine-tuned local models or cloud APIs.",
+      "slowBrainLabel": "Slow brain (dispatched reasoning)",
+      "slowBrainHint": "Complex tasks dispatched by the fast brain run their tool loops on the slow brain. Leave empty to fall back to the reasoner slot / cloud default.",
+      "slotOff": "Off (follow default model)",
+      "missingGroup": "Current value",
+      "noModelsHint": "No models available yet: add and enable a provider first; its model list is fetched automatically.",
+      "avatarToolsLabel": "Avatar tool injection",
+      "avatarToolsHint": "When enabled, avatar control tools (motion triggers, etc.) are injected into conversations so the fast brain can drive the avatar.",
+      "motionRegistryLabel": "Motion registry",
+      "motionRegistryPlaceholder": "e.g. wave, nod, shake_head",
+      "motionRegistryHint": "Comma-separated motion names; only registered motions can be invoked by the model.",
+      "advancedTitle": "Advanced",
+      "translationOverrideLabel": "Translation mapping override path",
+      "translationOverridePlaceholder": "e.g. D:/path/to/override.json (empty = default mapping)",
+      "translationOverrideHint": "Absolute path to a custom JSON mapping file that overrides the built-in motion translation mapping; leave empty for default.",
+      "savedToast": "Dual-brain routing saved",
+      "saveErrorToast": "Failed to save dual-brain routing",
+      "trustedModeLabel": "Full trust mode (no tool confirmation)",
+      "trustedModeHint": "When enabled, the agent executes every tool call immediately — high-risk operations like shell commands and file writes no longer ask for confirmation.",
+      "trustedModeWarn": "High risk: shell commands, file writes and other dangerous operations will run without confirmation. Recommended for personal devices only.",
+      "trustedModeOnToast": "Full trust mode enabled (effective immediately)",
+      "trustedModeOffToast": "Full trust mode disabled",
+      "trustedModePersistWarn": "Trust mode is active, but persistence failed: it will fall back to off after an app restart"
     },
     "context": {
       "title": "Context & Compression",

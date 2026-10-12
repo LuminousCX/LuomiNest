@@ -106,17 +106,16 @@ const handleConfig = (instance: PlatformInstance) => {
 
     <div class="platform-cards">
       <LumiCard
-        v-for="(p, idx) in filteredInstances"
+        v-for="p in filteredInstances"
         :key="p.id"
         class="platform-card"
         :class="{ disconnected: p.status !== 'running', selected: store.selectedInstanceId === p.id }"
-        :style="{ animationDelay: (0.08 + idx * 0.04) + 's' }"
         padding="md"
         hoverable
         @click="handleSelectInstance(p)"
       >
         <div class="card-top">
-          <div class="card-icon" :class="p.category">
+          <div class="card-icon">
             <component :is="getIcon(p.icon)" :size="16" />
           </div>
           <div class="card-info">
@@ -131,7 +130,7 @@ const handleConfig = (instance: PlatformInstance) => {
             <LumiButton
               size="sm"
               icon-only
-              :variant="p.status === 'running' ? 'danger-ghost' : 'ghost'"
+              variant="ghost"
               :class="['card-action-btn', p.status === 'running' ? 'stop' : 'start']"
               :aria-label="p.status === 'running' ? t('platform.stop') : t('platform.start')"
               @click.stop="handleToggleStatus(p)"
@@ -147,8 +146,7 @@ const handleConfig = (instance: PlatformInstance) => {
               icon-only
               variant="ghost"
               class="card-action-btn scan-qr"
-              style="color: #07C160"
-              title="微信扫码登录"
+              :title="t('platform.scanQr')"
               @click.stop="emit('scan-qr', p)"
             >
               <template #icon><QrCode :size="12" /></template>
@@ -166,7 +164,7 @@ const handleConfig = (instance: PlatformInstance) => {
             <LumiButton
               size="sm"
               icon-only
-              variant="danger-ghost"
+              variant="ghost"
               class="card-action-btn delete"
               :aria-label="t('platform.delete')"
               @click.stop="handleDelete(p)"
@@ -242,12 +240,11 @@ const handleConfig = (instance: PlatformInstance) => {
 
 .platform-card {
   cursor: pointer;
-  animation: lumi-content-fade-up var(--duration-slow) var(--ease-default) both;
 }
 
 .platform-card:hover {
-  border-color: var(--lumi-brand);
-  box-shadow: var(--shadow-glow-sm);
+  border-color: var(--border);
+  box-shadow: var(--shadow-xs);
 }
 
 .platform-card.selected {
@@ -266,25 +263,17 @@ const handleConfig = (instance: PlatformInstance) => {
   margin-bottom: var(--space-3);
 }
 
+/* 卡片图标：中性裸图标（无彩色底块） */
 .card-icon {
   width: var(--space-7);
   height: var(--space-7);
   border-radius: var(--radius-sm);
-  background: var(--lumi-brand-light);
-  color: var(--lumi-brand);
+  background: var(--bg-secondary);
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.card-icon.social {
-  background: var(--task-sky-soft);
-  color: var(--task-sky);
-}
-
-.card-icon.iot {
-  background: var(--task-green-soft);
-  color: var(--lumi-success);
+  flex-shrink: 0;
 }
 
 .card-info {
@@ -335,20 +324,26 @@ const handleConfig = (instance: PlatformInstance) => {
   gap: var(--space-1);
 }
 
-.card-action-btn.start {
+/* 操作图标：默认中性色，hover 才显语义色 */
+.card-action-btn {
+  color: var(--text-muted);
+}
+
+.card-action-btn.stop:hover:not(:disabled),
+.card-action-btn.start:hover:not(:disabled) {
+  background: var(--lumi-success-light);
   color: var(--lumi-success);
 }
 
-.card-action-btn.start:hover:not(:disabled) {
-  background: var(--lumi-success-light);
-}
-
-.card-action-btn.config {
+.card-action-btn.scan-qr:hover:not(:disabled),
+.card-action-btn.config:hover:not(:disabled) {
+  background: var(--lumi-brand-light);
   color: var(--lumi-brand);
 }
 
-.card-action-btn.config:hover:not(:disabled) {
-  background: var(--lumi-brand-light);
+.card-action-btn.delete:hover:not(:disabled) {
+  background: var(--lumi-danger-light);
+  color: var(--lumi-danger);
 }
 
 .card-error {

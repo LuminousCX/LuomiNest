@@ -499,24 +499,6 @@ export const usePlatformStore = defineStore('platform', () => {
       throw e
     }
   }
-
-  const createNewConversation = async (instanceId: string, senderName = 'Web 用户'): Promise<string | null> => {
-    try {
-      const result = await apiPost<{ data?: { conversation_id?: string; conversationId?: string }; conversation_id?: string; conversationId?: string }>(
-        `/platforms/instances/${instanceId}/conversations/new`,
-        { sender_name: senderName },
-      )
-      await fetchConversations(instanceId)
-      const d = result?.data || result
-      return d?.conversation_id || d?.conversationId || null
-    } catch (e: unknown) {
-      const toast = useToast()
-      const msg = toErrorMessage(e) || i18n.global.t('platform.toast.unknownError')
-      toast.error(i18n.global.t('platform.toast.createConversationFailed', { msg }))
-      throw e
-    }
-  }
-
   const clearLogs = async (instanceId: string) => {
     await apiDelete(`/platforms/instances/${instanceId}/logs`)
     await fetchLogs(instanceId)
@@ -652,7 +634,6 @@ export const usePlatformStore = defineStore('platform', () => {
     fetchLogSummary,
     fetchMainAgent,
     updateMainAgent,
-    createNewConversation,
     clearLogs,
     createInstance,
     updateInstance,

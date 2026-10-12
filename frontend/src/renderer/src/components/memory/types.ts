@@ -5,7 +5,6 @@ export interface LayerTab {
   name: string
   sub: string
   icon: Component
-  color: string
   desc: string
 }
 
@@ -14,7 +13,6 @@ export type ConfirmAction = 'clearFacts' | 'clearKnowledge' | 'clearDailies' | '
 export interface MemoryStatsCategory {
   name: string
   count: number
-  color: string
 }
 
 export interface MemoryStats {

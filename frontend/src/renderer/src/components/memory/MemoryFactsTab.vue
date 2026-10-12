@@ -2,7 +2,7 @@
 import { BookOpen, Plus, Search, Filter, ChevronDown, Check, X, Save, Loader2, Archive, Tag, Edit3, Trash2, Pin, PinOff } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import SearchInput from '../common/SearchInput.vue'
-import { categoryLabel, CATEGORY_COLORS, FACT_CATEGORIES } from '../../stores/memory'
+import { categoryLabel, FACT_CATEGORIES } from '../../stores/memory'
 import type { FactItem, FactCategory } from '../../stores/memory'
 
 const { t, locale } = useI18n()
@@ -58,7 +58,7 @@ function formatExpiresAt(iso: string): string {
 
 <template>
   <div class="detail-header">
-    <BookOpen :size="22" :style="{ color: 'var(--lumi-success)' }" />
+    <BookOpen :size="22" class="detail-icon" />
     <h3>{{ t('memory.facts.title') }}</h3>
     <div class="detail-actions">
       <button class="h-btn primary" @click="emit('startAddFact')">
@@ -141,9 +141,8 @@ function formatExpiresAt(iso: string): string {
   <div v-else class="facts-grid">
     <div v-for="(items, cat) in factsByCategory" :key="cat">
       <div v-if="items.length > 0" class="fact-category-group">
-        <div class="fact-category-header" :style="{ '--cat-color': CATEGORY_COLORS[cat] || 'var(--task-sky)' }">
-          <div class="cat-dot"></div>
-          <Tag :size="13" :style="{ color: CATEGORY_COLORS[cat] || 'var(--task-sky)' }" />
+        <div class="fact-category-header">
+          <Tag :size="13" class="detail-icon" />
           <span class="cat-label">{{ categoryLabel(cat) || cat }}</span>
           <span class="cat-count">{{ items.length }}</span>
         </div>
@@ -152,7 +151,6 @@ function formatExpiresAt(iso: string): string {
             v-for="fact in items"
             :key="fact.id"
             class="fact-item"
-            :style="{ '--fact-color': CATEGORY_COLORS[fact.category] || 'var(--task-sky)' }"
           >
             <template v-if="editingFactId === fact.id">
               <div class="fact-edit-row">
@@ -218,6 +216,12 @@ function formatExpiresAt(iso: string): string {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 标题裸图标：中性色（无彩色） */
+.detail-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .detail-header h3 {
@@ -291,14 +295,15 @@ function formatExpiresAt(iso: string): string {
 }
 
 .filter-option.active {
-  background: var(--task-sky-soft);
+  color: var(--lumi-brand);
+  font-weight: var(--font-semibold);
 }
 
 .add-fact-form {
   padding: var(--space-3);
   border-radius: var(--radius-md);
   background: var(--surface);
-  border: 1px solid var(--task-sky-border);
+  border: 1px solid var(--border-light);
 }
 
 .add-fact-row {
@@ -318,7 +323,7 @@ function formatExpiresAt(iso: string): string {
   outline: none;
 }
 
-.add-fact-input:focus { border-color: var(--task-sky); }
+.add-fact-input:focus { border-color: var(--lumi-brand); }
 
 .add-fact-select {
   padding: var(--space-2) 10px;
@@ -349,16 +354,8 @@ function formatExpiresAt(iso: string): string {
   align-items: center;
   gap: var(--space-2);
   padding: 10px 14px;
-  background: color-mix(in srgb, var(--cat-color) 6%, transparent);
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
-}
-
-.cat-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--cat-color);
-  flex-shrink: 0;
 }
 
 .cat-label {
@@ -390,7 +387,7 @@ function formatExpiresAt(iso: string): string {
 }
 
 .fact-item:hover {
-  background: color-mix(in srgb, var(--fact-color) 4%, transparent);
+  background: var(--surface-hover);
 }
 
 .fact-main {

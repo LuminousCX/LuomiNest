@@ -20,7 +20,7 @@ import {
   User,
   Users,
 } from 'lucide-vue-next'
-import { useMemoryStore, categoryLabel, CATEGORY_COLORS, FACT_CATEGORIES } from '../stores/memory'
+import { useMemoryStore, categoryLabel, FACT_CATEGORIES } from '../stores/memory'
 import type { FactItem, FactCategory, MemoryAgent, MemoryTrackType } from '../stores/memory'
 import { useToast } from '../composables/useToast'
 import LumiButton from '../components/common/LumiButton.vue'
@@ -54,10 +54,10 @@ const confirmDanger = ref(false)
 const isProcessing = ref(false)
 
 const layerTabs = computed<LayerTab[]>(() => [
-  { id: 'profile', name: t('memory.layer.profile.name'), sub: t('memory.layer.profile.sub'), icon: Brain, color: 'var(--task-sky)', desc: t('memory.layer.profile.desc') },
-  { id: 'facts', name: t('memory.layer.facts.name'), sub: t('memory.layer.facts.sub'), icon: BookOpen, color: 'var(--lumi-success)', desc: t('memory.layer.facts.desc') },
-  { id: 'knowledge', name: t('memory.layer.knowledge.name'), sub: t('memory.layer.knowledge.sub'), icon: FileText, color: 'var(--lumi-sky)', desc: t('memory.layer.knowledge.desc') },
-  { id: 'history', name: t('memory.layer.history.name'), sub: t('memory.layer.history.sub'), icon: Calendar, color: 'var(--lumi-amber)', desc: t('memory.layer.history.desc') },
+  { id: 'profile', name: t('memory.layer.profile.name'), sub: t('memory.layer.profile.sub'), icon: Brain, desc: t('memory.layer.profile.desc') },
+  { id: 'facts', name: t('memory.layer.facts.name'), sub: t('memory.layer.facts.sub'), icon: BookOpen, desc: t('memory.layer.facts.desc') },
+  { id: 'knowledge', name: t('memory.layer.knowledge.name'), sub: t('memory.layer.knowledge.sub'), icon: FileText, desc: t('memory.layer.knowledge.desc') },
+  { id: 'history', name: t('memory.layer.history.name'), sub: t('memory.layer.history.sub'), icon: Calendar, desc: t('memory.layer.history.desc') },
 ])
 
 const activeTab = ref('profile')
@@ -127,14 +127,6 @@ const knowledgeSectionCards = computed(() => {
 
 const summarySectionNames = ['用户画像', '偏好设置', '兴趣目标', '近期状态', '事件时间线'] as const
 
-const summarySectionColors: Record<string, string> = {
-  '用户画像': 'var(--task-sky)',
-  '偏好设置': 'var(--lumi-amber)',
-  '兴趣目标': 'var(--lumi-success)',
-  '近期状态': 'var(--lumi-sky)',
-  '事件时间线': 'var(--lumi-sky)',
-}
-
 const hasSummary = computed(() => {
   const s = memoryStore.summarySections
   return !!(s['用户画像'] || s['偏好设置'] || s['兴趣目标'] || s['近期状态'] || s['事件时间线'])
@@ -157,7 +149,6 @@ const memoryStats = computed(() => {
   const categories = FACT_CATEGORIES.map(cat => ({
     name: categoryLabel(cat),
     count: facts.filter(f => f.category === cat).length,
-    color: CATEGORY_COLORS[cat],
   }))
   return {
     totalFacts: facts.length,
@@ -705,7 +696,7 @@ window.addEventListener('click', closeMenu)
 
 <template>
   <div class="memory-view">
-    <div class="memory-header animate-fade-in">
+    <div class="memory-header">
       <div class="memory-header__left">
         <h1 class="memory-title lumi-page-title">{{ t('memory.title') }}</h1>
         <p class="memory-desc lumi-page-desc">{{ t('memory.desc') }}</p>
@@ -942,7 +933,6 @@ window.addEventListener('click', closeMenu)
           :is-saving="isSaving"
           :summary-has-changes="summaryHasChanges"
           :summary-section-names="summarySectionNames"
-          :summary-section-colors="summarySectionColors"
           :has-summary="hasSummary"
           :summary-sections="memoryStore.summarySections"
           @start-edit-summary="startEditSummary"
@@ -1074,7 +1064,6 @@ window.addEventListener('click', closeMenu)
   justify-content: space-between;
   padding: var(--space-6) var(--space-7) var(--space-4);
   flex-shrink: 0;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--lumi-brand) 3%, transparent) 0%, transparent 100%);
 }
 
 .memory-header__left {
