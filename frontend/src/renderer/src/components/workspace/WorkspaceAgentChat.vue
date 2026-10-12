@@ -3,10 +3,9 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { scrollToTextMatch } from '@/utils/chatSearchHelpers'
 import { useI18n } from 'vue-i18n'
 import {
-  Send,
-  Paperclip,
-  Mic,
   Wand2,
+  Paperclip,
+  Globe,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -17,12 +16,13 @@ import {
   Undo2,
   Copy,
   Check,
-  Square,
   Download,
   Trash2,
   Quote,
   X,
   Volume2,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-vue-next'
 import type { ChatMode } from '../../types/workflow'
 import FileUpload from '../../components/FileUpload.vue'
@@ -30,11 +30,14 @@ import SuggestedQuestions from '../../components/SuggestedQuestions.vue'
 import SkillsPicker from '../common/SkillsPicker.vue'
 import LumiButton from '../common/LumiButton.vue'
 import LumiEmptyState from '../common/LumiEmptyState.vue'
+import PromptBar from '../common/PromptBar.vue'
 import ThoughtLine from '../common/ThoughtLine.vue'
+import type { PromptBarMenuItem } from '../common/prompt-bar'
 import { renderMarkdownThrottled } from '../../utils/markdown'
 import { getFileIcon } from '../../utils/file'
 import type { ChatMessage, ProviderLogo, AgentProfile } from '../../types'
-import { useAutoResizeTextarea } from '../../composables/useAutoResizeTextarea'
+import { useFileUpload } from '../../composables/useFileUpload'
+import { useChatPromptPrefs } from '../../composables/useChatPromptPrefs'
 import { useChatScroll, isLastAssistantMessage as checkLastAssistantMessage } from '../../composables/useChatScroll'
 import { useChatWindow } from '../../composables/useChatWindow'
 
@@ -87,11 +90,21 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const messagesContainer = ref<HTMLElement | null>(null)
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const { autoResize, resetTextareaHeight } = useAutoResizeTextarea(textareaRef)
 const fileUploadRef = ref<InstanceType<typeof FileUpload> | null>(null)
+const promptBarRef = ref<InstanceType<typeof PromptBar> | null>(null)
 const isNearBottom = ref(true)
 const showScrollToBottomBtn = ref(false)
+
+// W4：task_dispatch 徽标文案（按生命周期阶段取 i18n，任务名留空时仅展示状态）
+const taskDispatchText = (td: NonNullable<ChatMessage['taskDispatch']>): string => {
+  const key =
+    td.phase === 'start'
+      ? 'chat.taskDispatchRunning'
+      : td.phase === 'done'
+        ? 'chat.taskDispatchDone'
+        : 'chat.taskDispatchFailed'
+  return t(key, { task: td.task || '' })
+}
 
 const { scrollToBottom, setupResizeObserver, teardownResizeObserver, handleScroll } = useChatScroll({
   container: messagesContainer,
@@ -111,6 +124,34 @@ const inputTextModel = computed<string>({
   get: () => props.inputText,
   set: (value) => emit('update:inputText', value),
 })
+
+// ── PromptBar：模型菜单 + 响应档位（共享偏好，见 useChatPromptPrefs 交接说明）──
+const { modelOptions, selectedModelKey, effortKey } = useChatPromptPrefs()
+
+// 加号附件菜单：上传接现有 FileUpload 链路（真实能力）；网络搜索无后端支撑，为占位条目
+const { parsedContent, fileName, clearUploadState } = useFileUpload()
+const attachMenuItems = computed<PromptBarMenuItem[]>(() => [
+  {
+    key: 'upload',
+    icon: Paperclip,
+    name: t('chat.attach.upload'),
+    description: t('chat.attach.uploadDesc'),
+    action: () => fileUploadRef.value?.triggerFileSelect(),
+  },
+  {
+    key: 'web-search',
+    icon: Globe,
+    name: t('chat.attach.webSearch'),
+    description: t('chat.attach.webSearchDesc'),
+    disabled: true,
+  },
+])
+
+// 上传成功后由输入卡 chip 展示文件名；移除 chip / 发送后清理上传状态
+const attachmentChips = computed(() =>
+  parsedContent.value && fileName.value ? [{ key: fileName.value, name: fileName.value }] : [],
+)
+const removeAttachment = () => clearUploadState()
 
 const isWorkflowMode = computed(() => props.chatMode !== 'normal')
 
@@ -148,7 +189,7 @@ const handleMessagesScroll = () => {
 }
 
 const focusTextarea = () => {
-  if (textareaRef.value) textareaRef.value.focus()
+  promptBarRef.value?.focus()
 }
 
 const renderMessageHtml = (msg: ChatMessage): string =>
@@ -203,8 +244,9 @@ onBeforeUnmount(() => {
 defineExpose({
   scrollToBottom,
   scrollToSearchResult,
-  resetTextareaHeight,
-  autoResize,
+  // PromptBar 自管 textarea 高度；保留旧接口签名兼容 useWorkspaceMessages 的调用
+  resetTextareaHeight: () => {},
+  autoResize: () => {},
   focusTextarea,
 })
 </script>
@@ -255,6 +297,17 @@ defineExpose({
               </div>
               <div class="message-body">
                 <div class="message-sender lumi-chat-message-sender" v-if="msg.role === 'assistant'">{{ agent?.name || 'LuomiNest' }}</div>
+                <!-- W4 task_dispatch 轻量状态标记：任务派发生命周期（进行中/完成/失败），不做任务面板 -->
+                <div
+                  v-if="msg.role === 'assistant' && msg.taskDispatch"
+                  class="task-dispatch-badge"
+                  :class="`task-dispatch-badge--${msg.taskDispatch.phase}`"
+                >
+                  <Loader2 v-if="msg.taskDispatch.phase === 'start'" :size="12" class="spin-animation" />
+                  <CheckCircle2 v-else-if="msg.taskDispatch.phase === 'done'" :size="12" />
+                  <XCircle v-else :size="12" />
+                  <span>{{ taskDispatchText(msg.taskDispatch) }}</span>
+                </div>
                 <div
                   v-if="msg.role === 'assistant' && (msg.reasoningContent !== undefined || (!msg.done && msg.id === messages[messages.length - 1].id && !msg.content))"
                   class="thought-section"
@@ -430,107 +483,68 @@ defineExpose({
 
     <div class="input-area">
       <FileUpload ref="fileUploadRef" />
-      <div class="input-wrapper lumi-card">
-        <SkillsPicker
-          :selected-ids="selectedSkillIds"
-          class="input-skills-picker"
-          @update:selected-ids="emit('update:selectedSkillIds', $event)"
-        />
-        <div v-if="quotedMessage" class="quote-preview">
-          <Quote :size="14" class="quote-preview-icon" />
-          <div class="quote-preview-content">
-            <span class="quote-preview-label">{{ quotedMessage.role === 'assistant' ? t('workspace.roleAssistant') : t('workspace.roleUser') }}</span>
-            <span class="quote-preview-text">{{ quotedMessage.content.slice(0, 80) }}{{ quotedMessage.content.length > 80 ? '...' : '' }}</span>
-          </div>
-          <button class="quote-preview-cancel" @click="emit('clear-quote')">
-            <X :size="14" />
-          </button>
-        </div>
-        <textarea
-          ref="textareaRef"
-          v-model="inputTextModel"
-          :placeholder="t('workspace.inputPlaceholder')"
-          rows="1"
-          class="chat-input"
-          :disabled="!isBackendReady"
-          @keydown.enter.exact.prevent="emit('send')"
-          @input="autoResize"
-        ></textarea>
-        <div class="input-toolbar">
-          <div class="toolbar-left lumi-row-1">
-            <!-- 2026-08 全局模型统一：对话页不提供模型切换，展示全局主模型；
-                 切换请前往 设置 → 模型设置 -->
-            <div
-              class="model-badge"
-              :title="t('workspace.modelBadgeTitle')"
-            >
-              <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
-              <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
-                {{ currentProviderLogo.initials }}
-              </span>
-              <span class="model-btn-text">{{ currentModel }}</span>
+      <PromptBar
+        ref="promptBarRef"
+        v-model="inputTextModel"
+        :placeholder="t('workspace.inputPlaceholder')"
+        :disabled="!isBackendReady"
+        :busy="isStreaming"
+        :can-send="canSend"
+        :models="modelOptions"
+        :model-key="selectedModelKey"
+        v-model:effort="effortKey"
+        :attachments="attachmentChips"
+        :menu-items="attachMenuItems"
+        @update:model="selectedModelKey = $event"
+        @send="emit('send')"
+        @stop="emit('cancel')"
+        @remove-attachment="removeAttachment"
+      >
+        <template #top>
+          <SkillsPicker
+            :selected-ids="selectedSkillIds"
+            class="input-skills-picker"
+            @update:selected-ids="emit('update:selectedSkillIds', $event)"
+          />
+          <div v-if="quotedMessage" class="quote-preview">
+            <Quote :size="14" class="quote-preview-icon" />
+            <div class="quote-preview-content">
+              <span class="quote-preview-label">{{ quotedMessage.role === 'assistant' ? t('workspace.roleAssistant') : t('workspace.roleUser') }}</span>
+              <span class="quote-preview-text">{{ quotedMessage.content.slice(0, 80) }}{{ quotedMessage.content.length > 80 ? '...' : '' }}</span>
             </div>
+            <button class="quote-preview-cancel" @click="emit('clear-quote')">
+              <X :size="14" />
+            </button>
+          </div>
+        </template>
+        <template #tools>
+          <LumiButton
+            :class="['workflow-toggle', { active: isWorkflowMode }]"
+            variant="secondary"
+            size="sm"
+            :title="isWorkflowMode ? t('workspace.modeProOnTitle') : t('workspace.modeProOffTitle')"
+            @click="toggleWorkflowMode"
+          >
+            <template #icon>
+              <Wand2 :size="15" />
+            </template>
+            <span class="workflow-toggle-text">{{ isWorkflowMode ? t('chat.modePro') : t('chat.modeNormal') }}</span>
+          </LumiButton>
+          <div v-if="isWorkflowMode" class="workflow-mode-selector">
             <LumiButton
-              :class="['workflow-toggle', { active: isWorkflowMode }]"
+              v-for="opt in chatModeOptions"
+              :key="opt.value"
+              :class="['mode-chip', { active: chatMode === opt.value }]"
               variant="secondary"
               size="sm"
-              :title="isWorkflowMode ? t('workspace.modeProOnTitle') : t('workspace.modeProOffTitle')"
-              @click="toggleWorkflowMode"
+              :title="opt.title"
+              @click="selectMode(opt.value)"
             >
-              <template #icon>
-                <Wand2 :size="15" />
-              </template>
-              <span class="workflow-toggle-text">{{ isWorkflowMode ? t('chat.modePro') : t('chat.modeNormal') }}</span>
-            </LumiButton>
-            <div v-if="isWorkflowMode" class="workflow-mode-selector">
-              <LumiButton
-                v-for="opt in chatModeOptions"
-                :key="opt.value"
-                :class="['mode-chip', { active: chatMode === opt.value }]"
-                variant="secondary"
-                size="sm"
-                :title="opt.title"
-                @click="selectMode(opt.value)"
-              >
-                {{ opt.label }}
-              </LumiButton>
-            </div>
-          </div>
-          <div class="toolbar-right lumi-row-1">
-            <button class="tool-btn icon-only" :title="t('workspace.attachment')" @click="fileUploadRef?.triggerFileSelect()">
-              <Paperclip :size="16" />
-            </button>
-            <button class="tool-btn icon-only" :title="t('workspace.voice')">
-              <Mic :size="16" />
-            </button>
-            <LumiButton
-              v-if="isStreaming"
-              variant="danger"
-              size="sm"
-              class="send-btn"
-              :title="t('workspace.stopGenerating')"
-              @click="emit('cancel')"
-            >
-              <template #icon>
-                <Square :size="16" />
-              </template>
-            </LumiButton>
-            <LumiButton
-              v-else
-              variant="primary"
-              size="sm"
-              class="send-btn"
-              :disabled="!canSend"
-              :title="t('workspace.send')"
-              @click="emit('send')"
-            >
-              <template #icon>
-                <Send :size="17" />
-              </template>
+              {{ opt.label }}
             </LumiButton>
           </div>
-        </div>
-      </div>
+        </template>
+      </PromptBar>
       <div class="input-footer">
         <div v-if="contextTokens > 0" class="context-usage">
           <div class="context-bar">
@@ -887,6 +901,24 @@ defineExpose({
   vertical-align: middle;
 }
 
+/* W4 task_dispatch 轻量状态标记（跟随消息组件小字风格） */
+.task-dispatch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+.task-dispatch-badge--done {
+  color: var(--lumi-success);
+}
+
+.task-dispatch-badge--error {
+  color: var(--lumi-danger);
+}
+
 .interrupted-only {
   display: inline-flex;
   align-items: center;
@@ -1144,107 +1176,15 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
 }
 
-.input-wrapper {
-  background: var(--workspace-card);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-sm), var(--shadow-inset);
-  overflow: visible;
-  transition: box-shadow var(--duration-normal) var(--ease-in-out), background-color var(--duration-normal) var(--ease-in-out);
-}
+/* 输入卡本体样式由 PromptBar 组件提供（主题变量，深浅主题自适应） */
 
 .input-skills-picker {
-  padding: var(--space-2) var(--space-4) 0;
-}
-
-.input-wrapper:focus-within {
-  box-shadow: 0 0 0 2px var(--lumi-brand-glow), var(--shadow-lg);
-}
-
-.chat-input {
-  width: 100%;
-  padding: 14px var(--space-5);
-  font-size: var(--text-md);
-  resize: none;
-  min-height: var(--space-9);
-  max-height: 120px;
-  background: transparent;
-  color: var(--text-primary);
-  line-height: 1.5;
-}
-
-.chat-input::placeholder {
-  color: var(--text-muted);
-}
-
-.chat-input:disabled {
-  opacity: 0.6;
-}
-
-.input-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-2) var(--space-4) var(--space-3);
-  position: relative;
-}
-
-.input-toolbar::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: var(--space-4);
-  right: var(--space-4);
-  height: 1px;
-  background: var(--divider-soft);
-}
-
-.tool-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background-color var(--duration-normal) var(--ease-in-out), color var(--duration-normal) var(--ease-in-out);
-  white-space: nowrap;
-}
-
-.tool-btn:hover {
-  background: var(--workspace-hover);
-  color: var(--text-secondary);
-}
-
-.tool-btn.icon-only {
-  padding: 6px;
-}
-
-.model-btn-text {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 2026-08 全局模型统一：对话页不提供模型切换，只读徽章展示全局主模型 */
-.model-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--surface-hover);
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  cursor: default;
-  user-select: none;
-  max-width: 220px;
-}
-
-.send-btn {
-  margin-left: var(--space-1);
+  min-height: 0;
 }
 
 .workflow-toggle {
@@ -1496,30 +1436,5 @@ defineExpose({
 .msg-appear-enter-from {
   opacity: 0;
   transform: translateY(16px) scale(0.97);
-}
-
-
-
-
-.provider-icon-mini {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 8px;
-  font-weight: 700;
-  color: var(--text-inverse);
-  flex-shrink: 0;
-}
-
-.provider-svg-mini {
-  background: transparent !important;
-}
-
-.provider-svg-mini :deep(svg) {
-  width: var(--space-4);
-  height: var(--space-4);
 }
 </style>

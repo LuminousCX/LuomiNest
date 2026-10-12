@@ -58,6 +58,15 @@
       "hiddenCount": "内蔵モデル{n}個を非表示中",
       "restoreOne": "再表示",
       "restoreAll": "すべて再表示"
+    },
+    "controls": {
+      "rendererPending": "{label} レンダラーは開発中です。お楽しみに",
+      "noEmotions": "このモデルに利用可能な表情はありません",
+      "noMotions": "このモデルに利用可能なモーションはありません",
+      "soon": "近日公開",
+      "chatPlaceholder": "アバターと会話...（Enter で送信）",
+      "expression": "表情",
+      "motion": "モーション"
     }
   },
   "pet": {
@@ -68,7 +77,12 @@
       "close": "ペットを閉じる"
     },
     "chat": {
-      "sendMessageFailed": "デスクトップペットの会話に失敗しました：{message}"
+      "sendMessageFailed": "デスクトップペットの会話に失敗しました：{message}",
+      "placeholderIdle": "Luomiに何か話しかけて…",
+      "placeholderThinking": "Luomiが考えています…",
+      "send": "送信",
+      "stop": "生成を停止",
+      "close": "ダイアログを閉じる"
     }
   },
   "theme": {

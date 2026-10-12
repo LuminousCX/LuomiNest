@@ -148,6 +148,16 @@
       "loading": "Loading...",
       "sendFailed": "Failed to send message",
       "panelNote": "Invite friends to this cloud group by user ID"
+    },
+    "presetAvatar": {
+      "pa1": "Coding Assistant",
+      "pa2": "Info Researcher",
+      "pa3": "Inspiration Assistant",
+      "pa4": "Task Planner",
+      "pa5": "Psychology Expert",
+      "pa6": "Info Collector",
+      "pa7": "Learning Helper",
+      "pa8": "Daily Assistant"
     }
   },
   "workbench": {
@@ -232,7 +242,8 @@
       "normalLabel": "Normal",
       "stop": "Stop generating",
       "send": "Send"
-    }
+    },
+    "noSummary": "No summary"
   },
   "agentCreate": {
     "stepTitle1": "Identity",
@@ -295,9 +306,68 @@
       "skillCount": "{n} items",
       "enabledSkills": "Enabled skills",
       "noSkills": "No skills enabled"
+    },
+    "skillItems": {
+      "skill-search": {
+        "name": "Skill Finder",
+        "desc": "Search the built-in catalog by keyword to quickly locate capability modules"
+      },
+      "skill-builder": {
+        "name": "Skill Creator",
+        "desc": "Create, modify, evaluate and optimize agent skills with structured SKILL.md authoring"
+      },
+      "self-learning": {
+        "name": "Agent Self-Learning",
+        "desc": "Record learnings, errors and reflections into a daily log to improve reasoning and decisions"
+      },
+      "mcp-tools": {
+        "name": "MCP Tools (CLI)",
+        "desc": "Discover and call MCP tools (Notion, Square, Apify, etc.) via the accio-mcp-cli"
+      },
+      "powerpoint": {
+        "name": "PowerPoint",
+        "desc": "Generate PowerPoint decks for vendor reviews, data summaries and strategic proposals"
+      },
+      "pdf": {
+        "name": "PDF",
+        "desc": "Generate or parse PDF documents, extract key clauses and compliance analysis from contracts"
+      },
+      "word": {
+        "name": "Word",
+        "desc": "Create and edit Word documents, including RFQs, SOPs and contract templates"
+      },
+      "xlsx": {
+        "name": "Excel",
+        "desc": "Create, edit and analyze spreadsheets with formulas and charts"
+      }
     }
   },
   "chat": {
+    "effort": {
+      "title": "Effort",
+      "fast": "Fast",
+      "balanced": "Balanced",
+      "max": "Deep Reasoning",
+      "hint": "Higher effort thinks longer before answering"
+    },
+    "promptBar": {
+      "menuAttachments": "Attachments & sources",
+      "addAttachment": "Add attachments and sources",
+      "chooseModel": "Choose model",
+      "chooseEffort": "Choose effort",
+      "send": "Send",
+      "stop": "Stop",
+      "inputLabel": "Message",
+      "removeFile": "Remove {name}",
+      "comingSoon": "\"{name}\" is coming soon",
+      "modelSettings": "Manage models in Settings"
+    },
+    "attach": {
+      "upload": "Photos & files",
+      "uploadDesc": "Upload images or documents from this device",
+      "webSearch": "Web search",
+      "webSearchDesc": "Live web results"
+    },
     "newConversation": "New conversation",
     "waitingModel": "Waiting for model...",
     "thinking": "Thinking...",
@@ -374,6 +444,14 @@
       "deny": "Deny",
       "fullNote": "With \"Full access\", commands run without per-command approval (you can switch back anytime in Settings). Dangerous commands like rm -rf or reading key files remain blocked by the hard guard in every mode.",
       "resolveFailed": "Failed to send your decision, please retry"
+    },
+    "taskDispatchRunning": "Dispatched task {task} (running)",
+    "taskDispatchDone": "Task {task} completed",
+    "taskDispatchFailed": "Task {task} failed",
+    "workflowCard": {
+      "title": "Workflow created",
+      "subtasks": "{n} subtasks",
+      "viewFlow": "View flowchart"
     }
   }
 }

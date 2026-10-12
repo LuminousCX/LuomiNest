@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Send, Square, X } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 const input = ref('')
 const streaming = ref(false)
@@ -45,17 +48,17 @@ onBeforeUnmount(() => {
       v-model="input"
       type="text"
       :disabled="streaming"
-      :placeholder="streaming ? 'Luomi 正在思考…' : '和 Luomi 说点什么…'"
+      :placeholder="streaming ? t('desktopPet.thinkingPlaceholder') : t('desktopPet.inputPlaceholder')"
       autofocus
       @keydown="keydown"
     />
-    <button v-if="!streaming" class="action send" :disabled="!canSend" title="发送" @click="send">
+    <button v-if="!streaming" class="action send" :disabled="!canSend" :title="t('desktopPet.send')" @click="send">
       <Send :size="17" />
     </button>
-    <button v-else class="action stop" title="停止生成" @click="cancel">
+    <button v-else class="action stop" :title="t('desktopPet.stop')" @click="cancel">
       <Square :size="14" />
     </button>
-    <button class="action close" title="关闭对话框" @click="closeWindow">
+    <button class="action close" :title="t('desktopPet.close')" @click="closeWindow">
       <X :size="17" />
     </button>
   </main>

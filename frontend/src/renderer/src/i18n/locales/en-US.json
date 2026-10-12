@@ -251,5 +251,26 @@
     "market": "Marketplace - LuomiNest",
     "marketDetail": "Marketplace Details - LuomiNest",
     "agentCreate": "Create Agent - LuomiNest"
+  },
+  "confirm": "Confirm",
+  "cancel": "Cancel",
+  "close": "Close",
+  "search": "Search...",
+  "minimize": "Minimize",
+  "restore": "Restore",
+  "maximize": "Maximize",
+  "file": {
+    "uploading": "Uploading...",
+    "attached": "Attached",
+    "failed": "Upload failed",
+    "download": "Download",
+    "downloadFile": "Download file",
+    "remove": "Remove",
+    "cannotPreview": "Cannot preview this file type",
+    "unsupportedType": "Unsupported file type: {name}",
+    "networkError": "Network error, please check the backend service"
+  },
+  "time": {
+    "yesterday": "Yesterday"
   }
 }

@@ -30,18 +30,39 @@ import { useToast } from '../composables/useToast'
 import { i18n } from '../i18n'
 import { useAgentStore } from './agent'
 import { useChatTrashStore } from './chat-trash'
+import { useTtsEngineStore } from './tts-engine'
 import { enrichWithSearchResults, enrichWithUrlContent } from '../utils/chatSearchHelpers'
 import { generateId } from '../utils/id'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import { toErrorMessage } from '@/utils/error'
 import { MAIN_AGENT_ID } from '../constants'
+import router, { SEMANTIC_NAVIGATION_WHITELIST } from '../router'
+import { consumeChunkDirectives } from '../utils/emotionTagInterceptor'
 
 const logger = createLuomiNestRendererLogger('Chat')
+
+/**
+ * W4 统一标签消费：语义导航（后端 <ui:navigate target="..."/> 的翻译产物）。
+ * 白名单外目标忽略（消费器已规整，这里只做路由表白名单校验），
+ * router.push 的冗余导航/守卫中断异常静默 catch。
+ */
+const navigateSemantic = async (target: string): Promise<void> => {
+  if (!SEMANTIC_NAVIGATION_WHITELIST.has(target)) {
+    logger.debug('语义导航目标不在白名单，已忽略:', target)
+    return
+  }
+  try {
+    await router.push(target)
+  } catch {
+    // 冗余导航（NavigationDuplicated）或导航被守卫中断：陪伴场景无需提示
+  }
+}
 
 export const useChatStore = defineStore('chat', () => {
   const { apiGet, apiPost, apiPatch, apiDelete, apiStream, checkHealth } = useApi()
   const agentStore = useAgentStore()
   const toast = useToast()
+  const ttsEngine = useTtsEngineStore()
 
   const agentConversations = ref<Record<string, ConversationListItem[]>>({})
   const agentCurrentConvId = ref<Record<string, string | null>>({})
@@ -385,6 +406,46 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /**
+   * W4 统一标签消费：应用 chunk 上的四类结构化指令（action/navigate/avatar_tool/task_dispatch）。
+   * 全部字段可选可缺省 —— 后端不下发（普通模型/普通聊天）时本函数不会被调用，
+   * emotion 既有驱动链（tts-engine feedChunk → TTS 段驱动表情）完全不受影响。
+   * 优先级纪律：exp 情绪通道高于工具通道（同帧冲突已在 consumeChunkDirectives 让位处理）；
+   * motion 与表情不冲突，可并行。
+   */
+  const applyStreamDirectives = (chunk: ChatStreamChunk, convId: string): void => {
+    const directives = consumeChunkDirectives(chunk)
+
+    // 动作 → Live2D motion（经 tts-engine drivers 路由：工作台画布 ↔ 桌宠 IPC）
+    if (directives.action) {
+      ttsEngine.dispatchAction(directives.action)
+    }
+    // 皮套工具 → motion/expression 驱动
+    if (directives.avatarTool) {
+      ttsEngine.dispatchAvatarTool(directives.avatarTool)
+    }
+    // 导航 → 白名单路由跳转
+    if (directives.navigate) {
+      void navigateSemantic(directives.navigate)
+    }
+    // 任务派发 → 挂到该对话最新 assistant 消息（气泡角落轻量徽标，start 被后续 done/error 覆盖）
+    if (directives.taskDispatch) {
+      const msgs = convMessages.value[convId]
+      if (!msgs || msgs.length === 0) return
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const msg = msgs[i]
+        if (msg.role === 'assistant') {
+          msg.taskDispatch = {
+            task: directives.taskDispatch.task,
+            phase: directives.taskDispatch.phase,
+            summary: directives.taskDispatch.summary,
+          }
+          break
+        }
+      }
+    }
+  }
+
+  /**
    * 流式回调工厂：sendMessage 与 regenerateMessage 共用
    *
    * 统一处理：content/reasoning 累加、done 时 context_tokens/usage 回写、
@@ -416,6 +477,11 @@ export const useChatStore = defineStore('chat', () => {
       // 工作台/对话页/桌宠等所有入口共用，不再依赖各端自行映射（P1-2）
       if (chunk.notice) {
         toast.warning(chunk.notice)
+      }
+      // W4 统一标签消费：四类结构化指令字段（全部可选，普通模型不下发时零开销）。
+      // 与 emotion 的 TTS 驱动链解耦：emotion 仍由各入口 feedChunk → tts-engine 处理
+      if (chunk.action || chunk.navigate || chunk.avatar_tool || chunk.task_dispatch) {
+        applyStreamDirectives(chunk, streamingConvId)
       }
       const msgsList = convMessages.value[streamingConvId]
       if (!msgsList) return

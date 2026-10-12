@@ -455,10 +455,19 @@ class AgentRunner:
         if event.type == "content":
             content = event.data.get("content", "")
             emotion = event.data.get("emotion")
+            # 五类标签网关事件（W2）：action/navigate/avatar_tool 随 content chunk
+            # 下发；dispatch(detected) 不进 event.data（StreamProcessor 已存 ctx.state
+            # 挂点），此处刻意不透传 task_dispatch。
+            action = event.data.get("action")
+            navigate = event.data.get("navigate")
+            avatar_tool = event.data.get("avatar_tool")
             if content:
                 ctx.state["iteration_content"] += content
                 ctx.state["content"] = ctx.state.get("content", "") + content
-            return SSEEmitMiddleware.format_content_sse(ctx, content, "", emotion)
+            return SSEEmitMiddleware.format_content_sse(
+                ctx, content, "", emotion,
+                action=action, navigate=navigate, avatar_tool=avatar_tool,
+            )
 
         if event.type == "reasoning":
             rc = event.data.get("reasoning", "")

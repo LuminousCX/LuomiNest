@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Search, Clock, X, TrendingUp, ArrowRight } from 'lucide-vue-next'
 import { useMarketplaceStore } from '../../stores/marketplace'
 import { debounce } from '../../utils/debounce'
 import SearchInput from '../common/SearchInput.vue'
 
+const { t } = useI18n()
 const store = useMarketplaceStore()
 
 const localQuery = ref(store.searchQuery)
@@ -58,7 +60,7 @@ const removeHistory = (text: string, e: Event) => {
       <SearchInput
         v-model="localQuery"
         size="md"
-        placeholder="搜索插件或技能..."
+        :placeholder="t('market.searchPlaceholder')"
         :loading="false"
         @update:model-value="onInput"
         @focus="onFocus"
@@ -82,7 +84,7 @@ const removeHistory = (text: string, e: Event) => {
           </div>
           <span class="suggestion-text">{{ suggestion.text }}</span>
           <span class="suggestion-type">
-            {{ suggestion.type === 'history' ? '历史' : suggestion.type === 'category' ? '分类' : '建议' }}
+            {{ suggestion.type === 'history' ? t('market.suggestionHistory') : suggestion.type === 'category' ? t('market.suggestionCategory') : t('market.suggestionTip') }}
           </span>
           <button
             v-if="suggestion.type === 'history'"
@@ -96,7 +98,7 @@ const removeHistory = (text: string, e: Event) => {
 
         <div v-if="store.searchHistory.length > 0 && !localQuery" class="suggestions-footer">
           <button class="clear-history-btn" @mousedown.prevent="store.clearSearchHistory()">
-            清除搜索历史
+            {{ t('market.clearHistory') }}
           </button>
         </div>
       </div>

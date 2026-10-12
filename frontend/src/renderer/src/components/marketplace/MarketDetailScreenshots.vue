@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { Image } from 'lucide-vue-next'
 import type { MarketplaceScreenshot } from '../../types/marketplace'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   screenshots: MarketplaceScreenshot[]
@@ -13,7 +16,7 @@ const emit = defineEmits<{
 
 <template>
   <div class="detail-screenshots animate-slide-up">
-    <h3 class="section-title lumi-section-title">截图预览</h3>
+    <h3 class="section-title lumi-section-title">{{ t('market.detail.screenshots') }}</h3>
     <div class="screenshots-grid">
       <div
         v-for="(shot, idx) in screenshots"
@@ -21,7 +24,7 @@ const emit = defineEmits<{
         class="screenshot-thumb"
         @click="emit('open', idx)"
       >
-        <img :src="shot.url" :alt="shot.caption || `截图 ${idx + 1}`" loading="lazy" />
+        <img :src="shot.url" :alt="shot.caption || t('market.detail.screenshotIndex', { n: idx + 1 })" loading="lazy" />
         <div class="screenshot-overlay">
           <Image :size="20" />
         </div>

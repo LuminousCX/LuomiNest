@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Star, Download, Heart, ArrowRight, PackageCheck } from 'lucide-vue-next'
 import type { MarketplaceItem, MarketplaceType } from '../../types/marketplace'
 import { useRouter } from 'vue-router'
 import { ITEM_ICON_MAP, DEFAULT_ICON } from '../../utils/marketplace-icons'
 import { formatCount } from '../../utils/format'
 import LumiCardIcon from '../common/LumiCardIcon.vue'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   items: MarketplaceItem[]
@@ -34,7 +37,7 @@ function navigateToList() {
         <h2 class="banner-title">{{ title }}</h2>
       </div>
       <button class="view-all-btn" @click="navigateToList()">
-        查看全部
+        {{ t('market.viewAll') }}
         <ArrowRight :size="14" />
       </button>
     </div>
@@ -73,7 +76,7 @@ function navigateToList() {
     </div>
     <div v-else class="banner-empty">
       <PackageCheck :size="24" />
-      <p>暂无已安装的内容</p>
+      <p>{{ t('market.noInstalled') }}</p>
     </div>
   </div>
 </template>

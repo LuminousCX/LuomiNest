@@ -204,10 +204,175 @@ class ContextService:
         return messages
 
     @staticmethod
+    def is_fast_brain_model(provider: str | None, model: str | None) -> bool:
+        """判断本次会话模型是否命中快脑寻址（model_config.fast_brain，分册 10 §八/§18）。
+
+        fast_brain 形如 "provider_id/model_id"（OpenAI 兼容 provider 通用，不绑定
+        任何具体模型名）；model_id 自身可含 "/"，故按首个 "/" 切分。空/缺省 =
+        快脑模式关闭 → 返回 False（不注入快脑提示词块/皮套工具/四段式，
+        行为与现状完全一致）。
+        """
+        from app.core.config import settings
+
+        target = (getattr(settings, "FAST_BRAIN", "") or "").strip()
+        if not target:
+            return False
+        if "/" in target:
+            p, m = target.split("/", 1)
+            return (provider or "") == p and (model or "") == m
+        return (model or "") == target
+
+    # ── 快脑合同提示词块（辰汐生态打通 W2，分册 08 §15 / 分册 10 §18）──────
+    # 隐私分层红线：以下均为协议/词表衍生文本（合同域），不含任何人设文本——
+    # 人设一律走 main_agent_config / agent 配置既有通道（分册 10 §18.2）。
+
+    # 派发自律条款定稿原文（分册 10 §18.3 第一关，逐字引用，改动须先改分册）
+    _DISPATCH_DISCIPLINE_TEXT = (
+        "你没有工具。简单问题、闲聊和你能直接回答的问题必须自己回答，禁止派发；"
+        "只有确需外部信息、多步操作或工具执行时，才先垫话再输出 `<dispatch task=\"…\"/>`，"
+        "task 一句话写清目标、关键约束与期望结果。拿不准要不要派发时，一律自己回答。"
+    )
+
+    @staticmethod
+    def _build_contract_avatar_block() -> str:
+        """合同风格 <avatar_emotion> 块：自闭合 8 词 + act 词表 + 频率纪律。"""
+        return """
+<avatar_emotion>
+你以 Live2D 皮套形象与用户对话。用自闭合小写标签驱动皮套，标签对用户不可见、不会被朗读，直接内联在回复文本中。
+- 表情标签 <exp:WORD/>：WORD 只能取以下 8 词之一（括号内为语义提示）：
+  smile(开心) angry(生气) shy(害羞) surprise(惊讶) tilt(好奇歪头) sigh(无奈叹气) wronged(委屈) cry(哭)
+- 动作标签 <act:NAME/>：NAME 只能取：nod(点头/肯定) shake(摇头/否定) think(沉思/停顿) hug(亲近/撒娇)
+
+频率纪律：
+1. 表情在情绪转折处输出、与后文情绪一致；自然切换，不要每句都打标签，也不要全程无标签。
+2. 动作仅在确有肢体语义（确认/否认/思考/亲近）时使用，不得连续堆叠。
+3. 标签不加引号、不进代码块、不做解释；拿不准用哪个表情时就不输出表情标签。
+示例：<exp:smile/>太好了！<act:nod/>就这么定了。
+</avatar_emotion>
+"""
+
+    @classmethod
+    def _build_dispatch_discipline_block(cls) -> str:
+        """派发自律条款块（快脑激活时注入，原文见 _DISPATCH_DISCIPLINE_TEXT）。"""
+        return f"""
+<dispatch_discipline>
+{cls._DISPATCH_DISCIPLINE_TEXT}
+</dispatch_discipline>
+"""
+
+    @staticmethod
+    def _build_avatar_tools_block() -> str:
+        """皮套工具用法说明块（avatar_tools_enabled 且注册表非空时注入，分册 08 §15.2）。"""
+        from app.core.config import settings
+
+        registry = [str(m).strip() for m in (getattr(settings, "AVATAR_MOTION_REGISTRY", []) or []) if str(m).strip()]
+        if not getattr(settings, "AVATAR_TOOLS_ENABLED", False) or not registry:
+            return ""
+        return f"""
+<avatar_tools>
+除表情/动作标签外，你还可以用以下自闭合小写标签调用皮套工具（文本协议，标签不可见、不会被朗读）：
+- <tool:avatar_motion name="ID"/>：播放一个 Live2D 动作，ID 只能从注册表取值：{", ".join(registry)}
+- <tool:avatar_expression name="ID"/>：驱动额外表情（8 词表与 12 语义表情之外的彩蛋表情），
+  ID 用小写字母/数字/下划线，不超过 32 字符
+注册表外或非法取值会被忽略。需要表演时才调用，不要连续堆叠。
+</avatar_tools>
+"""
+
+    # ── 四段式注入（分册 10 §18.1 冻结协议的 LuomiNest 域实现） ──────────
+
+    @staticmethod
+    def _part_of_day(dt: datetime) -> str:
+        """[时间节律].part_of_day 字段值（字段名冻结，值域为本文档实现定义）。"""
+        hour = dt.hour
+        if 5 <= hour < 11:
+            return "morning"
+        if 11 <= hour < 13:
+            return "noon"
+        if 13 <= hour < 18:
+            return "afternoon"
+        if 18 <= hour < 23:
+            return "evening"
+        return "night"
+
+    @staticmethod
+    def resolve_session_mode(domain: str = "", scene: str = "") -> str:
+        """[平台状态].session_mode 字段值（分册 10 §18.1）。
+
+        最小实现：按会话域推导——群聊域 = group_chat，其余（含工作台）= private_chat；
+        定时任务/派发等 task 形态由后续派发中间件按需传 "task" 覆盖。
+        """
+        d = (domain or "").lower()
+        if "group" in d:
+            return "group_chat"
+        return "private_chat"
+
+    @staticmethod
+    def _load_speaker_name(agent_id: str | None) -> str:
+        """说话人名字（走既有通道）：记忆画像 profile.name；读失败返回空串。"""
+        try:
+            engine = _owner_engine_for(agent_id)
+            profile = engine.parse_profile() or {}
+            return str(profile.get("name") or "").strip()
+        except Exception:
+            return ""
+
+    @staticmethod
+    def inject_fast_brain_protocol(
+        messages: list[dict],
+        agent_id: str | None = None,
+        *,
+        session_mode: str = "private_chat",
+        is_owner: bool = True,
+        speaker_name: str | None = None,
+    ) -> list[dict]:
+        """快脑激活时把最后一条 user 消息改写为四段式注入（分册 10 §18.1）。
+
+        段落顺序与标记为冻结常量：[当前说话人] + [时间节律] +（可选）[平台状态]
+        + 用户原文；JSON 字段名 name/is_owner/now/part_of_day/app/session_mode
+        不得改动（additive 纪律：允许新增字段，禁改/禁删既有字段）。
+        - 人设不经此注入（走 main_agent_config / agent 配置既有通道）；
+        - 说话人名字优先取调用方传入，缺省回退记忆画像（既有通道），仍无则空串；
+        - [平台状态] 为 LuomiNest 专属最小实现：app 固定 "luominest"（暂无前台
+          应用检测），session_mode 由调用方按会话域传入（resolve_session_mode）。
+        任何异常均原样返回（绝不中断流）。
+        """
+        try:
+            target_idx = None
+            for idx in range(len(messages) - 1, -1, -1):
+                if messages[idx].get("role") == "user":
+                    target_idx = idx
+                    break
+            if target_idx is None:
+                return messages
+            content = messages[target_idx].get("content")
+            if not isinstance(content, str) or not content:
+                return messages  # 多模态 content parts：W2 不改写，保持原样
+            if speaker_name is None:
+                speaker_name = ContextService._load_speaker_name(agent_id)
+            now = now_local()
+            protocol = (
+                "[当前说话人] "
+                f"{{\"name\": \"{speaker_name}\", \"is_owner\": {str(bool(is_owner)).lower()}}}\n"
+                "[时间节律] "
+                f"{{\"now\": \"{now.strftime('%Y-%m-%d %H:%M')}\", "
+                f"\"part_of_day\": \"{ContextService._part_of_day(now)}\"}}\n"
+                "[平台状态] "
+                f"{{\"app\": \"luominest\", \"session_mode\": \"{session_mode}\"}}\n\n"
+            )
+            messages[target_idx] = dict(messages[target_idx])
+            messages[target_idx]["content"] = protocol + content
+            return messages
+        except Exception as e:
+            logger.debug(f"[ContextService] fast brain protocol injection skipped: {e}")
+            return messages
+
+    @staticmethod
     def build_system_prompt(
         agent_id: str | None,
         user_context: str = "",
         include_avatar_emotion: bool | None = None,
+        provider: str | None = None,
+        model: str | None = None,
     ) -> str:
         agent_name = "LuomiNest AI"
         agent_description = "an intelligent companion powered by the LuminousCX platform"
@@ -218,6 +383,20 @@ class ContextService:
         if include_avatar_emotion is None:
             from app.core.config import settings
             include_avatar_emotion = settings.LLM_AVATAR_EMOTION_ENABLED
+
+        # 生态打通 W2（分册 08 §15 / 分册 10 §18）：本次会话模型命中快脑寻址
+        # （model_config.fast_brain）时——a) <avatar_emotion> 块切换为合同风格
+        # 指令（自闭合 8 词 + act 词表 + 频率纪律）；b) 追加派发自律条款；
+        # c) avatar_tools_enabled 且注册表非空时追加皮套工具说明；
+        # d) 用户消息四段式注入由 chat_service 调 inject_fast_brain_protocol 完成。
+        # include_avatar_emotion 显式 False 的调用方（平台文字渠道）维持现状不注入
+        # 表情块；fast_brain 未配置时以下全部不发生（优雅降级，行为与现状一致）。
+        fast_brain = ContextService.is_fast_brain_model(provider, model)
+        dispatch_block = ""
+        avatar_tools_block = ""
+        if fast_brain:
+            dispatch_block = ContextService._build_dispatch_discipline_block()
+            avatar_tools_block = ContextService._build_avatar_tools_block()
 
         if agent_id:
             # 主 Agent 走 main_agent_config，不查 agents_store
@@ -247,7 +426,11 @@ class ContextService:
 
         avatar_emotion_block = ""
         if include_avatar_emotion:
-            avatar_emotion_block = """
+            if fast_brain:
+                # 快脑：合同风格指令（自闭合 8 词 + act 词表 + 频率纪律）
+                avatar_emotion_block = ContextService._build_contract_avatar_block()
+            else:
+                avatar_emotion_block = """
 <avatar_emotion>
 You are embodied as a Live2D avatar. To drive the avatar's facial expression, emit an emotion tag BEFORE each sentence whose emotional tone differs from the previous one. The tag switches the avatar's expression in sync with TTS playback of the following text.
 
@@ -301,6 +484,8 @@ Your name is {agent_name}, {agent_description}.
 6. 内部思考与规则复述一律使用中文；回复语言跟随用户。
 </core_rules>
 {avatar_emotion_block}
+{dispatch_block}
+{avatar_tools_block}
 {base_prompt}
 {skills_index_block}
 {skills_body_block}""".strip()

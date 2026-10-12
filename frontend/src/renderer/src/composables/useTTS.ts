@@ -2,7 +2,7 @@ import { ref } from 'vue'
 import { useModelStore } from '../stores/model'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import { filterTtsText } from '../utils/ttsTextFilter'
-import { stripEmotionTags } from '../utils/emotionTagInterceptor'
+import { stripAssistantControlTags } from '../utils/emotionTagInterceptor'
 import { synthesizeTts } from '../utils/ttsApi'
 
 const logger = createLuomiNestRendererLogger('TTS')
@@ -21,10 +21,10 @@ function revokeCurrentAudioUrl() {
 }
 
 function cleanTextForTTS(text: string): string {
-  // 表情标签（<exp:xxx> 等）→ 删除（必须在最前面，防止标签被朗读）
+  // 控制标签（<exp:xxx> 及 W4 新增四类标签残留）→ 删除（必须在最前面，防止标签被朗读）
   // markdown 清洗复用 utils/ttsTextFilter 统一实现；围栏代码块 → 可朗读占位
   // 末尾的换行转停顿为聊天气泡朗读场景特有（filterTtsText 不做韵律映射）
-  return filterTtsText(stripEmotionTags(text).replace(/```[\s\S]*?```/g, '，代码块，'))
+  return filterTtsText(stripAssistantControlTags(text).replace(/```[\s\S]*?```/g, '，代码块，'))
     .replace(/\n{2,}/g, '。')
     .replace(/\n/g, '，')
     .replace(/\s+/g, ' ')

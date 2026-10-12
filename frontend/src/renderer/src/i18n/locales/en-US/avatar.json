@@ -58,6 +58,15 @@
       "hiddenCount": "{n} built-in models hidden",
       "restoreOne": "Show again",
       "restoreAll": "Restore all"
+    },
+    "controls": {
+      "rendererPending": "{label} renderer in development, stay tuned",
+      "noEmotions": "No expressions available for this model",
+      "noMotions": "No motions available for this model",
+      "soon": "Soon",
+      "chatPlaceholder": "Chat with avatar... (Enter to send)",
+      "expression": "Expression",
+      "motion": "Motion"
     }
   },
   "pet": {
@@ -68,7 +77,12 @@
       "close": "Close pet"
     },
     "chat": {
-      "sendMessageFailed": "Desktop pet chat failed: {message}"
+      "sendMessageFailed": "Desktop pet chat failed: {message}",
+      "placeholderIdle": "Say something to Luomi…",
+      "placeholderThinking": "Luomi is thinking…",
+      "send": "Send",
+      "stop": "Stop generating",
+      "close": "Close dialog"
     }
   },
   "theme": {

@@ -161,7 +161,7 @@ const emit = defineEmits<{
   gap: var(--space-3);
 }
 
-/* lang-card / lang-flag / lang-label / lang-check 见 steps-shared.css */
+/* lang-card / lang-flag / lang-label / lang-check 见 lang-card-shared.css */
 
 .step-actions .lumi-btn--block {
   flex: 1;
@@ -185,4 +185,5 @@ button:focus-visible {
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 </style>
+<style scoped src="../common/lang-card-shared.css"></style>
 <style scoped src="./steps-shared.css"></style>

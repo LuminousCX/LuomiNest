@@ -18,7 +18,7 @@ import {
   CheckCircle2
 } from 'lucide-vue-next'
 import type { LuomiNestTask, TaskPriority, TaskStatus } from './types'
-import { formatDateStr } from './types'
+import { formatDateStr, UNPLANNED_SLOT, timeSlotLabel } from './types'
 import LumiModal from '../common/LumiModal.vue'
 import LumiButton from '../common/LumiButton.vue'
 
@@ -107,7 +107,7 @@ const removeTag = (tag: string) => {
 const handleSave = () => {
   if (!draft.value.title.trim()) return
   if (!props.timeSlotOptions.includes(draft.value.timeSlot)) {
-    draft.value.timeSlot = '待安排'
+    draft.value.timeSlot = UNPLANNED_SLOT
   }
   emit('save', { ...draft.value })
   closeModal()
@@ -218,7 +218,7 @@ const modalIcon = computed(() => props.mode === 'create' ? Plus : Edit3)
                   {{ t('tasks.modal.timeSlotLabel') }}
                 </label>
                 <select v-model="draft.timeSlot" class="luomi-form-select">
-                  <option v-for="slot in timeSlotOptions" :key="slot" :value="slot">{{ slot }}</option>
+                  <option v-for="slot in timeSlotOptions" :key="slot" :value="slot">{{ timeSlotLabel(slot) }}</option>
                 </select>
               </div>
             </div>

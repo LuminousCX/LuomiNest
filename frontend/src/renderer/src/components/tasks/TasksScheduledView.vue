@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Timer,
@@ -16,9 +16,12 @@ import {
 } from 'lucide-vue-next'
 import type { ScheduledTaskInfo } from '../../stores/taskStream'
 import type { ScheduledTask } from '../../types/workflow'
+import type { TimelineTaskEntry, TimelineUnplacedTask } from './types'
 import { formatShortDateTime } from '../../utils/format'
+import { parseCronDayTimes, cronNextRun } from '../../utils/cron'
 import LumiModal from '../common/LumiModal.vue'
 import LumiButton from '../common/LumiButton.vue'
+import TasksDayTimeline from './TasksDayTimeline.vue'
 
 /** 数据库循环任务创建载荷 */
 interface CreateDbTaskPayload {
@@ -190,10 +193,158 @@ const SOURCE_LABELS = computed<Record<string, string>>(() => ({
   workflow: t('tasks.scheduled.sourceWorkflow'),
   normal_chat: t('tasks.scheduled.sourceChat')
 }))
+
+// ===== 24 小时时间轴 =====
+/** 当前时刻（30s 刷新，驱动时间轴时刻线与剩余时间文案） */
+const nowRef = ref(new Date())
+let nowTimer: ReturnType<typeof setInterval> | undefined
+
+onMounted(() => {
+  nowTimer = setInterval(() => {
+    nowRef.value = new Date()
+  }, 30_000)
+})
+
+onUnmounted(() => {
+  if (nowTimer) clearInterval(nowTimer)
+})
+
+/** 未来相对时间文案，如"3 小时后"；无效或已过期返回空串 */
+const formatUntil = (iso: string): string => {
+  const diff = new Date(iso).getTime() - nowRef.value.getTime()
+  if (!Number.isFinite(diff) || diff <= 0) return ''
+  const minutes = Math.floor(diff / 60_000)
+  if (minutes < 1) return t('tasks.scheduled.inMinutes', { n: 1 })
+  if (minutes < 60) return t('tasks.scheduled.inMinutes', { n: minutes })
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return t('tasks.scheduled.inHours', { n: hours })
+  return t('tasks.scheduled.inDays', { n: Math.floor(hours / 24) })
+}
+
+const isAwaiting = (task: ScheduledTaskInfo): boolean =>
+  task.status === 'pending' || task.status === 'running'
+
+/** 数据库 cron 任务的下次执行时间（后端不返回，前端按 cron 解析） */
+const dbNextRunMap = computed<Map<string, Date>>(() => {
+  const map = new Map<string, Date>()
+  for (const task of props.dbScheduledTasks) {
+    if (!task.is_active || task.schedule_type !== 'cron') continue
+    const next = cronNextRun(task.schedule_cron, nowRef.value)
+    if (next) map.set(task.task_id, next)
+  }
+  return map
+})
+
+const dbNextRunOf = (task: ScheduledTask): Date | null =>
+  dbNextRunMap.value.get(task.task_id) ?? null
+
+const dbNextRunText = (task: ScheduledTask): string => {
+  const next = dbNextRunOf(task)
+  if (!next) return ''
+  const time = formatShortDateTime(next.toISOString())
+  const until = formatUntil(next.toISOString())
+  return until
+    ? t('tasks.scheduled.next', { time }) + ` · ${until}`
+    : t('tasks.scheduled.next', { time })
+}
+
+const runtimeUntilText = (task: ScheduledTaskInfo): string =>
+  task.next_run_time ? formatUntil(task.next_run_time) : ''
+
+/** 时间轴打点：数据库 cron 任务（解析全部触发小时）+ 运行时 cron 任务（按下次执行时刻） */
+const timelineEntries = computed<TimelineTaskEntry[]>(() => {
+  const out: TimelineTaskEntry[] = []
+  for (const task of props.dbScheduledTasks) {
+    if (!task.is_active || task.schedule_type !== 'cron') continue
+    const parsed = parseCronDayTimes(task.schedule_cron)
+    if (!parsed || parsed.everyHour) continue
+    const summary = cronToChinese(task.schedule_cron, task.schedule_type)
+    for (const hour of parsed.hours) {
+      out.push({
+        id: `${task.task_id}#${hour}`,
+        name: task.name,
+        hour,
+        minute: parsed.minute,
+        summary
+      })
+    }
+  }
+  for (const task of props.scheduledTasks) {
+    if (task.task_type !== 'cron' || !isAwaiting(task) || !task.next_run_time) continue
+    const at = new Date(task.next_run_time)
+    if (Number.isNaN(at.getTime())) continue
+    out.push({
+      id: `rt-${task.id}`,
+      name: task.name,
+      hour: at.getHours(),
+      minute: at.getMinutes(),
+      summary: t('tasks.scheduled.next', { time: formatScheduledTime(task.next_run_time) })
+    })
+  }
+  return out
+})
+
+/** hour 为 `*`（每小时触发）的数据库 cron 任务数 */
+const hourlyCount = computed(() =>
+  props.dbScheduledTasks.filter(task => {
+    if (!task.is_active || task.schedule_type !== 'cron') return false
+    const parsed = parseCronDayTimes(task.schedule_cron)
+    return !!parsed && parsed.everyHour
+  }).length
+)
+
+/** 无法定位到固定小时的任务（interval / once / 无下次执行时刻） */
+const timelineUnplaced = computed<TimelineUnplacedTask[]>(() => {
+  const out: TimelineUnplacedTask[] = []
+  for (const task of props.dbScheduledTasks) {
+    if (task.schedule_type === 'cron') continue
+    const note = task.schedule_type === 'interval'
+      ? t('tasks.cron.interval')
+      : t('tasks.cron.once')
+    out.push({
+      id: `db-${task.task_id}`,
+      name: task.name,
+      note: task.is_active ? note : `${note} · ${t('tasks.scheduled.inactive')}`,
+      dim: !task.is_active
+    })
+  }
+  for (const task of props.scheduledTasks) {
+    if (!isAwaiting(task)) continue
+    if (task.task_type === 'cron') {
+      if (!task.next_run_time) {
+        out.push({ id: `rt-${task.id}`, name: task.name, note: 'cron' })
+      }
+      continue
+    }
+    if (task.task_type === 'interval') {
+      out.push({ id: `rt-${task.id}`, name: task.name, note: t('tasks.cron.interval') })
+      continue
+    }
+    out.push({
+      id: `rt-${task.id}`,
+      name: task.name,
+      note: task.next_run_time
+        ? t('tasks.scheduled.next', { time: formatScheduledTime(task.next_run_time) })
+        : t('tasks.cron.once')
+    })
+  }
+  return out
+})
+
+const showTimeline = computed(() => props.dbScheduledTasks.length > 0 || props.scheduledTasks.length > 0)
 </script>
 
 <template>
   <div class="scheduled-section animate-slide-up" style="animation-delay: 70ms">
+    <!-- 24 小时全天时间轴 -->
+    <TasksDayTimeline
+      v-if="showTimeline"
+      :entries="timelineEntries"
+      :unplaced="timelineUnplaced"
+      :hourly-count="hourlyCount"
+      :now="nowRef"
+    />
+
     <!-- 循环任务（数据库持久化） -->
     <div class="db-section">
       <div class="scheduled-header">
@@ -251,6 +402,7 @@ const SOURCE_LABELS = computed<Record<string, string>>(() => ({
           </div>
           <div class="scheduled-card-meta footer-meta">
             <span>{{ t('tasks.scheduled.createdAt', { time: formatScheduledTime(task.created_at) }) }}</span>
+            <span v-if="dbNextRunText(task)" class="scheduled-next">{{ dbNextRunText(task) }}</span>
             <span v-if="task.last_run_at">{{ t('tasks.scheduled.lastRun', { time: formatScheduledTime(task.last_run_at) }) }}</span>
           </div>
         </div>
@@ -411,6 +563,7 @@ const SOURCE_LABELS = computed<Record<string, string>>(() => ({
                 <span class="scheduled-type">{{ task.task_type }}</span>
                 <span v-if="task.next_run_time" class="scheduled-next">
                   {{ t('tasks.scheduled.next', { time: formatScheduledTime(task.next_run_time) }) }}
+                  <template v-if="runtimeUntilText(task)"> · {{ runtimeUntilText(task) }}</template>
                 </span>
                 <span v-if="task.last_run_time" class="scheduled-last">
                   {{ t('tasks.scheduled.last', { time: formatScheduledTime(task.last_run_time) }) }}

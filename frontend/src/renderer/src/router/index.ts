@@ -193,6 +193,27 @@ const router = createRouter({
   routes
 })
 
+/**
+ * W4 语义导航白名单 —— 后端 <ui:navigate target="..."/> 只允许跳到这些一级路由。
+ *
+ * 白名单纪律（新增项必须同时满足）：
+ * 1. path 与上方 routes 表严格一致（大小写/斜杠），不存在隐式 redirect 依赖；
+ * 2. 只放"查看类/设置类"页面 —— 对陪伴场景安全、无破坏性副作用；
+ * 3. 禁止登录(login)/向导(welcome 除外)/桌宠(desktop-pet*)/市场详情等
+ *    带状态副作用的页面，防止语义导航把用户带离可恢复上下文或打断流程。
+ * 白名单外的目标一律忽略 + console.debug，不报错。
+ */
+export const SEMANTIC_NAVIGATION_WHITELIST: ReadonlySet<string> = new Set([
+  '/welcome',            // 首页
+  '/workbench',          // 工作台（对话主页）
+  '/workspace',          // 对话空间
+  '/tasks',              // 任务列表
+  '/memory',             // 记忆
+  '/panel/console',      // 控制台
+  '/panel/data-stats',   // 数据统计
+  '/settings',           // 设置主页（详情子路由不放行，避免深层依赖参数）
+])
+
 // 公开路由 allowlist — 无需登录态即可访问
 // DesktopPet 为独立展示窗口：仅渲染 Live2D + IPC send 通信，不依赖 auth token，
 // 且其 webContents !== mainWindow.webContents，无法通过 assertTrustedSender 校验，

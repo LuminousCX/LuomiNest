@@ -1,0 +1,43 @@
+/*
+ * preset-avatar-shared.css - 预设头像选择网格共享样式
+ *
+ * 消费方（同一份 PRESET_AGENT_AVATARS 数据的两处 UI）：
+ * - components/settings-detail/SettingsMainAgentSection.vue
+ * - components/workspace/WorkspaceDialogs.vue
+ * 以 <style scoped src="./preset-avatar-shared.css"> 导入，样式按组件 scoped 隔离，
+ * 与 stage-shared.css 同一范式。
+ */
+
+.preset-avatar-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.preset-avatar-item {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: all var(--transition-normal);
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.preset-avatar-item:hover {
+  transform: scale(1.08);
+}
+
+.preset-avatar-item.selected {
+  border-color: var(--lumi-brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lumi-brand) 20%, transparent);
+}
+
+.preset-avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}

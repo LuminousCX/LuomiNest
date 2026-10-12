@@ -5,6 +5,7 @@
  * 会话搜索（走后端）与本地过滤搜索共用，保证全应用搜索框样式一致。
  */
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Search, Loader2 } from 'lucide-vue-next'
 import LumiInput from './LumiInput.vue'
 
@@ -18,11 +19,12 @@ interface Props {
 
 const props = withDefaults(defineProps<Props>(), {
   modelValue: '',
-  placeholder: '搜索...',
   size: 'sm',
   loading: false,
   disabled: false,
 })
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string | number | null]
@@ -48,7 +50,7 @@ defineExpose({
     ref="inputRef"
     v-model="model"
     type="text"
-    :placeholder="placeholder"
+    :placeholder="placeholder ?? t('search')"
     :size="size"
     :disabled="disabled"
     clearable

@@ -112,11 +112,11 @@ function formatExpiresAt(iso: string): string {
         :value="newFactScope || 'global'"
         @change="emit('update:newFactScope', ($event.target as HTMLSelectElement).value)"
         class="add-fact-select add-fact-scope-select"
-        title="隐私隔离"
+        :title="t('memory.facts.scopeTitle')"
       >
-        <option value="global">🌐 全局公开</option>
-        <option value="private">🔒 私密心事</option>
-        <option value="group">👥 群聊专属</option>
+        <option value="global">{{ t('memory.facts.scopeOptionGlobal') }}</option>
+        <option value="private">{{ t('memory.facts.scopeOptionPrivate') }}</option>
+        <option value="group">{{ t('memory.facts.scopeOptionGroup') }}</option>
       </select>
       <button class="h-btn primary" @click="emit('confirmAddFact')" :disabled="!newFactContent.trim() || saving">
         <Loader2 v-if="saving" :size="14" class="spin-animation" />
@@ -167,11 +167,11 @@ function formatExpiresAt(iso: string): string {
                   :value="editFactScope || fact.scope || 'global'"
                   @change="emit('update:editFactScope', ($event.target as HTMLSelectElement).value)"
                   class="add-fact-select add-fact-scope-select"
-                  title="隐私隔离"
+                  :title="t('memory.facts.scopeTitle')"
                 >
-                  <option value="global">🌐 全局公开</option>
-                  <option value="private">🔒 私密心事</option>
-                  <option value="group">👥 群聊专属</option>
+                  <option value="global">{{ t('memory.facts.scopeOptionGlobal') }}</option>
+                  <option value="private">{{ t('memory.facts.scopeOptionPrivate') }}</option>
+                  <option value="group">{{ t('memory.facts.scopeOptionGroup') }}</option>
                 </select>
                 <button class="h-btn primary" @click="emit('saveEditFact')" :disabled="saving">
                   <Save :size="13" />
@@ -183,9 +183,9 @@ function formatExpiresAt(iso: string): string {
               <div class="fact-main">
                 <span class="fact-text" :class="{ 'fact-deprecated': !fact.is_latest }">{{ fact.content }}</span>
                 <span v-if="fact.pinned" class="fact-badge pinned">{{ t('memory.facts.pinned') }}</span>
-                <span v-if="fact.scope === 'private'" class="fact-badge scope-private" title="私聊专属隐私：群聊中绝不泄露">🔒 私密</span>
-                <span v-else-if="fact.scope === 'group'" class="fact-badge scope-group" title="群聊公开互动">👥 群聊</span>
-                <span v-else class="fact-badge scope-global" title="全局公开画像">🌐 全局</span>
+                <span v-if="fact.scope === 'private'" class="fact-badge scope-private" :title="t('memory.facts.scopePrivateTip')">{{ t('memory.facts.scopePrivate') }}</span>
+                <span v-else-if="fact.scope === 'group'" class="fact-badge scope-group" :title="t('memory.facts.scopeGroupTip')">{{ t('memory.facts.scopeGroup') }}</span>
+                <span v-else class="fact-badge scope-global" :title="t('memory.facts.scopeGlobalTip')">{{ t('memory.facts.scopeGlobal') }}</span>
                 <span v-if="!fact.is_latest" class="fact-badge deprecated">{{ t('memory.facts.deprecated') }}</span>
                 <span v-if="fact.expires_at" class="fact-badge expires">{{ t('memory.facts.expires', { date: formatExpiresAt(fact.expires_at) }) }}</span>
                 <span v-if="fact.source_error" class="fact-error">{{ t('memory.facts.avoid', { msg: fact.source_error }) }}</span>

@@ -316,7 +316,7 @@ watch(() => props.visible, (visible) => {
                 <span class="required-mark">*</span>
               </label>
               <input v-model="newProvider.baseUrl" type="text" class="form-input" :class="{ 'input-error': !newProvider.baseUrl.trim() && addProviderError }" placeholder="http://localhost:11434/v1" />
-              <span class="form-hint">Ollama: http://localhost:11434/v1 | 其他: 含 /v1 后缀</span>
+              <span class="form-hint">{{ t('aiModel.addDialog.baseUrlHint') }}</span>
             </div>
             <div class="form-group">
               <label class="form-label">{{ t('aiModel.addDialog.apiKeyLabel') }}</label>
@@ -573,37 +573,6 @@ watch(() => props.visible, (visible) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.toggle-switch {
-  width: var(--space-9);
-  height: var(--space-6);
-  border-radius: var(--radius-md);
-  background: var(--workspace-border);
-  position: relative;
-  cursor: pointer;
-  transition: background var(--transition-normal);
-  flex-shrink: 0;
-}
-
-.toggle-switch.active {
-  background: var(--lumi-primary);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: var(--space-1);
-  left: var(--space-1);
-  width: var(--space-4);
-  height: var(--space-4);
-  border-radius: var(--radius-full);
-  background: var(--text-inverse);
-  transition: transform var(--transition-normal);
-  box-shadow: var(--shadow-xs);
-}
-
-.toggle-switch.active .toggle-thumb {
-  transform: translateX(var(--space-5));
 }
 
 .test-provider-row {

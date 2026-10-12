@@ -1,0 +1,9 @@
+{
+  "desktopPet": {
+    "thinkingPlaceholder": "Luomi が考えています…",
+    "inputPlaceholder": "Luomi に何か話しかけて…",
+    "send": "送信",
+    "stop": "生成を停止",
+    "close": "ダイアログを閉じる"
+  }
+}

@@ -1,20 +1,24 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import SettingsGenericSection from './SettingsGenericSection.vue'
 import { useToast } from '../../composables/useToast'
 import type { SectionItem } from './types'
 
+const { t } = useI18n()
 const toast = useToast()
 
-const items: SectionItem[] = [
-  { key: 'installed', label: '已安装工具', desc: '查看和管理已安装的 MCP 工具', type: 'list', actionText: '查看' },
-  { key: 'add', label: '添加工具', desc: '从市场或自定义安装工具', type: 'button', actionText: '添加' },
-  { key: 'permissions', label: '工具权限', desc: '管理工具的访问权限', type: 'action', actionText: '配置' },
-  { key: 'logs', label: '运行日志', desc: '查看工具运行日志', type: 'button', actionText: '查看' }
-]
+// computed：保证切换语言时条目文案随之更新
+const items = computed<SectionItem[]>(() => [
+  { key: 'installed', label: t('settingsEx.mcp.installed.label'), desc: t('settingsEx.mcp.installed.desc'), type: 'list', actionText: t('settingsEx.mcp.installed.action') },
+  { key: 'add', label: t('settingsEx.mcp.add.label'), desc: t('settingsEx.mcp.add.desc'), type: 'button', actionText: t('settingsEx.mcp.add.action') },
+  { key: 'permissions', label: t('settingsEx.mcp.permissions.label'), desc: t('settingsEx.mcp.permissions.desc'), type: 'action', actionText: t('settingsEx.mcp.permissions.action') },
+  { key: 'logs', label: t('settingsEx.mcp.logs.label'), desc: t('settingsEx.mcp.logs.desc'), type: 'button', actionText: t('settingsEx.mcp.logs.action') }
+])
 
 // MCP 工具管理功能开发中：动作行统一提示入口未开放
 function handleSelect() {
-  toast.info('MCP 工具管理功能正在开发中，敬请期待')
+  toast.info(t('settingsEx.mcp.devToast'))
 }
 </script>
 

@@ -124,7 +124,17 @@
       "avoid": "Avoid: {msg}",
       "pinned": "Pinned",
       "pin": "Pin (always injected)",
-      "unpin": "Unpin"
+      "unpin": "Unpin",
+      "scopeGlobal": "🌐 Global",
+      "scopePrivate": "🔒 Private",
+      "scopeGroup": "👥 Group",
+      "scopeOptionGlobal": "🌐 Global (public)",
+      "scopeOptionPrivate": "🔒 Private thoughts",
+      "scopeOptionGroup": "👥 Group only",
+      "scopeTitle": "Privacy isolation",
+      "scopePrivateTip": "Private 1-on-1 only: never revealed in group chats",
+      "scopeGroupTip": "Public within group chats",
+      "scopeGlobalTip": "Global public profile"
     },
     "nav": {
       "summarized": "Summarized",
@@ -171,7 +181,8 @@
     },
     "briefing": {
       "title": "Morning greeting"
-    }
+    },
+    "quickSwitch": "Quick switch:"
   },
   "market": {
     "title": "Extensions",
@@ -251,7 +262,12 @@
       "uninstalling": "Uninstalling...",
       "uninstall": "Uninstall",
       "processing": "Processing...",
-      "requesting": "Requesting..."
+      "requesting": "Requesting...",
+      "current": "Current",
+      "noVersions": "No version info",
+      "noChangelog": "No changelog",
+      "screenshots": "Screenshots",
+      "screenshotIndex": "Screenshot {n}"
     },
     "error": {
       "noDownloadUrl": "This item has no available download URL",
@@ -355,7 +371,91 @@
       "updating": "Updating...",
       "updated": "Update complete"
     },
-    "filterLabel": "Filters"
+    "filterLabel": "Filters",
+    "searchPlaceholder": "Search plugins or skills...",
+    "suggestionHistory": "History",
+    "suggestionCategory": "Category",
+    "suggestionTip": "Suggestion",
+    "clearHistory": "Clear search history",
+    "noInstalled": "Nothing installed yet",
+    "viewAll": "View all",
+    "tag": {
+      "official": "Official",
+      "community": "Community",
+      "free": "Free",
+      "premium": "Premium",
+      "popular": "Popular",
+      "new": "New"
+    },
+    "cat": {
+      "all": "All",
+      "ai-model": "AI Models",
+      "llm": "LLM",
+      "embedding": "Embedding",
+      "vision": "Vision",
+      "tts": "TTS",
+      "stt": "STT",
+      "tool": "Tools",
+      "search": "Search",
+      "code": "Code",
+      "file": "Files",
+      "web": "Web",
+      "database": "Database",
+      "integration": "Integrations",
+      "messaging": "Messaging",
+      "iot": "IoT Devices",
+      "api": "API",
+      "cloud": "Cloud",
+      "avatar": "Avatars",
+      "live2d": "Live2D",
+      "vrm": "VRM",
+      "voice": "Voice Packs",
+      "productivity": "Productivity",
+      "automation": "Automation",
+      "workflow": "Workflow",
+      "schedule": "Schedules",
+      "coding": "Coding",
+      "frontend": "Frontend",
+      "backend": "Backend",
+      "fullstack": "Fullstack",
+      "refactor": "Refactoring",
+      "document": "Documents",
+      "word": "Word",
+      "pdf": "PDF",
+      "slides": "Slides",
+      "coauthor": "Co-writing",
+      "design": "Design",
+      "visual": "Visual Design",
+      "brand": "Brand Guidelines",
+      "art": "Art",
+      "knowledge": "Knowledge",
+      "comms": "Internal Comms",
+      "content": "Content Creation",
+      "research": "Research",
+      "media": "Media",
+      "image-gen": "Image Generation",
+      "animation": "Animation",
+      "gif": "GIF",
+      "assistant": "Assistants",
+      "customer-service": "Customer Service",
+      "sales": "Sales",
+      "personal": "Personal",
+      "creative": "Creative",
+      "writing": "Writing",
+      "music": "Music",
+      "analysis": "Analysis",
+      "data-analysis": "Data Analysis",
+      "market-research": "Market Research",
+      "finance": "Finance",
+      "development": "Development",
+      "code-gen": "Code Generation",
+      "testing": "Testing",
+      "devops": "DevOps",
+      "education": "Education",
+      "teaching": "Teaching",
+      "tutoring": "Tutoring",
+      "training": "Training"
+    }
   },
   "tasks": {
     "title": "Plan View",
@@ -457,7 +557,16 @@
       "errAction": "Please enter an action",
       "errTimeFormat": "Time format should be HH:MM",
       "errTimeRange": "Invalid time range",
-      "errDayRange": "Day should be between 1 and 31"
+      "errDayRange": "Day should be between 1 and 31",
+      "timelineTitle": "24-Hour Timeline",
+      "timelineNow": "Now",
+      "timelineHourlyTag": "Hourly × {n}",
+      "timelineEmptyHint": "No tasks trigger at a fixed hour yet",
+      "timelineMore": "+{n} more",
+      "unplacedTitle": "Non-hourly tasks",
+      "inMinutes": "in {n} min",
+      "inHours": "in {n} h",
+      "inDays": "in {n} d"
     },
     "wd0": "Sun",
     "wd1": "Mon",
@@ -472,7 +581,52 @@
       "monthly": "Monthly on day {d} at {time}",
       "weekly": "Every {day} at {time}",
       "daily": "Every day at {time}"
-    }
+    },
+    "card": {
+      "edit": "Edit",
+      "delete": "Delete",
+      "addTask": "Add new task",
+      "completion": "Completion {done}/{total}"
+    },
+    "week": {
+      "itemCount": "{n} items"
+    },
+    "wds0": "Sun",
+    "wds1": "Mon",
+    "wds2": "Tue",
+    "wds3": "Wed",
+    "wds4": "Thu",
+    "wds5": "Fri",
+    "wds6": "Sat",
+    "timeSlot": {
+      "allDay": "All day",
+      "unplanned": "Unscheduled"
+    },
+    "demo": {
+      "t1Title": "Complete Agent chat module design",
+      "t1Desc": "Implement the immersive companion chat UI per the SRS doc",
+      "t2Title": "Browser engine integration",
+      "t2Desc": "Embed the ima-style browser view into the desktop client",
+      "t3Title": "MCP tool gateway development",
+      "t3Desc": "Implement the standardized tool access protocol",
+      "t4Title": "Three-layer memory architecture",
+      "t4Desc": "Working memory + episodic memory + semantic memory",
+      "t5Title": "Live2D avatar rendering",
+      "t5Desc": "Cubism 5 engine integration with lip sync",
+      "tagCore": "Core",
+      "tagEmbedded": "Embedded",
+      "tagBackend": "Backend",
+      "tagProtocol": "Protocol",
+      "tagArch": "Architecture",
+      "tagRender": "Rendering",
+      "tagAnim": "Animation",
+      "sub1": "Requirements",
+      "sub2": "Prototyping",
+      "sub3": "UI design",
+      "sub4": "Frontend dev",
+      "sub5": "Integration testing"
+    },
+    "more": "+{n} more"
   },
   "workflow": {
     "title": "Workflow Canvas",
@@ -487,6 +641,11 @@
     "emptyDesc": "After enabling professional mode in the main Agent workbench, execution plans created by AI will automatically appear here as flow charts.",
     "promptCron": "Enter a schedule expression (cron format, e.g. \"0 9 * * *\" means every day at 9 AM)",
     "scheduleCreated": "Scheduled task created",
+    "created": {
+      "title": "Workflow Created",
+      "taskCount": "{n} subtasks",
+      "viewFlow": "View Flowchart"
+    },
     "deleteConfirm": "Are you sure you want to delete template \"{name}\"?",
     "templates": {
       "loading": "Loading...",
@@ -829,7 +988,54 @@
       "updateFailed": "Update failed: {msg}",
       "unknownError": "Unknown error"
     },
-    "globalModelHint": "The model follows the global setting (Settings → AI Model). All platforms share the global fast-response model; below you can only customize this platform's persona prompt."
+    "globalModelHint": "The model follows the global setting (Settings → AI Model). All platforms share the global fast-response model; below you can only customize this platform's persona prompt.",
+    "roleSystem": "System",
+    "roleUser": "User",
+    "loadingMessages": "Loading messages...",
+    "imageIndex": "Image {n}",
+    "emptyMessage": "Empty message",
+    "wechat": {
+      "title": "WeChat QR Login",
+      "headerTitle": "Sign in to personal WeChat",
+      "headerDesc": "Scan the QR code below with WeChat on your phone and confirm the login there",
+      "init": "Getting QR code...",
+      "requesting": "Requesting WeChat login QR code...",
+      "scanHint": "Please scan the QR code with WeChat on your phone",
+      "fetchFail": "Failed to get QR code, please check the gateway config",
+      "gatewayError": "WeChat gateway service connection failed, please retry",
+      "generating": "Generating your login QR code...",
+      "expired": "QR code expired",
+      "scanned": "Scanned",
+      "confirmOnPhone": "Please confirm on your phone in WeChat",
+      "loggedIn": "Logged in!",
+      "retry": "Retry",
+      "refresh": "Refresh QR code",
+      "manualRefresh": "Refresh manually",
+      "qrAlt": "WeChat login QR code"
+    },
+    "field": {
+      "mcGamePort": "LAN/Game port (game_port)",
+      "mcGameHost": "Server address (game_host)",
+      "mcBotName": "Companion player name (bot_name)",
+      "mcAutoSpawnBot": "Auto-deploy companion into the server (auto_spawn_bot)",
+      "mcWsPort": "Mod communication port (ws_port)",
+      "mcRconPassword": "RCON password (rcon_password)",
+      "qqWsPort": "Reverse WS listen port (ws_port)",
+      "qqAccessToken": "Access token (access_token)",
+      "wechatApiUrl": "GeweChat API URL (api_url)",
+      "wechatToken": "API Token (token)",
+      "discordBotToken": "Discord Bot Token (bot_token)",
+      "mcGamePortTip": "The 5-digit port shown for \"Open to LAN\" in singleplayer (e.g. 56587), or a multiplayer server port",
+      "mcGameHostTip": "Minecraft server address; use 127.0.0.1 for LAN singleplayer",
+      "mcBotNameTip": "Nickname of the companion player in-game. Leave empty to inherit the Main Agent name from settings",
+      "mcWsPortTip": "Local WebSocket port for the Mineflayer companion to talk to the system, default 8081",
+      "qqWsPortTip": "Port of the NapCatQQ / OneBot v11 reverse WebSocket connection, default 8080",
+      "qqAccessTokenTip": "Access token; must match the access_token in the NapCat config",
+      "wechatApiUrlTip": "REST API URL of the local or containerized GeweChat (iPad protocol gateway) service",
+      "wechatTokenTip": "Token for calling the GeweChat service",
+      "discordBotTokenTip": "Bot Token from the Discord Developer Portal. Make sure Message Content Intent is enabled",
+      "phBotName": "Leave empty to inherit the Main Agent name"
+    }
   },
   "browser": {
     "captchaBanner": "CAPTCHA detected. Please complete the verification below to continue browsing",
@@ -914,7 +1120,10 @@
       "newTab": "New tab",
       "loading": "Loading...",
       "loadFail": "Failed to load"
-    }
+    },
+    "downloadBlocked": "The built-in browser doesn't support downloads; canceled",
+    "riskBlockedBanner": "Blocked by the site's anti-bot protection. Please try again later",
+    "tabSleeping": "This tab is sleeping to save resources; click to wake it"
   },
   "smartHome": {
     "title": "Smart Home",

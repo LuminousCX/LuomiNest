@@ -148,6 +148,16 @@
       "loading": "読み込み中...",
       "sendFailed": "メッセージの送信に失敗しました",
       "panelNote": "ユーザー ID で友人をクラウドグループに招待できます"
+    },
+    "presetAvatar": {
+      "pa1": "コーディングアシスタント",
+      "pa2": "情報リサーチャー",
+      "pa3": "ひらめきアシスタント",
+      "pa4": "タスクプランナー",
+      "pa5": "心理エキスパート",
+      "pa6": "情報コレクター",
+      "pa7": "学習ヘルパー",
+      "pa8": "日常アシスタント"
     }
   },
   "workbench": {
@@ -232,7 +242,8 @@
       "normalLabel": "通常",
       "stop": "生成を停止",
       "send": "送信"
-    }
+    },
+    "noSummary": "概要はありません"
   },
   "agentCreate": {
     "stepTitle1": "基本設定",
@@ -295,9 +306,68 @@
       "skillCount": "{n} 件",
       "enabledSkills": "有効なスキル",
       "noSkills": "有効なスキルなし"
+    },
+    "skillItems": {
+      "skill-search": {
+        "name": "スキルファインダー",
+        "desc": "キーワードで内蔵カタログを検索し、必要な能力モジュールを素早く特定"
+      },
+      "skill-builder": {
+        "name": "スキルクリエイター",
+        "desc": "構造化された SKILL.md 作成をサポートし、エージェントスキルを作成・修正・評価・最適化"
+      },
+      "self-learning": {
+        "name": "エージェント自己学習",
+        "desc": "学習成果・エラー・振り返りを日誌に記録し、推論と意思決定を継続的に向上"
+      },
+      "mcp-tools": {
+        "name": "MCP ツール (CLI)",
+        "desc": "accio-mcp-cli コマンドラインで MCP ツール（Notion、Square、Apify など）を検索・呼び出し"
+      },
+      "powerpoint": {
+        "name": "PowerPoint",
+        "desc": "ベンダーレビュー・データ集計・戦略提案用の PowerPoint 資料を生成"
+      },
+      "pdf": {
+        "name": "PDF",
+        "desc": "PDF 文書の生成・解析、契約書から重要条項やコンプライアンス分析を抽出"
+      },
+      "word": {
+        "name": "Word 文書",
+        "desc": "RFQ・SOP・契約テンプレートなどを含む Word 文書の作成と編集"
+      },
+      "xlsx": {
+        "name": "Excel 表",
+        "desc": "数式やグラフを含むスプレッドシートの作成・編集・分析"
+      }
     }
   },
   "chat": {
+    "effort": {
+      "title": "応答レベル",
+      "fast": "高速応答",
+      "balanced": "バランス",
+      "max": "ディープ推論",
+      "hint": "レベルが高いほど、回答前により長く思考します"
+    },
+    "promptBar": {
+      "menuAttachments": "添付とソース",
+      "addAttachment": "添付とソースを追加",
+      "chooseModel": "モデルを選択",
+      "chooseEffort": "応答レベルを選択",
+      "send": "送信",
+      "stop": "停止",
+      "inputLabel": "メッセージ入力",
+      "removeFile": "{name} を削除",
+      "comingSoon": "「{name}」は近日対応予定",
+      "modelSettings": "設定でモデルを管理"
+    },
+    "attach": {
+      "upload": "画像とファイルをアップロード",
+      "uploadDesc": "端末から画像や文書を選択",
+      "webSearch": "ウェブ検索",
+      "webSearchDesc": "リアルタイム検索結果"
+    },
     "newConversation": "新しい会話",
     "waitingModel": "モデルを待機中...",
     "thinking": "思考中...",
@@ -374,6 +444,14 @@
       "deny": "拒否",
       "fullNote": "「完全アクセス」にするとコマンドごとの確認は不要になります（設定でいつでも戻せます）。rm -rf や鍵ファイルの読み取りなど危険なコマンドは、どのモードでもハードガードによってブロックされます。",
       "resolveFailed": "確認の送信に失敗しました。再試行してください"
+    },
+    "taskDispatchRunning": "タスク {task} を派発しました（実行中）",
+    "taskDispatchDone": "タスク {task} が完了しました",
+    "taskDispatchFailed": "タスク {task} に失敗しました",
+    "workflowCard": {
+      "title": "ワークフローを作成しました",
+      "subtasks": "{n} 個のサブタスク",
+      "viewFlow": "フローチャートを見る"
     }
   }
 }

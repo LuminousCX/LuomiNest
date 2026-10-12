@@ -757,7 +757,7 @@ window.addEventListener('click', closeMenu)
 
     <!-- Quick pills bar for fans and groups -->
     <div v-if="memoryStore.currentTrack === 'users' && memoryStore.memoryUsers.length > 0" class="quick-pill-bar">
-      <span class="pill-bar-label">快捷切换：</span>
+      <span class="pill-bar-label">{{ t('memory.quickSwitch') }}</span>
       <button
         v-for="u in memoryStore.memoryUsers.slice(0, 8)"
         :key="u.user_key"
@@ -772,7 +772,7 @@ window.addEventListener('click', closeMenu)
     </div>
 
     <div v-if="memoryStore.currentTrack === 'groups' && memoryStore.memoryGroups.length > 0" class="quick-pill-bar">
-      <span class="pill-bar-label">快捷切换：</span>
+      <span class="pill-bar-label">{{ t('memory.quickSwitch') }}</span>
       <button
         v-for="g in memoryStore.memoryGroups.slice(0, 8)"
         :key="g.group_key"

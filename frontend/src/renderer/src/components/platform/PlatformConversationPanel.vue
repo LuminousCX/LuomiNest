@@ -7,8 +7,10 @@ import { usePlatformStore } from '../../stores/platform'
 import LumiEmptyState from '../../components/common/LumiEmptyState.vue'
 import { formatShortDateTime } from '../../utils/format'
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useChatScroll } from '../../composables/useChatScroll'
 
+const { t } = useI18n()
 const store = usePlatformStore()
 
 const conversationMessagesRef = ref<HTMLElement | null>(null)
@@ -20,7 +22,7 @@ const getRoleIcon = (role: string) => {
 }
 
 const getRoleLabel = (role: string) => {
-  return role === 'assistant' ? 'LuomiNest' : role === 'system' ? '系统' : '用户'
+  return role === 'assistant' ? 'LuomiNest' : role === 'system' ? t('platform.roleSystem') : t('platform.roleUser')
 }
 
 const isNearBottom = ref(true)
@@ -37,7 +39,7 @@ const { handleScroll } = useChatScroll({
   <div class="detail-body conversations-body">
     <div v-if="store.conversationLoading" class="conv-loading">
       <RefreshCw :size="20" class="spin-animation" />
-      <span>加载消息中...</span>
+      <span>{{ t('platform.loadingMessages') }}</span>
     </div>
 
     <div v-else-if="store.selectedConversationDetail" ref="conversationMessagesRef" class="conv-messages" @scroll="handleScroll()">
@@ -62,12 +64,12 @@ const { handleScroll } = useChatScroll({
             <div v-if="msg.content" class="msg-text">{{ msg.content }}</div>
             <div v-if="msg.imageUrls && msg.imageUrls.length > 0" class="msg-images">
               <div v-for="(url, idx) in msg.imageUrls" :key="idx" class="msg-image-item">
-                <img :src="url" :alt="`图片 ${idx + 1}`" loading="lazy" />
+                <img :src="url" :alt="t('platform.imageIndex', { n: idx + 1 })" loading="lazy" />
               </div>
             </div>
             <div v-if="!msg.content && (!msg.imageUrls || msg.imageUrls.length === 0)" class="msg-empty">
               <ImageIcon :size="14" />
-              <span>空消息</span>
+              <span>{{ t('platform.emptyMessage') }}</span>
             </div>
           </div>
         </div>
@@ -75,7 +77,7 @@ const { handleScroll } = useChatScroll({
       <LumiEmptyState
         v-if="store.selectedConversationDetail.messages.length === 0"
         :icon="MessageSquare"
-        title="对话暂无消息"
+        :title="t('platform.noMessages')"
         size="md"
       />
     </div>
@@ -83,7 +85,7 @@ const { handleScroll } = useChatScroll({
     <LumiEmptyState
       v-else
       :icon="MessageSquare"
-      title="选择对话查看详情"
+      :title="t('platform.selectConversation')"
       size="md"
     />
   </div>

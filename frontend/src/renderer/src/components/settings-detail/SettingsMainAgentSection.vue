@@ -29,7 +29,7 @@ const agentColors: string[] = [
 // 模型与生成参数（provider/model/temperature/maxTokens）统一在"模型设置"页配置，
 // 此处不再读写，避免把陈旧值写回全局配置。
 const mainAgentEdit = ref({
-  name: '主Agent',
+  name: t('settingsEx.mainAgent.defaultName'),
   systemPrompt: '',
   color: '',
   avatar: null as string | null,
@@ -45,7 +45,7 @@ const loadMainAgentConfig = async () => {
     await platformStore.fetchMainAgent()
     if (platformStore.mainAgent) {
       mainAgentEdit.value = {
-        name: platformStore.mainAgent.name || '主Agent',
+        name: platformStore.mainAgent.name || t('settingsEx.mainAgent.defaultName'),
         systemPrompt: platformStore.mainAgent.systemPrompt,
         color: platformStore.mainAgent.color || 'var(--lumi-brand)',
         avatar: platformStore.mainAgent.avatar || null,
@@ -64,7 +64,7 @@ const handleSaveMainAgentConfig = async () => {
   mainAgentSaveMsg.value = null
   try {
     await platformStore.updateMainAgent({
-      name: mainAgentEdit.value.name?.trim() || '主Agent',
+      name: mainAgentEdit.value.name?.trim() || t('settingsEx.mainAgent.defaultName'),
       systemPrompt: mainAgentEdit.value.systemPrompt,
       color: mainAgentEdit.value.avatarMode === 'color' ? mainAgentEdit.value.color : '',
       avatar: mainAgentEdit.value.avatarMode === 'preset' ? (mainAgentEdit.value.avatar || '') : '',
@@ -187,7 +187,10 @@ onMounted(() => {
   </div>
 </template>
 
+<style scoped src="./preset-avatar-shared.css"></style>
+
 <style scoped>
+/* 预设头像网格样式见 preset-avatar-shared.css（与 WorkspaceDialogs 共享） */
 .main-agent-loading {
   display: flex;
   align-items: center;
@@ -238,40 +241,6 @@ onMounted(() => {
 .color-dot.active {
   border-color: var(--text-primary);
   transform: scale(1.15);
-}
-
-.preset-avatar-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.preset-avatar-item {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-full);
-  border: 2px solid transparent;
-  padding: 0;
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  background: var(--bg-secondary);
-  overflow: hidden;
-}
-
-.preset-avatar-item:hover {
-  transform: scale(1.08);
-}
-
-.preset-avatar-item.selected {
-  border-color: var(--lumi-brand);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lumi-brand) 20%, transparent);
-}
-
-.preset-avatar-img {
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  object-fit: cover;
 }
 
 </style>

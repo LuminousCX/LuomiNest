@@ -43,9 +43,23 @@ class ToolFilterMiddleware(AgentMiddleware):
     ToolExecutionMiddleware 收获进 ctx.state["dynamic_tool_schemas"]，本中间件
     在每轮 before_model 把它们追加进 ctx.tools 并并入白名单放行集——
     模型经探索拿到完整定义的工具，下一轮即可真正发起 function call。
+
+    W3「快脑零原生工具」（D3 口径，分册 10 §18）：会话模型命中快脑寻址
+    （model_config.fast_brain）时，本中间件在工具注入面整体清空原生工具
+    （before_agent/before_model 双闸，探索收获也一并清掉），并把系统提示里的
+    <tool_index> 长尾摘要块剥除——快脑只走文本标签协议（皮套工具标签已由
+    W2 解析层处理，与本条无冲突）。
     """
 
     async def before_agent(self, ctx: AgentContext) -> None:
+        # W3 快脑零原生工具：注入面整体拦截（先于 disable/whitelist 过滤）
+        from app.core.agents.middleware.dispatch import apply_fast_brain_zero_tools, is_fast_brain_ctx
+
+        if is_fast_brain_ctx(ctx):
+            if apply_fast_brain_zero_tools(ctx):
+                logger.info("[ToolFilter] 快脑会话：原生工具注入面已清空（D3 文本协议）")
+            return
+
         if not ctx.tools:
             return
 
@@ -70,6 +84,14 @@ class ToolFilterMiddleware(AgentMiddleware):
             logger.debug("[ToolFilter] 工具过滤后为空，本次以纯对话模式运行")
 
     async def before_model(self, ctx: AgentContext) -> None:
+        # W3 快脑零原生工具：每轮兜底（探索收获不会在快脑会话出现，双保险）
+        from app.core.agents.middleware.dispatch import apply_fast_brain_zero_tools, is_fast_brain_ctx
+
+        if is_fast_brain_ctx(ctx):
+            if apply_fast_brain_zero_tools(ctx):
+                logger.info("[ToolFilter] 快脑会话：before_model 再次清空原生工具注入面")
+            return
+
         # 1) 探索收获：把 tool_explore/skill_explore 返回的工具 schema 追加进可调用集
         dynamic = [
             t for t in (ctx.state.get("dynamic_tool_schemas") or [])
@@ -570,8 +592,17 @@ class SSEEmitMiddleware(AgentMiddleware):
         reasoning: str = "",
         emotion: str | None = None,
         err_code: str | None = None,
+        *,
+        action: str | None = None,
+        navigate: str | None = None,
+        avatar_tool: dict[str, Any] | None = None,
     ) -> str:
-        """格式化 content/reasoning SSE 字符串（err_code 仅错误透传场景携带，可为云链路业务码）。"""
+        """格式化 content/reasoning SSE 字符串（err_code 仅错误透传场景携带，可为云链路业务码）。
+
+        action/navigate/avatar_tool：五类标签网关事件字段（辰汐生态打通 W2，
+        分册 08 §15 / 分册 10 §18，前端 W4 契约字段）。task_dispatch 的 detected
+        事件刻意不经此下发——存 ctx.state 挂点供派发中间件消费。
+        """
         chat_id = ctx.state.get("chat_id", "")
         model = ctx.state.get("model", "")
         provider = ctx.state.get("provider", "")
@@ -583,6 +614,9 @@ class SSEEmitMiddleware(AgentMiddleware):
             provider=provider,
             emotion=emotion,
             errCode=err_code,
+            action=action,
+            navigate=navigate,
+            avatar_tool=avatar_tool,
         )
         return sse_data(chunk)
 

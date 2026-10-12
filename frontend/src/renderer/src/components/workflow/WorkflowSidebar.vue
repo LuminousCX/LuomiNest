@@ -175,10 +175,6 @@ const { t } = useI18n()
   color: var(--lumi-danger);
 }
 
-.session-item-icon.stale {
-  color: var(--lumi-warning);
-}
-
 .session-item-info {
   display: flex;
   flex-direction: column;

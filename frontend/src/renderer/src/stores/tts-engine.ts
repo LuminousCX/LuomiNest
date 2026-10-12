@@ -53,6 +53,10 @@ export const useTtsEngineStore = defineStore('ttsEngine', () => {
   // ── 驱动回调（由调用方设置） ──────────────────────────
   const drivers = {
     driveEmotion: null as ((emotionId: string) => void) | null,
+    // W4 统一标签消费：动作（motion）与皮套工具驱动，与 driveEmotion 同模式路由
+    // （工作台画布 ↔ 桌宠 IPC 由调用方按模式设置；未设置时为静默 no-op）
+    driveAction: null as ((action: string) => void) | null,
+    driveAvatarTool: null as ((tool: { name: string; args: Record<string, string> }) => void) | null,
     syncLipParam: null as ((value: number) => void) | null,
     onTtsError: null as ((err: Error) => void) | null,
   }
@@ -78,10 +82,14 @@ export const useTtsEngineStore = defineStore('ttsEngine', () => {
   // ── 设置驱动回调 ──────────────────────────────────────
   const setDrivers = (opts: {
     driveEmotion?: (emotionId: string) => void
+    driveAction?: (action: string) => void
+    driveAvatarTool?: (tool: { name: string; args: Record<string, string> }) => void
     syncLipParam?: (value: number) => void
     onTtsError?: (err: Error) => void
   }): void => {
     if (opts.driveEmotion !== undefined) drivers.driveEmotion = opts.driveEmotion
+    if (opts.driveAction !== undefined) drivers.driveAction = opts.driveAction
+    if (opts.driveAvatarTool !== undefined) drivers.driveAvatarTool = opts.driveAvatarTool
     if (opts.syncLipParam !== undefined) drivers.syncLipParam = opts.syncLipParam
     if (opts.onTtsError !== undefined) drivers.onTtsError = opts.onTtsError
   }
@@ -236,6 +244,17 @@ export const useTtsEngineStore = defineStore('ttsEngine', () => {
     }
   }
 
+  // ── W4 统一标签消费：动作/皮套工具驱动入口 ────────────
+  // chat store 消费 chunk 指令（consumeChunkDirectives）后调用，
+  // 经 drivers 路由到当前模式的 Live2D 实例；驱动未设置时静默 no-op
+  const dispatchAction = (action: string): void => {
+    drivers.driveAction?.(action)
+  }
+
+  const dispatchAvatarTool = (tool: { name: string; args: Record<string, string> }): void => {
+    drivers.driveAvatarTool?.(tool)
+  }
+
   // ── 对话结束后回归正常表情 ────────────────────────────
   const resetEmotionToNeutral = (): void => {
     if (currentEmotion.value !== 'idle') {
@@ -361,5 +380,8 @@ export const useTtsEngineStore = defineStore('ttsEngine', () => {
     finishStream,
     stop,
     dismissSubtitle,
+    // W4 统一标签消费：动作/皮套工具驱动入口
+    dispatchAction,
+    dispatchAvatarTool,
   }
 })

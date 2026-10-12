@@ -111,6 +111,46 @@ class Settings(BaseSettings):
     LLM_CONTEXT_TRIM_THRESHOLD: float = 0.85  # 超过窗口该比例触发裁剪
     # <avatar_emotion> 表情块注入开关（平台文字渠道恒关；桌面由前端 Live2D 配置决定）
     LLM_AVATAR_EMOTION_ENABLED: bool = True
+
+    # ── 辰汐生态打通 W2：五类标签网关 / 快慢脑寻址（分册 08 §15、分册 10 §18）──
+    # 运行时值由 model_config（config_items['model_config']）同名键在启动
+    # （apply_model_config_from_db）与 PATCH /models/config 时覆盖。
+    # fast_brain / slow_brain = "provider_id/model_id" 字符串；
+    # 空/缺省 = 快/慢脑模式关闭（不注入快脑提示词块、不注入皮套工具、
+    # 不注入四段式——行为与现状完全一致，优雅降级）。
+    FAST_BRAIN: str = ""
+    SLOW_BRAIN: str = ""
+    # 皮套工具（<tool:avatar_*/>）总开关，默认关；仅快脑可挂（分册 08 §15.2 条款 3）
+    AVATAR_TOOLS_ENABLED: bool = False
+    # Live2D motion 注册表（消费端 motion3 动作 ID 列表，由配置声明）；
+    # 空 = 不注入皮套工具提示词，且解析侧所有 motion 调用按注册表外丢弃
+    AVATAR_MOTION_REGISTRY: list[str] = []
+    # 合同词→语义 ID 映射覆盖表（可选 JSON 文件路径，{"smile":"happy"} 形态）
+    AVATAR_TRANSLATION_OVERRIDE: str = ""
+
+    # ── 辰汐生态打通 W3：dispatch 派发网关第二关（分册 10 §18.3）────────
+    # 阈值与动词表均为消费端配置项（§18.3 只定语义档位：先改章再调参）。
+    # 长度关：task 去空白后 < N 字符 → 判空派发，丢弃；
+    # 意图关：task 不含工具动词且无检索意图特征 → 丢弃（两表均为逗号分隔 CSV，
+    # env 可覆盖：DISPATCH_TOOL_VERBS / DISPATCH_INTENT_MARKERS）。
+    DISPATCH_TASK_MIN_CHARS: int = 6
+    DISPATCH_TOOL_VERBS: str = (
+        "查,搜,找,算,列,执行,跑,发,改,禁,踢,重启,监控,打开,关闭,启动,安装,下载,"
+        "创建,删除,发送,设置,同步,备份,检索,浏览,截图,翻译,计算,转换,播放,停止,上传,抓取"
+    )
+    DISPATCH_INTENT_MARKERS: str = (
+        "什么,怎么,怎样,哪些,多少,几,最新,今天,明天,现在,新闻,天气,价格,是哪,在哪,"
+        "文件,网页,网址,联网,上网,资料,消息,邮件,日程,提醒,订单,快递"
+    )
+
+    # ── 辰汐生态打通 W3：权限三级 T2 信任档总开关 ──────────────────────
+    # 持久化键 config_items['permission.trusted_mode']；启动时由
+    # load_trusted_mode_from_db() 镜像到本运行时值（跟随 model_config 五键惯例）。
+    # 开启后所有工具免弹窗直接执行（T1 高危工具也放行；黑名单硬防线仍在
+    # CommandValidator，不受本开关影响）。默认 false = T0/T1 分级正常生效。
+    PERMISSION_TRUSTED_MODE: bool = False
+
+
     # W6-1 对外 MCP 服务器：把陪伴安全工具白名单经 Streamable HTTP 暴露在 /mcp
     MCP_SERVER_ENABLED: bool = True
     # P0-3 传输安全：/mcp Bearer 鉴权开关（token 见 config_items: mcp_server.token，

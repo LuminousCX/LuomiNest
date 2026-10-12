@@ -345,35 +345,4 @@ watch(() => props.providerId, (providerId) => {
   align-items: center;
   justify-content: space-between;
 }
-
-.toggle-switch {
-  width: var(--space-9);
-  height: var(--space-6);
-  border-radius: var(--radius-md);
-  background: var(--workspace-border);
-  position: relative;
-  cursor: pointer;
-  transition: background var(--transition-normal);
-  flex-shrink: 0;
-}
-
-.toggle-switch.active {
-  background: var(--lumi-primary);
-}
-
-.toggle-thumb {
-  position: absolute;
-  top: var(--space-1);
-  left: var(--space-1);
-  width: var(--space-4);
-  height: var(--space-4);
-  border-radius: var(--radius-full);
-  background: var(--text-inverse);
-  transition: transform var(--transition-normal);
-  box-shadow: var(--shadow-xs);
-}
-
-.toggle-switch.active .toggle-thumb {
-  transform: translateX(var(--space-5));
-}
 </style>

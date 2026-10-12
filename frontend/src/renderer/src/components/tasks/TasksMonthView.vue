@@ -1,5 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { MonthGrid, LuomiNestTask } from './types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   monthGrid: MonthGrid
@@ -14,7 +18,8 @@ const emit = defineEmits<{
   wheel: [event: WheelEvent]
 }>()
 
-const weekdayNames = ['一', '二', '三', '四', '五', '六', '日']
+// 月视图表头周一起始：一 二 三 四 五 六 日（computed 随语言切换刷新）
+const weekdayNames = computed(() => [1, 2, 3, 4, 5, 6, 0].map(d => t(`tasks.wds${d}`)))
 </script>
 
 <template>
@@ -70,7 +75,7 @@ const weekdayNames = ['一', '二', '三', '四', '五', '六', '日']
               v-if="tasksForDate(cell.fullDate).length > 3"
               class="month-task-more"
             >
-              +{{ tasksForDate(cell.fullDate).length - 3 }} 更多
+              {{ t('tasks.more', { n: tasksForDate(cell.fullDate).length - 3 }) }}
             </div>
           </div>
         </div>

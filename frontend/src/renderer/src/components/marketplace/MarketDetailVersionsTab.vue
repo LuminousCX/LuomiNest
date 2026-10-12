@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { Tag, ChevronDown, ChevronRight } from 'lucide-vue-next'
 import type { MarketplaceItem } from '../../types/marketplace'
 import { formatFileSize, formatDateRelative } from '../../utils/format'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   item: MarketplaceItem
@@ -25,7 +28,7 @@ const emit = defineEmits<{
         <button class="version-header" @click="emit('toggleVersion', ver.version)">
           <div class="version-info">
             <span class="version-number">v{{ ver.version }}</span>
-            <span v-if="ver.version === item.version" class="version-current">当前</span>
+            <span v-if="ver.version === item.version" class="version-current">{{ t('market.detail.current') }}</span>
             <span class="version-date">{{ formatDateRelative(ver.releasedAt) }}</span>
           </div>
           <div class="version-meta">
@@ -39,14 +42,14 @@ const emit = defineEmits<{
         </button>
         <Transition name="expand">
           <div v-if="expandedVersion === ver.version" class="version-changelog">
-            <p>{{ ver.changelog || '暂无更新日志' }}</p>
+            <p>{{ ver.changelog || t('market.detail.noChangelog') }}</p>
           </div>
         </Transition>
       </div>
     </div>
     <div v-else class="empty-versions">
       <Tag :size="32" />
-      <p>暂无版本信息</p>
+      <p>{{ t('market.detail.noVersions') }}</p>
     </div>
   </div>
 </template>

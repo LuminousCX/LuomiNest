@@ -432,13 +432,16 @@ class ToolOrchestrator:
 
         中间件组装顺序（参考 deer-flow 位置驱动）：
         1. MemoryAccessMiddleware（before_agent 设 contextvar）
-        2. ToolFilterMiddleware（before_agent 过滤工具）
-        3. SubagentCancelMiddleware（before_model 检查取消，仅 subagent）
-        4. LoopGuardMiddleware（after_model 检测循环边界）
-        5. SSEEmitMiddleware（after_model/after_tool_call 发射 SSE，仅流式）
-        6. ToolExecutionMiddleware（wrap_tool_call 执行工具）
-        7. SpecialToolMiddleware（wrap_tool_call 处理特殊工具，仅 chat 流式）
-        8. UsageTrackMiddleware（after_agent 记录 usage）
+        2. ToolFilterMiddleware（before_agent 过滤工具；W3 快脑零原生工具拦截）
+        3. ContextTrimMiddleware（before_model 逐轮兜底裁剪）
+        4. SubagentCancelMiddleware（before_model 检查取消，仅 subagent）
+        5. LoopGuardMiddleware（after_model 检测循环边界）
+        6. PermissionGateMiddleware（wrap_tool_call 三档确认，T0/T1/T2）
+        7. DispatchMiddleware（after_model 派发网关，仅 chat 流式）
+        8. SSEEmitMiddleware（after_model/after_tool_call 发射 SSE，仅流式）
+        9. ToolExecutionMiddleware（wrap_tool_call 执行工具）
+        10. SpecialToolMiddleware（wrap_tool_call 处理特殊工具，仅 chat 流式）
+        11. UsageTrackMiddleware（after_agent 记录 usage）
 
         Args:
             extra: 调用方配置字典，识别以下键：
@@ -460,6 +463,7 @@ class ToolOrchestrator:
             ToolFilterMiddleware,
             UsageTrackMiddleware,
         )
+        from app.core.agents.middleware.dispatch import DispatchMiddleware
         from app.core.agents.middleware.permission import PermissionGateMiddleware
         from app.core.agents.middleware.pipeline import MiddlewarePipeline
 
@@ -480,6 +484,14 @@ class ToolOrchestrator:
         middlewares.append(LoopGuardMiddleware(max_iterations=max_iter))
         # 命令确认闸门在 SSEEmit/ToolExecution 外层：permission_request 先于 started 到达
         middlewares.append(PermissionGateMiddleware())
+
+        # W3 dispatch 派发网关：仅主对话流式场景挂载。位于 SSEEmit 之前
+        # （after_model 反序执行 → SSEEmit 的 tool_calls 公告先落 buffer，
+        # 派发 start/done/error 随后），runner 在 after_model 返回后立即
+        # 排水 buffer，事件可达前端；非流式/子 Agent/群聊场景不挂载
+        # （detected 事件就地终结，优雅降级同 W2 口径）。
+        if scene == "chat" and is_stream:
+            middlewares.append(DispatchMiddleware())
 
         if is_stream:
             middlewares.append(SSEEmitMiddleware())

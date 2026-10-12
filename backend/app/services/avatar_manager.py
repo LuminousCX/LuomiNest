@@ -9,17 +9,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from loguru import logger
 
 from app.core.constants.voice import DEFAULT_EDGE_VOICE
-
+from app.core.tags.definitions import LUOMINEST_EMOTION_IDS
+from app.core.tags.parser import TagStreamParser
 
 # Semantic emotion IDs supported across all avatars.
 # The LLM is instructed to emit only these IDs inside <exp:...> tags.
-SUPPORTED_EMOTION_IDS: tuple[str, ...] = (
-    "happy", "sad", "neutral", "love", "surprise",
-    "angry", "think", "awkward", "curious", "shy", "excited", "confused",
-)
+# 辰汐生态打通 W2：单一定义源收敛到 app/core/tags/definitions.py
+# （LUOMINEST_EMOTION_IDS），此处保持别名导出以维持既有引用不变。
+SUPPORTED_EMOTION_IDS: tuple[str, ...] = LUOMINEST_EMOTION_IDS
 
 # Matches a complete <exp:emotion> or <exp=emotion> tag. Used for final cleanup of
 # non-streamed content and for sanity checks. Supports both ':' and '=' separators
@@ -105,8 +104,16 @@ def is_supported_emotion(emotion_id: str) -> bool:
 
 
 def strip_emotion_tags(text: str) -> str:
-    """Remove all <exp:...> tags from a complete text (non-streaming use)."""
-    return _EMOTION_TAG_LOOSE_RE.sub("", _EMOTION_TAG_RE.sub("", text))
+    """Remove all LLM output tags from a complete text (non-streaming use).
+
+    辰汐生态打通 W2（分册 08 §15.3）：剥离范围从 exp 单族扩展到五族标签
+    （exp/act/ui/tool/dispatch，含自闭合与非自闭合形态），委托统一标签网关
+    app/core/tags 实现；对既有调用方（chat_service / group_chat）而言
+    「剥净标签返回干净文本」的对外行为不变，只是剥得更净。
+    """
+    from app.core.tags import strip_all_tags
+
+    return strip_all_tags(text or "")
 
 
 # 完整标签的宽松正则：同时匹配开始标签 <exp:NAME> 和闭合标签 </exp:NAME>
@@ -124,96 +131,32 @@ _EMOTION_TAG_PARTIAL_RE = re.compile(r"</?(?:\s*e(?:x(?:p(?:(?::|=)(?:\s*[a-zA-Z
 
 
 @dataclass
-class EmotionStreamParser:
+class EmotionStreamParser(TagStreamParser):
     """Stateful streaming parser for <exp:emotion> tags.
 
-    Feed each LLM chunk via feed(). Returns (clean_content, emotion_or_none).
-    emotion is emitted only when it changes from the previous value.
-    Handles partial tags split across chunk boundaries.
+    辰汐生态打通 W2（分册 08 §15.3）：exp 解析逻辑并入统一标签网关
+    app/core/tags.TagStreamParser，本类改为委托（继承），对外行为不变——
+    feed() 仍返回 (clean_content, emotion_or_none)，emotion 仅在变化时发射，
+    闭合标签回归 neutral。清洗范围随网关扩展到五族标签（平台/群聊文字渠道
+    收益：act/ui/tool/dispatch 幻觉标签同样被剥净，皮套工具事件在非快脑链路
+    一律不发射，仅计数留痕）。
 
-    支持的标签格式（与 _EMOTION_TAG_LOOSE_RE 一致）：
-    - <exp:NAME> / <exp=NAME>          标准格式
-    - < exp:NAME > / <exp: NAME />     含空格变体
-    - <exp:NAME/> / <exp:NAME />       自闭合变体
+    支持的标签格式（严格 + 宽松双正则，见 app/core/tags/definitions.py）：
+    - <exp:NAME> / <exp=NAME> / <exp:NAME/>   标准与自闭合
+    - < exp:NAME > / <exp: NAME />            含空格变体
+    - <exp:smile/>                            合同 8 词自闭合（经翻译映射）
     """
 
-    _current_emotion: str | None = field(default=None, init=False)
-    _pending: str = field(default="", init=False)
+    def __init__(self) -> None:
+        # 平台/群聊文字渠道：皮套工具不启用（分册 08 §15.2 优先级条款 3，
+        # 皮套工具仅快脑可挂），工具标签只剥离 + 计数
+        super().__init__(avatar_tools_enabled=False)
 
     def feed(self, chunk: str) -> tuple[str, str | None]:
-        if not chunk:
-            return ("", None)
-
-        # 合并上一个 chunk 保留的部分标签
-        buf = self._pending + chunk
-        self._pending = ""
-
-        clean_parts: list[str] = []
-        emitted_emotion: str | None = None
-        i = 0
-
-        while i < len(buf):
-            lt = buf.find("<", i)
-            if lt == -1:
-                # 没有更多 '<'，刷新剩余内容为干净文本
-                clean_parts.append(buf[i:])
-                break
-
-            # 刷新 '<' 之前的干净文本
-            if lt > i:
-                clean_parts.append(buf[i:lt])
-
-            # 尝试从 lt 开始匹配完整的 emotion 标签
-            match = _EMOTION_TAG_FULL_RE.match(buf, lt)
-            if match:
-                tag_prefix = match.group(1)  # '<' 或 '</'
-                emotion_id = match.group(2)
-                is_closing = tag_prefix == "</"
-                if is_closing:
-                    # 闭合标签 </exp:NAME>：发射 neutral 回归正常状态
-                    # 这样前端可以在播放完标签内的语句后，通过 TTS 段同步切换回 neutral
-                    if self._current_emotion is not None and self._current_emotion != "neutral":
-                        self._current_emotion = "neutral"
-                        emitted_emotion = "neutral"
-                        logger.debug(f"[EmotionParser] 闭合标签回归 neutral: {match.group(0)!r}")
-                    else:
-                        logger.debug(f"[EmotionParser] 闭合标签剥离(无需回归): {match.group(0)!r}")
-                elif is_supported_emotion(emotion_id):
-                    if emotion_id != self._current_emotion:
-                        self._current_emotion = emotion_id
-                        emitted_emotion = emotion_id
-                        logger.debug(f"[EmotionParser] 表情切换: {emotion_id} (原始标签: {match.group(0)!r})")
-                    else:
-                        logger.debug(f"[EmotionParser] 表情未变化(仍为 {emotion_id})，不发射")
-                else:
-                    logger.warning(f"[EmotionParser] 不支持的 emotion ID: {emotion_id!r} (原始标签: {match.group(0)!r})")
-                # 不支持的 emotion ID 静默剥离（不发射）
-                i = match.end()
-            else:
-                # 检查是否是部分标签（可能跨 chunk 完成）
-                partial = buf[lt:]
-                if _EMOTION_TAG_PARTIAL_RE.match(partial):
-                    # 保留部分标签到下一个 chunk
-                    logger.debug(f"[EmotionParser] 保留部分标签到下一 chunk: {partial!r}")
-                    self._pending = partial
-                    break
-                else:
-                    # 不是 emotion 标签，把 '<' 当作普通字符输出
-                    clean_parts.append("<")
-                    i = lt + 1
-
-        clean_content = "".join(clean_parts)
-        logger.debug(
-            f"[EmotionParser] feed(chunk={chunk!r}) => "
-            f"clean={clean_content!r}, emotion={emitted_emotion!r}, "
-            f"current_emotion={self._current_emotion!r}, pending={self._pending!r}"
-        )
-        return (clean_content, emitted_emotion)
-
-    @property
-    def current_emotion(self) -> str | None:
-        return self._current_emotion
-
-    def reset(self) -> None:
-        self._current_emotion = None
-        self._pending = ""
+        clean_content, events = super().feed(chunk)
+        # 与原实现语义一致：单变量覆盖，同 chunk 多次情绪切换时取最后一次
+        emotion = None
+        for event in events:
+            if event.kind == "emotion":
+                emotion = event.value
+        return (clean_content, emotion)

@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { X, Download } from 'lucide-vue-next'
 import LumiButton from './common/LumiButton.vue'
 import { getFileIcon } from '../utils/file'
 import { formatFileSize } from '../utils/format'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   name: string
@@ -27,18 +30,18 @@ const fileIcon = computed(() => getFileIcon(props.name))
     </div>
     <div class="file-info">
       <div class="file-name">{{ name }}</div>
-      <div v-if="status === 'uploading'" class="file-status uploading">上传中...</div>
-      <div v-else-if="status === 'success'" class="file-status success">已附加</div>
-      <div v-else-if="status === 'failed'" class="file-status failed">{{ error || '上传失败' }}</div>
+      <div v-if="status === 'uploading'" class="file-status uploading">{{ t('file.uploading') }}</div>
+      <div v-else-if="status === 'success'" class="file-status success">{{ t('file.attached') }}</div>
+      <div v-else-if="status === 'failed'" class="file-status failed">{{ error || t('file.failed') }}</div>
       <div v-else class="file-size">{{ formatFileSize(size) }}</div>
     </div>
     <div class="file-actions">
-      <LumiButton variant="ghost" size="sm" icon-only aria-label="下载" @click="emit('download')">
+      <LumiButton variant="ghost" size="sm" icon-only :aria-label="t('file.download')" @click="emit('download')">
         <template #icon>
           <Download :size="14" />
         </template>
       </LumiButton>
-      <LumiButton variant="ghost" size="sm" icon-only aria-label="移除" @click="emit('remove')">
+      <LumiButton variant="ghost" size="sm" icon-only :aria-label="t('file.remove')" @click="emit('remove')">
         <template #icon>
           <X :size="14" />
         </template>

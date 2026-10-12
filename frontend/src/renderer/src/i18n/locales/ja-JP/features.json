@@ -44,6 +44,24 @@
       "clearSummary": "AI サマリーをリセット",
       "resetAll": "すべてのメモリをクリア ⚠️"
     },
+    "tracks": {
+      "owner": "配信者自身のメモリ",
+      "users": "ファンユーザープロフィール",
+      "groups": "ファングループプロフィール",
+      "noUsers": "ファンのプロフィール記録はまだありません",
+      "noGroups": "グループのプロフィール記録はまだありません",
+      "currentFan": "現在のファン",
+      "currentGroup": "現在のグループ",
+      "searchFans": "ファンのニックネームまたはプラットフォーム ID を検索...",
+      "searchGroups": "グループ名またはグループ ID を検索..."
+    },
+    "agentPicker": {
+      "viewing": "表示中",
+      "mainWorkspace": "メインワークベンチ",
+      "mainWorkspaceSub": "メイン Agent のメモリ",
+      "factCount": "{n} 件の事実",
+      "noSubAgents": "他の Agent はまだいません"
+    },
     "confirm": {
       "deleteFactTitle": "事実を削除",
       "deleteFactMessage": "この事実を削除してもよろしいですか？",
@@ -106,7 +124,17 @@
       "avoid": "回避: {msg}",
       "pinned": "ピン済み",
       "pin": "ピン留め（常に注入）",
-      "unpin": "ピン留め解除"
+      "unpin": "ピン留め解除",
+      "scopeGlobal": "🌐 グローバル",
+      "scopePrivate": "🔒 非公開",
+      "scopeGroup": "👥 グループ",
+      "scopeOptionGlobal": "🌐 グローバル公開",
+      "scopeOptionPrivate": "🔒 個人的な秘密",
+      "scopeOptionGroup": "👥 グループ限定",
+      "scopeTitle": "プライバシー分離",
+      "scopePrivateTip": "1対1の非公開：グループチャットでは決して公開されません",
+      "scopeGroupTip": "グループチャット内で公開",
+      "scopeGlobalTip": "グローバル公開プロフィール"
     },
     "nav": {
       "summarized": "要約済み",
@@ -153,7 +181,8 @@
     },
     "briefing": {
       "title": "朝のご挨拶"
-    }
+    },
+    "quickSwitch": "クイック切替："
   },
   "market": {
     "title": "拡張機能",
@@ -233,7 +262,12 @@
       "uninstalling": "アンインストール中...",
       "uninstall": "アンインストール",
       "processing": "処理中...",
-      "requesting": "リクエスト中..."
+      "requesting": "リクエスト中...",
+      "current": "現在",
+      "noVersions": "バージョン情報がありません",
+      "noChangelog": "更新履歴がありません",
+      "screenshots": "スクリーンショット",
+      "screenshotIndex": "スクリーンショット {n}"
     },
     "error": {
       "noDownloadUrl": "このアイテムには利用可能なダウンロード URL がありません",
@@ -337,7 +371,91 @@
       "updating": "更新中...",
       "updated": "更新完了"
     },
-    "filterLabel": "フィルター"
+    "filterLabel": "フィルター",
+    "searchPlaceholder": "プラグインやスキルを検索...",
+    "suggestionHistory": "履歴",
+    "suggestionCategory": "カテゴリ",
+    "suggestionTip": "候補",
+    "clearHistory": "検索履歴をクリア",
+    "noInstalled": "インストール済みのコンテンツはありません",
+    "viewAll": "すべて表示",
+    "tag": {
+      "official": "公式",
+      "community": "コミュニティ",
+      "free": "無料",
+      "premium": "有料",
+      "popular": "人気",
+      "new": "新着"
+    },
+    "cat": {
+      "all": "すべて",
+      "ai-model": "AIモデル",
+      "llm": "大規模言語モデル",
+      "embedding": "埋め込みモデル",
+      "vision": "視覚モデル",
+      "tts": "音声合成",
+      "stt": "音声認識",
+      "tool": "ツール",
+      "search": "検索",
+      "code": "コード",
+      "file": "ファイル",
+      "web": "ウェブ",
+      "database": "データベース",
+      "integration": "連携",
+      "messaging": "メッセージング",
+      "iot": "IoTデバイス",
+      "api": "API接続",
+      "cloud": "クラウド",
+      "avatar": "アバター",
+      "live2d": "Live2D",
+      "vrm": "VRM",
+      "voice": "ボイスパック",
+      "productivity": "生産性",
+      "automation": "自動化",
+      "workflow": "ワークフロー",
+      "schedule": "スケジュール",
+      "coding": "コーディング",
+      "frontend": "フロントエンド",
+      "backend": "バックエンド",
+      "fullstack": "フルスタック",
+      "refactor": "リファクタリング",
+      "document": "ドキュメント",
+      "word": "Word文書",
+      "pdf": "PDF文書",
+      "slides": "プレゼンテーション",
+      "coauthor": "共同執筆",
+      "design": "デザイン",
+      "visual": "ビジュアルデザイン",
+      "brand": "ブランドガイドライン",
+      "art": "アート创作",
+      "knowledge": "ナレッジ",
+      "comms": "社内コミュニケーション",
+      "content": "コンテンツ制作",
+      "research": "リサーチ",
+      "media": "メディア",
+      "image-gen": "画像生成",
+      "animation": "アニメーション",
+      "gif": "GIF制作",
+      "assistant": "アシスタント",
+      "customer-service": "カスタマーサポート",
+      "sales": "セールス",
+      "personal": "パーソナル",
+      "creative": "クリエイティブ",
+      "writing": "執筆",
+      "music": "音楽",
+      "analysis": "分析",
+      "data-analysis": "データ分析",
+      "market-research": "市場調査",
+      "finance": "財務分析",
+      "development": "開発",
+      "code-gen": "コード生成",
+      "testing": "テスト",
+      "devops": "運用",
+      "education": "教育",
+      "teaching": "教授",
+      "tutoring": "チュータリング",
+      "training": "研修"
+    }
   },
   "tasks": {
     "title": "計画ビュー",
@@ -439,7 +557,16 @@
       "errAction": "実行指令を入力してください",
       "errTimeFormat": "時刻は HH:MM 形式で入力してください",
       "errTimeRange": "時刻の範囲が無効です",
-      "errDayRange": "日は 1〜31 の範囲で指定してください"
+      "errDayRange": "日は 1〜31 の範囲で指定してください",
+      "timelineTitle": "24時間タイムライン",
+      "timelineNow": "現在",
+      "timelineHourlyTag": "毎時 × {n}",
+      "timelineEmptyHint": "定時刻に発火するタスクはまだありません",
+      "timelineMore": "他 {n} 件",
+      "unplacedTitle": "不定時タスク",
+      "inMinutes": "{n} 分後",
+      "inHours": "{n} 時間後",
+      "inDays": "{n} 日後"
     },
     "wd0": "日曜",
     "wd1": "月曜",
@@ -454,7 +581,52 @@
       "monthly": "毎月 {d} 日 {time}",
       "weekly": "毎{day} {time}",
       "daily": "毎日 {time}"
-    }
+    },
+    "card": {
+      "edit": "編集",
+      "delete": "削除",
+      "addTask": "新しいタスクを追加",
+      "completion": "達成度 {done}/{total}"
+    },
+    "week": {
+      "itemCount": "{n} 件"
+    },
+    "wds0": "日",
+    "wds1": "月",
+    "wds2": "火",
+    "wds3": "水",
+    "wds4": "木",
+    "wds5": "金",
+    "wds6": "土",
+    "timeSlot": {
+      "allDay": "終日",
+      "unplanned": "未定"
+    },
+    "demo": {
+      "t1Title": "Agent対話モジュールの設計を完了",
+      "t1Desc": "SRSドキュメントに基づき没入型コンパニオン対話UIを実装",
+      "t2Title": "ブラウザエンジンの統合",
+      "t2Desc": "ima風ブラウザビューをデスクトップクライアントに埋め込む",
+      "t3Title": "MCPツールゲートウェイの開発",
+      "t3Desc": "標準化されたツール接続プロトコルを実装",
+      "t4Title": "3層メモリアーキテクチャの実装",
+      "t4Desc": "ワーキングメモリ＋エピソードメモリ＋セマンティックメモリ",
+      "t5Title": "Live2Dアバターのレンダリング",
+      "t5Desc": "Cubism 5エンジンの統合とリップシンク",
+      "tagCore": "コア機能",
+      "tagEmbedded": "組み込み",
+      "tagBackend": "バックエンド",
+      "tagProtocol": "プロトコル",
+      "tagArch": "アーキテクチャ",
+      "tagRender": "レンダリング",
+      "tagAnim": "アニメーション",
+      "sub1": "要件定義",
+      "sub2": "プロトタイプ設計",
+      "sub3": "UIデザイン",
+      "sub4": "フロントエンド開発",
+      "sub5": "結合テスト"
+    },
+    "more": "+{n} 件"
   },
   "workflow": {
     "title": "ワークフローキャンバス",
@@ -469,6 +641,11 @@
     "emptyDesc": "メイン Agent のワークベンチでプロフェッショナルモードを有効にすると、AI が作成した実行計画が自動的にフローチャートとして表示されます。",
     "promptCron": "スケジュール式を入力してください（cron 形式。例：\"0 9 * * *\" は毎日9時）",
     "scheduleCreated": "定期タスクを作成しました",
+    "created": {
+      "title": "ワークフローを作成しました",
+      "taskCount": "{n} 件のサブタスク",
+      "viewFlow": "フローチャートを見る"
+    },
     "deleteConfirm": "テンプレート「{name}」を削除してもよろしいですか？",
     "templates": {
       "loading": "読み込み中...",
@@ -811,7 +988,54 @@
       "updateFailed": "更新に失敗しました：{msg}",
       "unknownError": "不明なエラー"
     },
-    "globalModelHint": "モデルはグローバル設定（設定 → モデル設定）に従います。すべてのプラットフォームはグローバル高速応答モデルを使用し、以下ではこのプラットフォーム専用のペルソナプロンプトのみ設定できます。"
+    "globalModelHint": "モデルはグローバル設定（設定 → モデル設定）に従います。すべてのプラットフォームはグローバル高速応答モデルを使用し、以下ではこのプラットフォーム専用のペルソナプロンプトのみ設定できます。",
+    "roleSystem": "システム",
+    "roleUser": "ユーザー",
+    "loadingMessages": "メッセージを読み込み中...",
+    "imageIndex": "画像 {n}",
+    "emptyMessage": "空のメッセージ",
+    "wechat": {
+      "title": "WeChat QRログイン",
+      "headerTitle": "個人WeChatにログイン",
+      "headerDesc": "スマホのWeChatで下のQRコードをスキャンし、スマホ側でログインを確認してください",
+      "init": "QRコードを取得中...",
+      "requesting": "WeChatログインQRコードをリクエスト中...",
+      "scanHint": "スマホのWeChatでQRコードをスキャンしてください",
+      "fetchFail": "QRコードの取得に失敗しました。ゲートウェイ設定をご確認ください",
+      "gatewayError": "WeChatゲートウェイサービスへの接続で異常が発生しました。再試行してください",
+      "generating": "専用ログインQRコードを生成中...",
+      "expired": "QRコードの有効期限が切れました",
+      "scanned": "スキャン済み",
+      "confirmOnPhone": "スマホのWeChatで確認をタップしてください",
+      "loggedIn": "ログイン成功！",
+      "retry": "再取得",
+      "refresh": "QRコードを更新",
+      "manualRefresh": "手動で更新",
+      "qrAlt": "WeChatログインQRコード"
+    },
+    "field": {
+      "mcGamePort": "LAN/ゲームポート (game_port)",
+      "mcGameHost": "サーバーアドレス (game_host)",
+      "mcBotName": "コンパニオンプレイヤー名 (bot_name)",
+      "mcAutoSpawnBot": "コンパニオンをサーバーへ自動派遣 (auto_spawn_bot)",
+      "mcWsPort": "Mod通信ポート (ws_port)",
+      "mcRconPassword": "RCON パスワード (rcon_password)",
+      "qqWsPort": "リバース WS 待受ポート (ws_port)",
+      "qqAccessToken": "通信トークン (access_token)",
+      "wechatApiUrl": "GeweChat API アドレス (api_url)",
+      "wechatToken": "API Token (token)",
+      "discordBotToken": "Discord Bot Token (bot_token)",
+      "mcGamePortTip": "シングルプレイの「LANに開く」で表示される5桁のポート（例: 56587）、またはマルチプレイサーバーのポート",
+      "mcGameHostTip": "Minecraftサーバーのアドレス。LANシングルプレイは 127.0.0.1",
+      "mcBotNameTip": "ゲーム内コンパニオンのニックネーム。空欄の場合は設定の【メインAgent】名を継承します",
+      "mcWsPortTip": "Mineflayerコンパニオンがシステムと通信するローカルWebSocketポート、既定 8081",
+      "qqWsPortTip": "NapCatQQ / OneBot v11 リバースWebSocket接続のポート、既定 8080",
+      "qqAccessTokenTip": "認証トークン。NapCat 設定の access_token と一致させる必要があります",
+      "wechatApiUrlTip": "GeweChat（iPadプロトコルゲートウェイ）ローカルまたはコンテナサービスの REST API アドレス",
+      "wechatTokenTip": "GeweChat サービス呼び出し用 token",
+      "discordBotTokenTip": "Discord Developer Portal で生成した Bot Token。Message Content Intent を必ず有効にしてください",
+      "phBotName": "空欄でメインAgent名を継承"
+    }
   },
   "browser": {
     "captchaBanner": "CAPTCHA（人間認証）ページを検出しました。認証を完了すると閲覧を続けられます",
@@ -896,7 +1120,10 @@
       "newTab": "新しいタブ",
       "loading": "読み込み中...",
       "loadFail": "読み込みに失敗"
-    }
+    },
+    "downloadBlocked": "内蔵ブラウザはダウンロードに対応していないため、キャンセルしました",
+    "riskBlockedBanner": "サイトのアンチボット対策によりブロックされました。後でもう一度お試しください",
+    "tabSleeping": "リソース節約のためこのタブは休止中です。クリックで復帰します"
   },
   "smartHome": {
     "title": "スマートホーム",

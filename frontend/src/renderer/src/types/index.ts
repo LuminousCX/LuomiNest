@@ -55,6 +55,15 @@ export interface ChatMessage {
   workflowSessionId?: string
   /** 工作流子任务数量（配合 workflowSessionId 使用） */
   workflowTaskCount?: number
+  /**
+   * 任务派发状态（W4 task_dispatch）：流式期间收到 task_dispatch chunk 时
+   * 写到最新 assistant 消息上，气泡角落轻量徽标展示（start 覆盖为 done/error）
+   */
+  taskDispatch?: {
+    task: string
+    phase: TaskDispatchPhase
+    summary?: string | null
+  }
 }
 
 /** Raw message shape returned by the backend API (snake_case) */
@@ -145,6 +154,33 @@ export interface TaskStreamEvent {
   payload?: Record<string, unknown>
 }
 
+/**
+ * 皮套工具调用载荷（后端 <tool:NAME> 标签翻译产物，W4 统一标签消费）。
+ * W6 形状核查：后端解析器（core/tags/parser.py _on_tool）实际下发
+ * {"name": <motion/表情目标名>, "args": {}} —— name 携带目标名而非工具种类
+ * （avatar_motion/avatar_expression 不随 chunk 下发，白名单校验已在后端完成）；
+ * 由 emotionTagInterceptor.consumeChunkDirectives 单点翻译成内部规范形状。
+ */
+export interface AvatarToolCall {
+  /** motion/表情目标名（如 wave / smile），≤32 字符 */
+  name: string
+  /** 工具参数（后端当前恒为空对象，保留字段以兼容内部规范形状） */
+  args: Record<string, string>
+}
+
+/** 任务派发生命周期阶段（前端只需处理 start/done/error，detected 不会下发） */
+export type TaskDispatchPhase = 'start' | 'done' | 'error'
+
+/** 任务派发生命周期事件（后端 <dispatch> 标签翻译产物，W4 统一标签消费） */
+export interface TaskDispatchEvent {
+  /** 任务名（语义标识，如 weather_query） */
+  task: string
+  phase: TaskDispatchPhase
+  task_id: string | null
+  /** 人类可读摘要（可缺省） */
+  summary: string | null
+}
+
 export interface ChatStreamChunk {
   id: string
   content: string
@@ -159,6 +195,18 @@ export interface ChatStreamChunk {
   }
   suggested_questions?: string[]
   emotion?: string
+  /**
+   * ── W4 统一标签消费：以下 4 个字段与 emotion 并列，全部可选可缺省 ──
+   * 后端不下发时（普通模型/普通聊天）前端行为与历史版本完全一致（优雅降级）
+   */
+  /** <act:*> 动作名（nod/shake/think/hug），驱动 Live2D motion */
+  action?: string | null
+  /** <ui:navigate target="..."/> 导航目标，白名单校验通过才跳转 */
+  navigate?: string | null
+  /** 皮套工具调用（avatar_motion/avatar_expression） */
+  avatar_tool?: AvatarToolCall | null
+  /** 任务派发生命周期（挂到最新 assistant 消息展示轻量徽标） */
+  task_dispatch?: TaskDispatchEvent | null
   tool_calls?: ToolCall[]
   tool_event?: ToolEvent
   subagent_event?: SubagentEvent
@@ -278,6 +326,17 @@ export interface ModelConfig {
   compressionRatio?: number
   /** 是否启用 LLM 摘要压缩 */
   llmCompressEnabled?: boolean
+  // ── 辰汐生态打通 W2 五键（双脑路由 + 皮套工具）──
+  /** 快脑槽："provider_id/model_id"，空 = 关闭（跟随默认模型） */
+  fastBrain?: string
+  /** 慢脑槽（派发任务工具循环）："provider_id/model_id"，空 = 自动回退推理槽/云端默认 */
+  slowBrain?: string
+  /** 皮套工具注入开关 */
+  avatarToolsEnabled?: boolean
+  /** 皮套 motion 注册表 */
+  avatarMotionRegistry?: string[]
+  /** 翻译映射覆盖 JSON 文件路径（高级项，可留空） */
+  avatarTranslationOverride?: string
 }
 
 export interface Skill {

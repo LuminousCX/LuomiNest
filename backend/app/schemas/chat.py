@@ -64,6 +64,21 @@ class ChatStreamChunk(BaseModel):
     done: bool = False
     suggested_questions: list[str] | None = None
     emotion: str | None = None
+    # ── 五类标签网关事件字段（辰汐生态打通 W2，分册 08 §15 / 分册 10 §18；
+    #    与并行开发的前端 W4 契约字段，不得改名。语义与 emotion 并列，全部默认
+    #    None：模型一个标签都不输出时 = 普通聊天，行为与网关上线前完全一致）──
+    # <act:X/> 的动作名（nod/shake/think/hug）
+    action: str | None = None
+    # <ui:navigate target="X"/> 的导航目标
+    navigate: str | None = None
+    # <tool:avatar_motion|avatar_expression name="X"/> → {"name": str, "args": dict}
+    avatar_tool: dict[str, Any] | None = None
+    # 派发事件 {"task": str, "phase": "detected"|"start"|"done"|"error",
+    #           "task_id": str|None, "summary": str|None}。
+    # W2 仅产生 phase="detected"（解析层捕获），且 detected 事件不直接下发——
+    # 存入执行上下文 ctx.state（挂点键见 app/core/tags/definitions.py），
+    # 由后续派发中间件读取后才会以 start/done/error 形态下发。
+    task_dispatch: dict[str, Any] | None = None
     # 工具调用相关字段（主 Agent 工具调用循环）
     tool_calls: list[dict[str, Any]] | None = None
     tool_event: dict[str, Any] | None = None

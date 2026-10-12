@@ -41,61 +41,13 @@ const localeStore = useLocaleStore()
   </div>
 </template>
 
+<style scoped src="../common/lang-card-shared.css"></style>
+
 <style scoped>
+/* lang-card / lang-flag / lang-label / lang-check 见 lang-card-shared.css（与 StepLanguage 共享） */
 .lang-options {
   display: flex;
   gap: var(--space-3);
-}
-
-.lang-card {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  cursor: pointer;
-  transition: all var(--transition-normal);
-  position: relative;
-}
-
-.lang-card:hover {
-  border-color: var(--lumi-brand-border);
-  box-shadow: var(--shadow-sm);
-  transform: translateY(-1px);
-}
-
-.lang-card.active {
-  border-color: var(--lumi-brand);
-  background: var(--lumi-brand-light);
-  box-shadow: var(--shadow-sm);
-}
-
-.lang-flag {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-md);
-  font-weight: var(--font-bold);
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.lang-label {
-  font-size: var(--text-md);
-  font-weight: var(--font-medium);
-  color: var(--text);
-}
-
-.lang-check {
-  margin-left: auto;
-  color: var(--lumi-brand);
 }
 
 @media (max-width: 560px) {

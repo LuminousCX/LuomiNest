@@ -6,10 +6,12 @@ import { useTaskStreamStore } from '../stores/taskStream'
 import { getItem, setItem } from '../utils/storage'
 import type { ViewMode, TaskStatus, LuomiNestTask, CalendarDay, MonthGrid } from '../components/tasks/types'
 import {
-  WEEKDAY_NAMES,
-  WEEKDAY_FULL,
+  weekdayShort,
+  weekdayFull,
   formatDateStr,
-  cloneDate
+  cloneDate,
+  UNPLANNED_SLOT,
+  ALL_DAY_SLOT
 } from '../components/tasks/types'
 import SearchInput from '../components/common/SearchInput.vue'
 import TasksToolbar from '../components/tasks/TasksToolbar.vue'
@@ -34,75 +36,76 @@ const isMonthTransitioning = ref(false)
 
 const nextTaskId = ref(6)
 
-const DEFAULT_TASKS: LuomiNestTask[] = [
+/** 首次使用（无本地持久化数据）时的示例任务，文案随界面语言 */
+const defaultTasks = (): LuomiNestTask[] => [
   {
     id: 1,
-    title: '完成 Agent 对话模块设计',
-    desc: '根据 SRS 文档实现沉浸式陪伴域的对话界面',
+    title: t('tasks.demo.t1Title'),
+    desc: t('tasks.demo.t1Desc'),
     priority: 'high',
     status: 'done',
     dueDate: '2026-04-08',
     assignees: ['https://picsum.photos/id/1001/40/40', 'https://picsum.photos/id/1002/40/40'],
-    tags: ['UI/UX', '核心功能'],
+    tags: ['UI/UX', t('tasks.demo.tagCore')],
     progress: 100,
     colorVar: '--task-yellow',
     timeSlot: '10:15 - 12:15'
   },
   {
     id: 2,
-    title: '浏览器内核集成',
-    desc: '将 ima 风格浏览器视图嵌入桌面客户端',
+    title: t('tasks.demo.t2Title'),
+    desc: t('tasks.demo.t2Desc'),
     priority: 'high',
     status: 'progress',
     dueDate: '2026-04-09',
     assignees: ['https://picsum.photos/id/1003/40/40'],
-    tags: ['嵌入式', 'Electron'],
+    tags: [t('tasks.demo.tagEmbedded'), 'Electron'],
     progress: 65,
     colorVar: '--task-blue',
     timeSlot: '13:00 - 14:30'
   },
   {
     id: 3,
-    title: 'MCP 工具网关开发',
-    desc: '实现标准化工具接入协议',
+    title: t('tasks.demo.t3Title'),
+    desc: t('tasks.demo.t3Desc'),
     priority: 'medium',
     status: 'pending',
     dueDate: '2026-04-12',
     assignees: ['https://picsum.photos/id/1004/40/40', 'https://picsum.photos/id/1005/40/40', 'https://picsum.photos/id/1006/40/40'],
-    tags: ['后端', '协议'],
+    tags: [t('tasks.demo.tagBackend'), t('tasks.demo.tagProtocol')],
     progress: 0,
     colorVar: '--task-sky',
     timeSlot: '10:45 - 14:15'
   },
   {
     id: 4,
-    title: '三层记忆架构实现',
-    desc: '工作记忆 + 情景记忆 + 语义记忆',
+    title: t('tasks.demo.t4Title'),
+    desc: t('tasks.demo.t4Desc'),
     priority: 'medium',
     status: 'pending',
     dueDate: '2026-04-15',
     assignees: ['https://picsum.photos/id/1007/40/40'],
-    tags: ['AI', '架构'],
+    tags: ['AI', t('tasks.demo.tagArch')],
     progress: 0,
     colorVar: '--task-pink',
-    timeSlot: '全天'
+    timeSlot: ALL_DAY_SLOT
   },
   {
     id: 5,
-    title: 'Live2D 皮套渲染',
-    desc: 'Cubism 5 引擎集成与嘴型同步',
+    title: t('tasks.demo.t5Title'),
+    desc: t('tasks.demo.t5Desc'),
     priority: 'low',
     status: 'pending',
     dueDate: '2026-04-20',
     assignees: ['https://picsum.photos/id/1008/40/40', 'https://picsum.photos/id/1009/40/40'],
-    tags: ['渲染', '动画'],
+    tags: [t('tasks.demo.tagRender'), t('tasks.demo.tagAnim')],
     progress: 0,
     colorVar: '--task-green',
-    timeSlot: '待安排'
+    timeSlot: UNPLANNED_SLOT
   }
 ]
 
-const tasks = ref<LuomiNestTask[]>([...DEFAULT_TASKS])
+const tasks = ref<LuomiNestTask[]>(defaultTasks())
 
 const normalizeTask = (raw: Record<string, unknown>, fallbackId: number): LuomiNestTask => ({
   id: typeof raw.id === 'number' ? raw.id : fallbackId,
@@ -115,11 +118,11 @@ const normalizeTask = (raw: Record<string, unknown>, fallbackId: number): LuomiN
   tags: Array.isArray(raw.tags) ? raw.tags.filter((t: unknown): t is string => typeof t === 'string') : [],
   progress: typeof raw.progress === 'number' ? Math.max(0, Math.min(100, raw.progress)) : 0,
   colorVar: typeof raw.colorVar === 'string' ? raw.colorVar : '--task-blue',
-  timeSlot: typeof raw.timeSlot === 'string' ? raw.timeSlot : '待安排',
+  timeSlot: typeof raw.timeSlot === 'string' ? raw.timeSlot : UNPLANNED_SLOT,
 })
 
 const normalizeTasks = (rawList: unknown[]): LuomiNestTask[] => {
-  if (!Array.isArray(rawList)) return [...DEFAULT_TASKS]
+  if (!Array.isArray(rawList)) return defaultTasks()
   const result: LuomiNestTask[] = []
   for (let i = 0; i < rawList.length; i++) {
     const item = rawList[i]
@@ -130,7 +133,7 @@ const normalizeTasks = (rawList: unknown[]): LuomiNestTask[] => {
       continue
     }
   }
-  return result.length > 0 ? result : [...DEFAULT_TASKS]
+  return result.length > 0 ? result : defaultTasks()
 }
 
 interface PersistedTaskState {
@@ -186,12 +189,12 @@ onMounted(() => {
   taskStreamStore.fetchDbScheduledTasks()
 })
 
-const subTasks = ref([
-  { label: '需求分析', done: true },
-  { label: '原型设计', done: true },
-  { label: 'UI 设计', done: true },
-  { label: '前端开发', done: false },
-  { label: '联调测试', done: false }
+const subTasks = computed(() => [
+  { label: t('tasks.demo.sub1'), done: true },
+  { label: t('tasks.demo.sub2'), done: true },
+  { label: t('tasks.demo.sub3'), done: true },
+  { label: t('tasks.demo.sub4'), done: false },
+  { label: t('tasks.demo.sub5'), done: false }
 ])
 
 const completedSubTasks = computed(() => subTasks.value.filter(t => t.done).length)
@@ -211,7 +214,8 @@ const colors = ref([
   { varName: '--task-green', active: false }
 ])
 
-const timeSlots = ref(['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'])
+// 全天 24 小时时刻轴（0-23 整点），供卡片/周视图与新建编辑选择器共用
+const timeSlots = ref(Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`))
 
 const searchQuery = ref('')
 const showModal = ref(false)
@@ -243,8 +247,8 @@ const cardDays = computed((): CalendarDay[] => {
       date: d.getDate(),
       month: d.getMonth() + 1,
       year: d.getFullYear(),
-      weekday: WEEKDAY_NAMES[d.getDay()],
-      weekdayFull: WEEKDAY_FULL[d.getDay()],
+      weekday: weekdayShort(d.getDay()),
+      weekdayFull: weekdayFull(d.getDay()),
       fullDate: formatDateStr(d),
       isToday,
       isWeekend: d.getDay() === 0 || d.getDay() === 6
@@ -267,8 +271,8 @@ const weekDays = computed((): CalendarDay[] => {
       date: dd.getDate(),
       month: dd.getMonth() + 1,
       year: dd.getFullYear(),
-      weekday: WEEKDAY_NAMES[dd.getDay()],
-      weekdayFull: WEEKDAY_FULL[dd.getDay()],
+      weekday: weekdayShort(dd.getDay()),
+      weekdayFull: weekdayFull(dd.getDay()),
       fullDate: formatDateStr(dd),
       isToday,
       isWeekend: dd.getDay() === 0 || dd.getDay() === 6
@@ -527,19 +531,11 @@ const statusOptions = computed<{ value: 'done' | 'progress' | 'pending'; label: 
   { value: 'done', label: t('tasks.status.done') }
 ])
 
+// 全天 24 小时时段选项（00:00-01:00 … 23:00-24:00），外加全天/待安排哨兵值（展示经 timeSlotLabel 本地化）
 const timeSlotOptions = [
-  '08:00 - 09:00',
-  '09:00 - 10:00',
-  '10:00 - 11:00',
-  '11:00 - 12:00',
-  '12:00 - 13:00',
-  '13:00 - 14:00',
-  '14:00 - 15:00',
-  '15:00 - 16:00',
-  '16:00 - 17:00',
-  '17:00 - 18:00',
-  '全天',
-  '待安排'
+  ...Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00 - ${String((i + 1) % 24).padStart(2, '0')}:00`),
+  ALL_DAY_SLOT,
+  UNPLANNED_SLOT
 ]
 </script>
 

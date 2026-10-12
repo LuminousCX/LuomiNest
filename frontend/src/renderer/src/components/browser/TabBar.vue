@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { X, Globe, Loader2, Moon, Plus } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 interface Tab {
   id: string
@@ -41,7 +44,7 @@ watch(() => props.tabs, (newTabs) => {
 
 function getTabTooltip(tab: Tab): string {
   if (tab.sleeping) {
-    return `${tab.title}\n此标签页已进入休眠状态以节省资源，点击即可唤醒`
+    return `${tab.title}\n${t('browser.tabSleeping')}`
   }
   return tab.title
 }

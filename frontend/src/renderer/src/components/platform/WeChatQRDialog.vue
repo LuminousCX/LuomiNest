@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import {
   QrCode, RefreshCw, CheckCircle2, AlertCircle, Smartphone, Clock,
 } from 'lucide-vue-next'
@@ -9,6 +10,7 @@ import LumiModal from '../../components/common/LumiModal.vue'
 import LumiButton from '../../components/common/LumiButton.vue'
 import { createLuomiNestRendererLogger } from '../../utils/logger'
 
+const { t } = useI18n()
 const logger = createLuomiNestRendererLogger('WeChatQR')
 const store = usePlatformStore()
 
@@ -25,7 +27,7 @@ const emit = defineEmits<{
 const qrData = ref<string>('')
 const qrUuid = ref<string>('')
 const qrStatus = ref<'waiting_scan' | 'scanned' | 'logged_in' | 'expired' | 'loading' | 'error'>('loading')
-const statusMessage = ref<string>('正在获取二维码...')
+const statusMessage = ref<string>(t('platform.wechat.init'))
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const stopPolling = () => {
@@ -39,23 +41,23 @@ const fetchQrCode = async () => {
   if (!props.instance) return
   stopPolling()
   qrStatus.value = 'loading'
-  statusMessage.value = '正在请求微信登录二维码...'
+  statusMessage.value = t('platform.wechat.requesting')
   try {
     const res = await store.getWeChatQrCode(props.instance.id)
     if (res && res.qr_data) {
       qrData.value = res.qr_data
       qrUuid.value = res.uuid || ''
       qrStatus.value = (res.status as any) || 'waiting_scan'
-      statusMessage.value = res.message || '请使用手机微信扫描二维码'
+      statusMessage.value = res.message || t('platform.wechat.scanHint')
       startPolling()
     } else {
       qrStatus.value = 'error'
-      statusMessage.value = res?.message || '获取二维码失败，请检查网关配置'
+      statusMessage.value = res?.message || t('platform.wechat.fetchFail')
     }
   } catch (e) {
     logger.error('Failed to fetch wechat qrcode:', e)
     qrStatus.value = 'error'
-    statusMessage.value = '连接微信网关服务异常，请重试'
+    statusMessage.value = t('platform.wechat.gatewayError')
   }
 }
 
@@ -113,7 +115,7 @@ onUnmounted(() => {
 <template>
   <LumiModal
     :visible="visible"
-    :title="`微信扫码登录 - ${instance?.name || ''}`"
+    :title="`${t('platform.wechat.title')} - ${instance?.name || ''}`"
     size="md"
     @close="closeDialog"
     @update:visible="emit('update:visible', $event)"
@@ -124,8 +126,8 @@ onUnmounted(() => {
           <QrCode :size="24" style="color: #07C160" />
         </div>
         <div class="header-text">
-          <h3>扫码登录个人微信</h3>
-          <p>请使用手机微信扫一扫，扫描下方二维码并在手机端确认登录</p>
+          <h3>{{ t('platform.wechat.headerTitle') }}</h3>
+          <p>{{ t('platform.wechat.headerDesc') }}</p>
         </div>
       </div>
 
@@ -133,7 +135,7 @@ onUnmounted(() => {
       <div class="qr-card">
         <div v-if="qrStatus === 'loading'" class="qr-state-box">
           <RefreshCw :size="32" class="spin-animation" style="color: var(--lumi-primary)" />
-          <span>正在生成专属登录二维码...</span>
+          <span>{{ t('platform.wechat.generating') }}</span>
         </div>
 
         <div v-else-if="qrStatus === 'error'" class="qr-state-box">
@@ -141,28 +143,28 @@ onUnmounted(() => {
           <span>{{ statusMessage }}</span>
           <LumiButton variant="secondary" size="sm" @click="fetchQrCode">
             <RefreshCw :size="14" />
-            重试获取
+            {{ t('platform.wechat.retry') }}
           </LumiButton>
         </div>
 
         <div v-else class="qr-image-wrapper">
-          <img :src="qrData" alt="微信登录二维码" class="qr-image" />
+          <img :src="qrData" :alt="t('platform.wechat.qrAlt')" class="qr-image" />
           <div v-if="qrStatus === 'expired'" class="qr-overlay expired">
             <Clock :size="32" style="color: white" />
-            <span>二维码已失效</span>
+            <span>{{ t('platform.wechat.expired') }}</span>
             <LumiButton variant="primary" size="sm" @click="fetchQrCode">
               <RefreshCw :size="14" />
-              刷新二维码
+              {{ t('platform.wechat.refresh') }}
             </LumiButton>
           </div>
           <div v-else-if="qrStatus === 'scanned'" class="qr-overlay scanned">
             <Smartphone :size="32" style="color: white" />
-            <span>已扫码</span>
-            <small>请在手机微信上点击确认</small>
+            <span>{{ t('platform.wechat.scanned') }}</span>
+            <small>{{ t('platform.wechat.confirmOnPhone') }}</small>
           </div>
           <div v-else-if="qrStatus === 'logged_in'" class="qr-overlay success">
             <CheckCircle2 :size="36" style="color: #07C160" />
-            <span>登录成功！</span>
+            <span>{{ t('platform.wechat.loggedIn') }}</span>
           </div>
         </div>
       </div>
@@ -178,10 +180,10 @@ onUnmounted(() => {
       <div class="qr-actions">
         <LumiButton variant="ghost" size="sm" @click="fetchQrCode" :disabled="qrStatus === 'loading'">
           <RefreshCw :size="14" :class="{ 'spin-animation': qrStatus === 'loading' }" />
-          手动刷新
+          {{ t('platform.wechat.manualRefresh') }}
         </LumiButton>
         <LumiButton variant="secondary" size="sm" @click="closeDialog">
-          关闭
+          {{ t('close') }}
         </LumiButton>
       </div>
     </div>

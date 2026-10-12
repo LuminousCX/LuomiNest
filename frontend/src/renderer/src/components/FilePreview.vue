@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Download } from 'lucide-vue-next'
 import LumiButton from './common/LumiButton.vue'
 import LumiEmptyState from './common/LumiEmptyState.vue'
@@ -16,6 +17,7 @@ const emit = defineEmits<{
   close: []
 }>()
 
+const { t } = useI18n()
 const isImage = computed(() => props.fileType === 'image')
 const isText = computed(() => props.fileType === 'text' || !props.fileType)
 
@@ -62,7 +64,7 @@ const handleDownload = () => {
         <template #icon>
           <Download :size="16" />
         </template>
-        下载
+        {{ t('file.download') }}
       </LumiButton>
     </template>
     <div class="file-preview-body">
@@ -73,13 +75,13 @@ const handleDownload = () => {
         <pre>{{ fileContent }}</pre>
       </div>
       <div v-else class="no-content">
-        <LumiEmptyState icon="file" title="无法预览此文件类型">
+        <LumiEmptyState icon="file" :title="t('file.cannotPreview')">
           <template #action>
             <LumiButton variant="primary" @click="handleDownload">
               <template #icon>
                 <Download :size="16" />
               </template>
-              下载文件
+              {{ t('file.downloadFile') }}
             </LumiButton>
           </template>
         </LumiEmptyState>

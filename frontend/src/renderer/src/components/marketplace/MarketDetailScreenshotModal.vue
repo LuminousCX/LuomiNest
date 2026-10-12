@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { ChevronDown, X } from 'lucide-vue-next'
 import LumiModal from '../common/LumiModal.vue'
 import type { MarketplaceScreenshot } from '../../types/marketplace'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   screenshots: MarketplaceScreenshot[]
@@ -31,7 +34,7 @@ const emit = defineEmits<{
         :alt="screenshots[currentIndex].caption"
       />
       <div v-if="currentIndex !== null" class="modal-caption">
-        {{ screenshots[currentIndex]?.caption || `截图 ${currentIndex + 1}` }}
+        {{ screenshots[currentIndex]?.caption || t('market.detail.screenshotIndex', { n: currentIndex + 1 }) }}
         <span class="modal-counter">{{ currentIndex + 1 }} / {{ screenshots.length }}</span>
       </div>
       <div v-if="currentIndex !== null" class="modal-nav">

@@ -5,7 +5,10 @@
  * 在对话气泡中显示"已创建工作流"字样，可点击跳转到工作流页面。
  * 当 AI 在专业模式下创建工作流计划时，此卡片会出现在助手消息中。
  */
+import { useI18n } from 'vue-i18n'
 import { Workflow, ChevronRight, ListChecks } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 defineProps<{
   /** 工作流会话 ID */
@@ -31,14 +34,14 @@ const emit = defineEmits<{
       <Workflow :size="18" />
     </div>
     <div class="card-body">
-      <div class="card-title">已创建工作流</div>
+      <div class="card-title">{{ t('workflow.created.title') }}</div>
       <div class="card-meta">
         <ListChecks :size="12" />
-        <span>{{ taskCount }} 个子任务</span>
+        <span>{{ t('workflow.created.taskCount', { n: taskCount }) }}</span>
       </div>
     </div>
     <div class="card-action">
-      <span class="action-text">查看流程图</span>
+      <span class="action-text">{{ t('workflow.created.viewFlow') }}</span>
       <ChevronRight :size="14" />
     </div>
   </div>

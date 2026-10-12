@@ -180,6 +180,17 @@ watch(
   { immediate: true }
 )
 
+// W4：task_dispatch 徽标文案（按生命周期阶段取 i18n，任务名留空时仅展示状态）
+const taskDispatchText = (td: NonNullable<ChatMessage['taskDispatch']>): string => {
+  const key =
+    td.phase === 'start'
+      ? 'chat.taskDispatchRunning'
+      : td.phase === 'done'
+        ? 'chat.taskDispatchDone'
+        : 'chat.taskDispatchFailed'
+  return t(key, { task: td.task || '' })
+}
+
 // reasoning 原文 → 思考步骤列表：按行拆分并剥离行首 markdown 修饰
 const reasoningSteps = (msg: ChatMessage): string[] =>
   (msg.reasoningContent || '')
@@ -256,6 +267,17 @@ defineExpose({
             <div class="message-body">
               <div v-if="msg.role === 'assistant'" class="message-sender lumi-chat-message-sender">
                 {{ t('workbench.mainAgent') }}
+              </div>
+              <!-- W4 task_dispatch 轻量状态标记：任务派发生命周期（进行中/完成/失败），不做任务面板 -->
+              <div
+                v-if="msg.role === 'assistant' && msg.taskDispatch"
+                class="task-dispatch-badge"
+                :class="`task-dispatch-badge--${msg.taskDispatch.phase}`"
+              >
+                <Loader2 v-if="msg.taskDispatch.phase === 'start'" :size="12" class="spin-animation" />
+                <CheckCircle2 v-else-if="msg.taskDispatch.phase === 'done'" :size="12" />
+                <XCircle v-else :size="12" />
+                <span>{{ taskDispatchText(msg.taskDispatch) }}</span>
               </div>
               <div
                 v-if="msg.role === 'assistant' && (msg.reasoningContent !== undefined || (!msg.done && msg.id === messages[messages.length - 1].id && !msg.content))"
@@ -1576,6 +1598,24 @@ button:focus-visible {
   font-size: var(--text-sm);
   color: var(--lumi-warning);
   margin-left: var(--space-2);
+}
+
+/* W4 task_dispatch 轻量状态标记（跟随消息组件小字风格） */
+.task-dispatch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: var(--space-1);
+}
+
+.task-dispatch-badge--done {
+  color: var(--lumi-success);
+}
+
+.task-dispatch-badge--error {
+  color: var(--lumi-danger);
 }
 
 .interrupted-only {

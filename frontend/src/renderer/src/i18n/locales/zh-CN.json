@@ -251,5 +251,26 @@
     "market": "扩展 - LuomiNest",
     "marketDetail": "市场详情 - LuomiNest",
     "agentCreate": "创建智能体 - LuomiNest"
+  },
+  "confirm": "确认",
+  "cancel": "取消",
+  "close": "关闭",
+  "search": "搜索...",
+  "minimize": "最小化",
+  "restore": "还原",
+  "maximize": "最大化",
+  "file": {
+    "uploading": "上传中...",
+    "attached": "已附加",
+    "failed": "上传失败",
+    "download": "下载",
+    "downloadFile": "下载文件",
+    "remove": "移除",
+    "cannotPreview": "无法预览此文件类型",
+    "unsupportedType": "不支持的文件类型: {name}",
+    "networkError": "网络错误，请检查后端服务"
+  },
+  "time": {
+    "yesterday": "昨天"
   }
 }

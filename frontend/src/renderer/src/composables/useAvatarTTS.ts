@@ -1,7 +1,7 @@
 import { ref, onBeforeUnmount } from 'vue'
 import { useModelStore } from '../stores/model'
 import { synthesizeTts } from '@/utils/ttsApi'
-import { stripEmotionTags } from '../utils/emotionTagInterceptor'
+import { stripAssistantControlTags } from '../utils/emotionTagInterceptor'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import {
   LUOMINEST_DEFAULT_TTS_VOICE,
@@ -69,7 +69,8 @@ export const useAvatarTTS = (options: AvatarTTSOptions = {}) => {
   }
 
   const speak = async (text: string) => {
-    const cleanedText = stripEmotionTags(text)
+    // 剥离 exp 及 W4 新增四类控制标签残留，防止标签被朗读
+    const cleanedText = stripAssistantControlTags(text)
     if (!cleanedText.trim()) return
 
     stopSpeaking()

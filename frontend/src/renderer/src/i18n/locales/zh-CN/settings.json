@@ -464,6 +464,7 @@
       "personaTitle": "人格与系统提示",
       "nameLabel": "主 Agent 名称",
       "namePlaceholder": "例如：主Agent、小洛、Luomi 等",
+      "defaultName": "主Agent",
       "nameHint": "该名称将直接同步作为各对接平台（Minecraft 实体名称与聊天前缀、QQ、微信、Discord 等）及工作台对话的统一智能体身份名称",
       "systemPrompt": "系统提示词",
       "promptPlaceholder": "主智能体的系统提示词，决定其角色、人格与行为准则。例如：你是主控智能体，负责与用户交互、管理记忆与工具...",
@@ -509,6 +510,29 @@
       "gpuCountSuffix": "（{n} 块 GPU）",
       "hintCuda": "检测到 GPU{gpus}，硬件支持 CUDA 加速。Faster Whisper 可自动使用 GPU (CTranslate2)，本地推理延迟更低。",
       "hintGpuNoCuda": "检测到 GPU{gpus}，硬件支持图形/通用计算。未安装 CUDA 版 PyTorch，本地 STT 当前以 CPU 推理；在线 STT 在云端识别，不受本地设备限制。"
+    },
+    "mcp": {
+      "installed": {
+        "label": "已安装工具",
+        "desc": "查看和管理已安装的 MCP 工具",
+        "action": "查看"
+      },
+      "add": {
+        "label": "添加工具",
+        "desc": "从市场或自定义安装工具",
+        "action": "添加"
+      },
+      "permissions": {
+        "label": "工具权限",
+        "desc": "管理工具的访问权限",
+        "action": "配置"
+      },
+      "logs": {
+        "label": "运行日志",
+        "desc": "查看工具运行日志",
+        "action": "查看"
+      },
+      "devToast": "MCP 工具管理功能正在开发中，敬请期待"
     }
   },
   "aiModel": {
@@ -670,6 +694,7 @@
       "baseUrlLabel": "API 地址",
       "apiKeyLabel": "API Key",
       "apiKeyHint": "Ollama 自动填充，其他供应商需填写真实密钥",
+      "baseUrlHint": "Ollama: http://localhost:11434/v1 | 其他: 含 /v1 后缀",
       "testTitle": "API 连通性检测",
       "testing": "检测中...",
       "testButton": "检测 API / TOKEN",

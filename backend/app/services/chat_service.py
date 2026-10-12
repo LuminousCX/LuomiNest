@@ -977,7 +977,11 @@ class ChatService:
                 conv_scene = conv_meta.get("scene") or ""
                 conv_user_key = conv_meta.get("user_key") or ""
         user_query = self._context.get_user_query(messages)
-        system_prompt = self._context.build_system_prompt(body.agent_id, user_context=user_query)
+        # 生态打通 W2：传 provider/model 供快脑寻址判定（fast_brain 未配置时无差异）
+        system_prompt = self._context.build_system_prompt(
+            body.agent_id, user_context=user_query,
+            provider=resolved_provider, model=resolved_model,
+        )
         messages = [{"role": "system", "content": system_prompt}] + messages
 
         # 用户显式选择的技能注入（无条件注入完整 body，优先于关键词自动匹配）
@@ -1012,6 +1016,15 @@ class ChatService:
         ctx_mgr = get_context_manager(resolved_provider, resolved_model, conv_id=body.conversation_id)
         process_result = await ctx_mgr.process(messages, conv_id=body.conversation_id)
         messages = process_result["messages"]
+
+        # 生态打通 W2：快脑激活时用户消息按四段式注入（分册 10 §18.1 冻结协议；
+        # 压缩后注入，避免注入头被摘要吞掉）。fast_brain 未配置时不发生。
+        if self._context.is_fast_brain_model(resolved_provider, resolved_model):
+            messages = self._context.inject_fast_brain_protocol(
+                messages, body.agent_id,
+                session_mode=self._context.resolve_session_mode(conv_domain, conv_scene),
+                is_owner=not (conv_domain or "").startswith("platform"),
+            )
 
         if body.stream:
             logger.info("[ChatService] POST /chat/completions - Starting stream response")
@@ -1223,7 +1236,11 @@ class ChatService:
             request.top_p = settings.LLM_DEFAULT_TOP_P
 
         user_query = self._context.get_user_query(conv["messages"])
-        system_prompt = self._context.build_system_prompt(conv.get("agent_id"), user_context=user_query)
+        # 生态打通 W2：传 provider/model 供快脑寻址判定（fast_brain 未配置时无差异）
+        system_prompt = self._context.build_system_prompt(
+            conv.get("agent_id"), user_context=user_query,
+            provider=resolved_provider, model=resolved_model,
+        )
         all_messages: list[dict] = [{"role": "system", "content": system_prompt}]
 
         # 用户显式选择的技能注入（无条件注入完整 body，优先于关键词自动匹配）
@@ -1271,6 +1288,15 @@ class ChatService:
         ctx_mgr = get_context_manager(resolved_provider, resolved_model, conv_id=conv_id)
         process_result = await ctx_mgr.process(all_messages, conv_id=conv_id)
         all_messages = process_result["messages"]
+
+        # 生态打通 W2：快脑激活时用户消息按四段式注入（分册 10 §18.1 冻结协议；
+        # 压缩后注入，避免注入头被摘要吞掉）。fast_brain 未配置时不发生。
+        if self._context.is_fast_brain_model(resolved_provider, resolved_model):
+            all_messages = self._context.inject_fast_brain_protocol(
+                all_messages, agent_id,
+                session_mode=self._context.resolve_session_mode(conv_domain, conv_scene),
+                is_owner=not (conv_domain or "").startswith("platform"),
+            )
 
         gen_state: dict = {
             "content": "",

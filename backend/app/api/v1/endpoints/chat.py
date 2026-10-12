@@ -627,3 +627,47 @@ async def resolve_tool_permission(
         )
     logger.info(f"[API] POST /chat/tool-permission/{request_id} -> {body.decision}")
     return ok({"resolved": True, "decision": body.decision})
+
+
+# ─── T2 信任档开关（PermissionGate 总开关；W6 补设置入口，默认 false） ──────
+
+
+class TrustedModeUpdateRequest(BaseModel):
+    enabled: bool
+
+
+@router.get("/permission/trusted-mode")
+async def get_trusted_mode():
+    """查询 T2 信任档当前值（开启后所有工具免确认，CommandValidator 黑名单不受影响）。"""
+    from app.core.agents.middleware.permission import is_trusted_mode
+
+    return ok({"enabled": is_trusted_mode()})
+
+
+@router.patch("/permission/trusted-mode")
+async def update_trusted_mode(body: TrustedModeUpdateRequest):
+    """更新 T2 信任档（内部走 set_trusted_mode：内存镜像先行生效；持久化失败
+    不回滚内存态，set_trusted_mode 内已记 warning 日志——响应额外回读
+    config_items 给出 persisted 实况，前端可据此提示"重启后可能回落"。）"""
+    from app.core.agents.middleware.permission import (
+        TRUSTED_MODE_CONFIG_KEY,
+        is_trusted_mode,
+        set_trusted_mode,
+    )
+
+    await set_trusted_mode(body.enabled)
+    persisted: bool | None = None
+    try:
+        from app.infrastructure.database.config_store import luominest_config_store
+
+        persisted = bool(
+            await luominest_config_store.get_async(TRUSTED_MODE_CONFIG_KEY, False)
+        )
+    except Exception as e:
+        # 回读失败不代表未生效：内存态已先行切换，仅影响本次响应的 persisted 字段
+        logger.warning(f"[API] PATCH trusted_mode 持久化状态回读失败: {e}")
+    logger.info(
+        f"[API] PATCH /chat/permission/trusted-mode -> {body.enabled} "
+        f"(persisted={persisted})"
+    )
+    return ok({"enabled": is_trusted_mode(), "persisted": persisted})

@@ -11,6 +11,20 @@ from loguru import logger
 # 与 avatar_manager.py 的 _EMOTION_TAG_LOOSE_RE 保持一致
 _EMOTION_TAG_RE = re.compile(r"<\s*exp[:=]\s*[a-zA-Z]+\s*/?\s*>")
 
+# 五类合同标签全族（辰汐生态打通 W2，分册 08 §15.3-3：标签绝不进 TTS 朗读文本）
+# exp/act/ui/tool/dispatch 全族在送 TTS 前剥净，含自闭合与非自闭合两种形态；
+# 与 app/core/tags/definitions.ALL_GATEWAY_TAGS_RE 同族（此处独立声明避免 utils→core 反向细节耦合）
+_GATEWAY_TAG_RE = re.compile(
+    r"<\s*/?\s*(?:"
+    r"exp\s*[:=]\s*[a-zA-Z]+"                           # <exp:X/> / <exp:X> / <exp=X>
+    r"|act\s*[:=]\s*[a-zA-Z]+"                          # <act:X/>
+    r"|ui\s*:\s*navigate\b[^>]*"                        # <ui:navigate target="X"/>
+    r"|tool\s*:\s*avatar_(?:motion|expression)\b[^>]*"  # <tool:avatar_* name="X"/>
+    r"|dispatch\b[^>]*"                                 # <dispatch task="X"/>
+    r")\s*/?\s*>",
+    re.IGNORECASE,
+)
+
 # 标题标记
 _HEADING_RE = re.compile(r"^#{1,6}\s+", re.MULTILINE)
 
@@ -72,7 +86,9 @@ def filter_tts_text(text: str) -> str:
     if not text:
         return ""
 
-    # 表情标签 <exp:xxx> → 删除（必须在最前面，防止标签被朗读）
+    # 五类合同标签全族 → 删除（必须在最前面，防止标签被朗读；分册 08 §15.3-3）
+    text = _GATEWAY_TAG_RE.sub("", text)
+    # 表情标签 <exp:xxx> → 删除（兜底，覆盖上面未命中的极端变体）
     text = _EMOTION_TAG_RE.sub("", text)
 
     # 行内代码 → 保留内容

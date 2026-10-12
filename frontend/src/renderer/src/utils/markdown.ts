@@ -1,6 +1,6 @@
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { stripEmotionTags } from './emotionTagInterceptor'
+import { stripAssistantControlTags } from './emotionTagInterceptor'
 
 marked.setOptions({
   breaks: true,
@@ -9,7 +9,8 @@ marked.setOptions({
 
 export const renderMarkdown = (text: string): string => {
   if (!text) return ''
-  const cleaned = stripEmotionTags(text)
+  // 剥离 exp 及 W4 新增四类控制标签残留，保证标签不出现在消息正文
+  const cleaned = stripAssistantControlTags(text)
   const raw = marked.parse(cleaned) as string
   return DOMPurify.sanitize(raw)
 }

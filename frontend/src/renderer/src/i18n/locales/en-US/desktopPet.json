@@ -1,0 +1,9 @@
+{
+  "desktopPet": {
+    "thinkingPlaceholder": "Luomi is thinking…",
+    "inputPlaceholder": "Say something to Luomi…",
+    "send": "Send",
+    "stop": "Stop generating",
+    "close": "Close dialog"
+  }
+}

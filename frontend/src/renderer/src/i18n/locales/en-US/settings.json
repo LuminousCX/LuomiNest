@@ -464,6 +464,7 @@
       "personaTitle": "Persona & System Prompt",
       "nameLabel": "Main Agent Name",
       "namePlaceholder": "e.g., Main Agent, Luomi, etc.",
+      "defaultName": "Main Agent",
       "nameHint": "This name synchronizes across all integrated platforms (Minecraft in-game entity name and chat prefix, QQ, WeChat, Discord, etc.) and workbench conversations",
       "systemPrompt": "System Prompt",
       "promptPlaceholder": "The main agent's system prompt, which determines its role, persona, and code of conduct. Example: You are the main agent, responsible for interacting with users, managing memory and tools...",
@@ -509,6 +510,29 @@
       "gpuCountSuffix": " ({n} GPUs)",
       "hintCuda": "GPU detected{gpus}, CUDA acceleration supported. Faster Whisper can use the GPU (CTranslate2) automatically for lower local latency.",
       "hintGpuNoCuda": "GPU detected{gpus}, graphics/general compute supported. CUDA PyTorch is not installed, so local STT currently runs on CPU; online STT is not limited by local hardware."
+    },
+    "mcp": {
+      "installed": {
+        "label": "Installed Tools",
+        "desc": "View and manage installed MCP tools",
+        "action": "View"
+      },
+      "add": {
+        "label": "Add Tool",
+        "desc": "Install tools from the marketplace or custom sources",
+        "action": "Add"
+      },
+      "permissions": {
+        "label": "Tool Permissions",
+        "desc": "Manage tool access permissions",
+        "action": "Configure"
+      },
+      "logs": {
+        "label": "Run Logs",
+        "desc": "View tool run logs",
+        "action": "View"
+      },
+      "devToast": "MCP tool management is under development, stay tuned"
     }
   },
   "aiModel": {
@@ -670,6 +694,7 @@
       "baseUrlLabel": "API URL",
       "apiKeyLabel": "API Key",
       "apiKeyHint": "Filled automatically for Ollama; other providers require a real key",
+      "baseUrlHint": "Ollama: http://localhost:11434/v1 | Others: must include the /v1 suffix",
       "testTitle": "API Connectivity Test",
       "testing": "Testing...",
       "testButton": "Test API / TOKEN",

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { X } from 'lucide-vue-next'
+
+const { t } = useI18n()
 
 type ModalSize = 'sm' | 'md' | 'lg'
 
@@ -101,7 +104,7 @@ const handleKeydown = (e: KeyboardEvent) => {
               v-if="closable"
               type="button"
               class="lumi-modal__close"
-              aria-label="关闭"
+              :aria-label="t('close')"
               @click="handleClose"
             >
               <X :size="18" />

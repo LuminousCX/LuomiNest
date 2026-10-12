@@ -56,20 +56,20 @@ const platformTip = computed(() => {
 const getFieldLabel = (key: string) => {
   const at = props.instance?.adapterType
   if (at === 'minecraft') {
-    if (key === 'game_port') return '局域网/游戏端口 (game_port)'
-    if (key === 'game_host') return '服务器地址 (game_host)'
-    if (key === 'bot_name') return '伴侣玩家名称 (bot_name)'
-    if (key === 'auto_spawn_bot') return '自动派遣伴侣入服 (auto_spawn_bot)'
-    if (key === 'ws_port') return '模组通信端口 (ws_port)'
-    if (key === 'rcon_password') return 'RCON 密码 (rcon_password)'
+    if (key === 'game_port') return t('platform.field.mcGamePort')
+    if (key === 'game_host') return t('platform.field.mcGameHost')
+    if (key === 'bot_name') return t('platform.field.mcBotName')
+    if (key === 'auto_spawn_bot') return t('platform.field.mcAutoSpawnBot')
+    if (key === 'ws_port') return t('platform.field.mcWsPort')
+    if (key === 'rcon_password') return t('platform.field.mcRconPassword')
   } else if (at === 'qq_onebot') {
-    if (key === 'ws_port') return '反向 WS 监听端口 (ws_port)'
-    if (key === 'access_token') return '通信密钥 (access_token)'
+    if (key === 'ws_port') return t('platform.field.qqWsPort')
+    if (key === 'access_token') return t('platform.field.qqAccessToken')
   } else if (at === 'wechat_personal') {
-    if (key === 'api_url') return 'GeweChat API 地址 (api_url)'
-    if (key === 'token') return 'API Token (token)'
+    if (key === 'api_url') return t('platform.field.wechatApiUrl')
+    if (key === 'token') return t('platform.field.wechatToken')
   } else if (at === 'discord') {
-    if (key === 'bot_token') return 'Discord Bot Token (bot_token)'
+    if (key === 'bot_token') return t('platform.field.discordBotToken')
   }
   return key
 }
@@ -77,24 +77,24 @@ const getFieldLabel = (key: string) => {
 const getFieldTip = (key: string) => {
   const at = props.instance?.adapterType
   if (at === 'minecraft') {
-    if (key === 'game_port') return '单人游戏“对局域网开放”时显示的5位数字端口（如 56587），或多人服务器端口'
-    if (key === 'game_host') return 'Minecraft 服务器地址，单人局域网填 127.0.0.1'
-    if (key === 'bot_name') return '虚拟玩家伴侣进服昵称。留空直接继承设置中设定的【主 Agent】名称'
-    if (key === 'ws_port') return 'Mineflayer 具身伴侣与系统通信的本地 WebSocket 端口，默认 8081'
+    if (key === 'game_port') return t('platform.field.mcGamePortTip')
+    if (key === 'game_host') return t('platform.field.mcGameHostTip')
+    if (key === 'bot_name') return t('platform.field.mcBotNameTip')
+    if (key === 'ws_port') return t('platform.field.mcWsPortTip')
   } else if (at === 'qq_onebot') {
-    if (key === 'ws_port') return 'NapCatQQ 或 OneBot v11 反向 WebSocket 连接的端口，默认 8080'
-    if (key === 'access_token') return '鉴权令牌，需与 NapCat 配置的 access_token 保持一致'
+    if (key === 'ws_port') return t('platform.field.qqWsPortTip')
+    if (key === 'access_token') return t('platform.field.qqAccessTokenTip')
   } else if (at === 'wechat_personal') {
-    if (key === 'api_url') return 'GeweChat (iPad 协议网关) 本地或容器服务的 REST API 地址'
-    if (key === 'token') return 'GeweChat 服务调用 token'
+    if (key === 'api_url') return t('platform.field.wechatApiUrlTip')
+    if (key === 'token') return t('platform.field.wechatTokenTip')
   } else if (at === 'discord') {
-    if (key === 'bot_token') return 'Discord Developer Portal 中生成的 Bot Token。请务必开启 Message Content Intent'
+    if (key === 'bot_token') return t('platform.field.discordBotTokenTip')
   }
   return ''
 }
 
 const getFieldPlaceholder = (key: string) => {
-  if (key === 'bot_name') return '留空继承主 Agent 名称'
+  if (key === 'bot_name') return t('platform.field.phBotName')
   if (key === 'game_port') return '56587'
   return ''
 }
@@ -479,11 +479,6 @@ watch(() => props.instance, async (instance) => {
   color: var(--text-muted);
 }
 
-.main-agent-info {
-  font-size: var(--text-xs);
-  opacity: 0.8;
-}
-
 .vision-tag {
   padding: 1px var(--space-1);
   border-radius: var(--radius-xs);
@@ -532,15 +527,6 @@ watch(() => props.instance, async (instance) => {
   resize: vertical;
   font-family: inherit;
   min-height: 80px;
-}
-
-.config-field-row {
-  display: flex;
-  gap: var(--space-3);
-}
-
-.config-field-row .config-field {
-  flex: 1;
 }
 
 .reset-btn {

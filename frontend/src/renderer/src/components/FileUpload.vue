@@ -24,8 +24,9 @@ defineExpose({ triggerFileSelect, clearUploadState })
 
 <template>
   <div class="upload-container">
+    <!-- 上传中/失败保留状态卡；成功后改由 PromptBar 输入卡的附件 chip 展示，避免重复 -->
     <FileCard
-      v-if="uploadingFile"
+      v-if="uploadingFile && uploadingFile.status !== 'success'"
       :name="uploadingFile.name"
       :size="0"
       :status="uploadingFile.status"

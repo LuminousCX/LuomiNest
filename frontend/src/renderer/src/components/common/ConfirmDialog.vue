@@ -3,6 +3,7 @@
  * 统一确认弹窗：LumiModal 封装，覆盖"标题 + 一句话 + 取消/确定"场景。
  * danger 时确认按钮为危险色并带警示图标；loading 时按钮禁用并转圈。
  */
+import { useI18n } from 'vue-i18n'
 import { AlertCircle } from 'lucide-vue-next'
 import LumiModal from './LumiModal.vue'
 import LumiButton from './LumiButton.vue'
@@ -20,10 +21,10 @@ interface Props {
 withDefaults(defineProps<Props>(), {
   title: '',
   danger: false,
-  confirmText: '确定',
-  cancelText: '取消',
   loading: false,
 })
+
+const { t } = useI18n()
 
 const emit = defineEmits<{
   confirm: []
@@ -51,7 +52,7 @@ const handleCancel = () => {
     </div>
     <template #footer>
       <LumiButton size="sm" :disabled="loading" @click="handleCancel">
-        {{ cancelText }}
+        {{ cancelText ?? t('cancel') }}
       </LumiButton>
       <LumiButton
         :variant="danger ? 'danger' : 'primary'"
@@ -59,7 +60,7 @@ const handleCancel = () => {
         :loading="loading"
         @click="emit('confirm')"
       >
-        {{ confirmText }}
+        {{ confirmText ?? t('confirm') }}
       </LumiButton>
     </template>
   </LumiModal>

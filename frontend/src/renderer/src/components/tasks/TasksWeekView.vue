@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { CheckCircle2, Circle, Trash2 } from 'lucide-vue-next'
 import type { CalendarDay, LuomiNestTask } from './types'
-import { getTaskTopPosition } from './types'
+import { getTaskTopPosition, timeSlotLabel } from './types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   weekDays: CalendarDay[]
@@ -17,7 +20,8 @@ const emit = defineEmits<{
 }>()
 
 const openCreateForSlot = (day: CalendarDay, slot: string) => {
-  const nextSlot = props.timeSlots[props.timeSlots.indexOf(slot) + 1]
+  // 末档（23:00）无下一整点，时段记为 23:00 - 00:00
+  const nextSlot = props.timeSlots[props.timeSlots.indexOf(slot) + 1] ?? '00:00'
   emit('createTask', day.fullDate, `${slot} - ${nextSlot}`)
 }
 </script>
@@ -35,7 +39,7 @@ const openCreateForSlot = (day: CalendarDay, slot: string) => {
         <div class="week-day-weekday">{{ day.weekdayFull }}</div>
         <div class="week-day-date" :class="{ 'today-dot': day.isToday }">{{ day.date }}</div>
         <div class="week-day-count" v-if="tasksForDate(day.fullDate).length > 0">
-          {{ tasksForDate(day.fullDate).length }} 项
+          {{ t('tasks.week.itemCount', { n: tasksForDate(day.fullDate).length }) }}
         </div>
       </div>
     </div>
@@ -79,7 +83,7 @@ const openCreateForSlot = (day: CalendarDay, slot: string) => {
               <div class="week-task-accent"></div>
               <div class="week-task-content">
                 <span class="week-task-title">{{ task.title }}</span>
-                <span class="week-task-time">{{ task.timeSlot }}</span>
+                <span class="week-task-time">{{ timeSlotLabel(task.timeSlot) }}</span>
               </div>
               <div class="week-task-actions">
                 <button class="week-task-action" @click.stop="emit('toggleStatus', task)">

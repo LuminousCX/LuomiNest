@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import {
   Heart,
   Volume2,
@@ -10,6 +11,8 @@ import {
 import LumiButton from '../common/LumiButton.vue'
 import LumiCard from '../common/LumiCard.vue'
 import type { AvatarEmotion, AvatarMode, AvatarMotion, IdleAnimation } from './types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   currentMode: string
@@ -51,7 +54,7 @@ const emit = defineEmits<{
           :key="mode.id"
           :class="['mode-btn', { active: props.currentMode === mode.id, disabled: !mode.implemented }]"
           :disabled="!mode.implemented"
-          :title="!mode.implemented ? `${mode.label} 渲染器开发中，敬请期待` : mode.desc"
+          :title="!mode.implemented ? t('avatar.controls.rendererPending', { label: mode.label }) : mode.desc"
           @click="mode.implemented && emit('select-mode', mode.id)"
         >
           <span class="mode-name">{{ mode.label }}</span>
@@ -128,7 +131,7 @@ const emit = defineEmits<{
           <span>Expression</span>
           <span v-if="props.emotions.length" class="panel-count">{{ props.emotions.length }}</span>
         </div>
-        <div v-if="!props.emotions.length" class="empty-hint">该模型无可用表情</div>
+        <div v-if="!props.emotions.length" class="empty-hint">{{ t('avatar.controls.noEmotions') }}</div>
         <div v-else class="emotion-grid">
           <button
             v-for="emo in props.emotions"
@@ -149,7 +152,7 @@ const emit = defineEmits<{
           <span>Motion</span>
           <span v-if="props.motions.length" class="panel-count">{{ props.motions.length }}</span>
         </div>
-        <div v-if="!props.motions.length" class="empty-hint">该模型无可用动作</div>
+        <div v-if="!props.motions.length" class="empty-hint">{{ t('avatar.controls.noMotions') }}</div>
         <div v-else class="motion-grid">
           <button
             v-for="motion in props.motions"
@@ -334,39 +337,6 @@ const emit = defineEmits<{
   cursor: not-allowed;
 }
 
-.tts-inline .chat-send-btn {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all var(--duration-normal) var(--ease-in-out);
-}
-
-.tts-inline .chat-send-btn:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px var(--lumi-primary-border);
-}
-
-.tts-inline .chat-send-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.tts-inline .chat-send-btn.streaming {
-  background: var(--lumi-accent);
-}
-
-.tts-inline .chat-send-btn.streaming:hover:not(:disabled) {
-  background: var(--lumi-danger-hover);
-}
-
 .tts-emotion-tag {
   margin-left: auto;
   font-size: var(--text-2xs);
@@ -410,47 +380,6 @@ const emit = defineEmits<{
   cursor: not-allowed;
 }
 
-.tts-inline .tts-send-btn {
-  width: var(--space-7);
-  height: var(--space-7);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--lumi-primary);
-  color: var(--text-inverse);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all var(--duration-normal) var(--ease-in-out);
-}
-
-.tts-inline .tts-send-btn:hover:not(:disabled) {
-  background: var(--lumi-primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px var(--lumi-primary-border);
-}
-
-.tts-inline .tts-send-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.tts-inline .tts-send-btn.speaking {
-  background: var(--lumi-accent);
-}
-
-.tts-inline .tts-send-btn.speaking:hover:not(:disabled) {
-  background: var(--lumi-danger-hover);
-}
-
-.tts-inline .tts-send-btn.loading {
-  background: var(--lumi-primary-soft);
-}
-
-.tts-loading-spin {
-  animation: spin 1s linear infinite;
-}
-
 .tts-status-row {
   display: flex;
   align-items: center;
@@ -470,12 +399,6 @@ const emit = defineEmits<{
 
 .tts-status-text.synthesizing {
   color: var(--lumi-amber-dark);
-}
-
-.tts-inline .tts-error {
-  font-size: var(--text-2xs);
-  color: var(--lumi-accent);
-  padding: 0 2px;
 }
 
 .panel-title {

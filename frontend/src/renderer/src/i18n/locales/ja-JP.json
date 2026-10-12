@@ -251,5 +251,26 @@
     "market": "拡張マーケット - LuomiNest",
     "marketDetail": "マーケット詳細 - LuomiNest",
     "agentCreate": "エージェント作成 - LuomiNest"
+  },
+  "confirm": "確認",
+  "cancel": "キャンセル",
+  "close": "閉じる",
+  "search": "検索...",
+  "minimize": "最小化",
+  "restore": "元に戻す",
+  "maximize": "最大化",
+  "file": {
+    "uploading": "アップロード中...",
+    "attached": "添付済み",
+    "failed": "アップロード失敗",
+    "download": "ダウンロード",
+    "downloadFile": "ファイルをダウンロード",
+    "remove": "削除",
+    "cannotPreview": "このファイル形式はプレビューできません",
+    "unsupportedType": "サポートされていないファイル形式: {name}",
+    "networkError": "ネットワークエラーです。バックエンドサービスをご確認ください"
+  },
+  "time": {
+    "yesterday": "昨日"
   }
 }

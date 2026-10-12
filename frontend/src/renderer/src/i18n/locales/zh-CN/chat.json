@@ -148,6 +148,16 @@
       "loading": "加载中...",
       "sendFailed": "消息发送失败",
       "panelNote": "通过用户 ID 邀请好友加入云端群"
+    },
+    "presetAvatar": {
+      "pa1": "编程助手",
+      "pa2": "信息研究员",
+      "pa3": "灵感助手",
+      "pa4": "任务规划师",
+      "pa5": "心理专家",
+      "pa6": "信息搜集员",
+      "pa7": "学习帮手",
+      "pa8": "日常助手"
     }
   },
   "workbench": {
@@ -232,7 +242,8 @@
       "normalLabel": "普通",
       "stop": "停止生成",
       "send": "发送"
-    }
+    },
+    "noSummary": "暂无摘要"
   },
   "agentCreate": {
     "stepTitle1": "身份设置",
@@ -295,9 +306,68 @@
       "skillCount": "{n} 项",
       "enabledSkills": "已启用技能",
       "noSkills": "暂无启用技能"
+    },
+    "skillItems": {
+      "skill-search": {
+        "name": "技能查找器",
+        "desc": "通过关键词搜索内置目录库，快速定位所需能力模块"
+      },
+      "skill-builder": {
+        "name": "技能创建器",
+        "desc": "创建、修改、评估和优化智能体技能，支持结构化的 SKILL.md 编写"
+      },
+      "self-learning": {
+        "name": "智能体自我学习",
+        "desc": "将学习成果、错误和反思记录到每日日志中，持续提升推理与决策能力"
+      },
+      "mcp-tools": {
+        "name": "MCP 工具 (CLI)",
+        "desc": "通过 accio-mcp-cli 命令行发现和调用 MCP 工具（Notion、Square、Apify 等）"
+      },
+      "powerpoint": {
+        "name": "PowerPoint",
+        "desc": "为供应商评审、数据汇总和战略提案生成 PowerPoint 演示文稿"
+      },
+      "pdf": {
+        "name": "PDF",
+        "desc": "生成或解析 PDF 文档，从合同中提取关键条款及商业合规分析"
+      },
+      "word": {
+        "name": "Word 文档",
+        "desc": "创建和编辑 Word 文档，包括询价函（RFQ）、SOP 及合同模板"
+      },
+      "xlsx": {
+        "name": "Excel 表格",
+        "desc": "创建、编辑、分析和可视化 Excel 电子表格，支持公式与图表"
+      }
     }
   },
   "chat": {
+    "effort": {
+      "title": "响应档位",
+      "fast": "快速响应",
+      "balanced": "均衡",
+      "max": "深度推理",
+      "hint": "档位越高，回答前的思考越深入"
+    },
+    "promptBar": {
+      "menuAttachments": "附件与来源",
+      "addAttachment": "添加附件与来源",
+      "chooseModel": "选择模型",
+      "chooseEffort": "选择响应档位",
+      "send": "发送",
+      "stop": "停止",
+      "inputLabel": "输入消息",
+      "removeFile": "移除 {name}",
+      "comingSoon": "「{name}」即将支持",
+      "modelSettings": "在设置中管理模型"
+    },
+    "attach": {
+      "upload": "上传图片与文件",
+      "uploadDesc": "从本机选择图片或文档",
+      "webSearch": "网络搜索",
+      "webSearchDesc": "实时联网检索"
+    },
     "newConversation": "新对话",
     "waitingModel": "等待模型中...",
     "thinking": "思考中...",
@@ -374,6 +444,14 @@
       "deny": "拒绝",
       "fullNote": "「完全访问」后命令不再逐条询问（可随时在设置中改回）；rm -rf、读取密钥文件等危险命令在任何模式下都会被硬防线拦截。",
       "resolveFailed": "确认发送失败，请重试"
+    },
+    "taskDispatchRunning": "已派发任务 {task}（进行中）",
+    "taskDispatchDone": "任务 {task} 已完成",
+    "taskDispatchFailed": "任务 {task} 失败",
+    "workflowCard": {
+      "title": "已创建工作流",
+      "subtasks": "{n} 个子任务",
+      "viewFlow": "查看流程图"
     }
   }
 }

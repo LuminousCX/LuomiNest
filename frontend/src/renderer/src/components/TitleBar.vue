@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { Minus, Square, X, Minimize2 } from 'lucide-vue-next'
 import LumiBrandStar from './common/LumiBrandStar.vue'
 
+const { t } = useI18n()
 const isMaximized = ref(false)
 const appVersion = ref('')
 // macOS 原生红绿灯（traffic lights）绘制在 web 内容之上，占左侧约 76px；
@@ -53,14 +55,14 @@ onUnmounted(() => window.removeEventListener('resize', checkMaximized))
       </div>
     </div>
     <div class="win-controls">
-      <button class="ctrl-btn minimize" aria-label="最小化" @click="handleMinimize">
+      <button class="ctrl-btn minimize" :aria-label="t('minimize')" @click="handleMinimize">
         <Minus :size="13" />
       </button>
-      <button class="ctrl-btn maximize" :aria-label="isMaximized ? '还原' : '最大化'" @click="handleMaximize">
+      <button class="ctrl-btn maximize" :aria-label="isMaximized ? t('restore') : t('maximize')" @click="handleMaximize">
         <Square v-if="!isMaximized" :size="11" />
         <Minimize2 v-else :size="13" />
       </button>
-      <button class="ctrl-btn close" aria-label="关闭" @click="handleClose">
+      <button class="ctrl-btn close" :aria-label="t('close')" @click="handleClose">
         <X :size="13" />
       </button>
     </div>

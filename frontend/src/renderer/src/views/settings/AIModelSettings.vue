@@ -7,6 +7,7 @@ import {
   Cpu,
   Zap,
   Atom,
+  Brain,
   Plus,
   Settings2,
   Volume2,
@@ -15,6 +16,7 @@ import {
 import { useModelStore } from '../../stores/model'
 import AiModelMainConfig from '../../components/ai-model-settings/AiModelMainConfig.vue'
 import AiModelReasonerConfig from '../../components/ai-model-settings/AiModelReasonerConfig.vue'
+import AiModelDualBrainConfig from '../../components/ai-model-settings/AiModelDualBrainConfig.vue'
 import AiModelAddProviderDialog from '../../components/ai-model-settings/AiModelAddProviderDialog.vue'
 import AiModelEditProviderDialog from '../../components/ai-model-settings/AiModelEditProviderDialog.vue'
 import AiModelContextConfig from '../../components/ai-model-settings/AiModelContextConfig.vue'
@@ -35,6 +37,7 @@ const activeTile = ref(props.initialTile || (route.meta?.initialTile as string) 
 const modelTiles = computed(() => [
   { id: 'main', label: t('aiModel.tiles.main.label'), icon: Zap, tag: t('aiModel.tiles.main.tag') },
   { id: 'reasoner', label: t('aiModel.tiles.reasoner.label'), icon: Atom, tag: t('aiModel.tiles.reasoner.tag') },
+  { id: 'dualbrain', label: t('aiModel.tiles.dualbrain.label'), icon: Brain, tag: t('aiModel.tiles.dualbrain.tag') },
   { id: 'context', label: t('aiModel.tiles.context.label'), icon: Settings2, tag: t('aiModel.tiles.context.tag') },
   { id: 'tts', label: t('aiModel.tiles.tts.label'), icon: Volume2, tag: t('aiModel.tiles.tts.tag') },
   { id: 'stt', label: t('aiModel.tiles.stt.label'), icon: Mic, tag: t('aiModel.tiles.stt.tag') },
@@ -45,7 +48,7 @@ const showEditDialog = ref(false)
 const editingProviderId = ref('')
 
 const showProviderActions = computed(() => {
-  return ['main', 'reasoner', 'context'].includes(activeTile.value)
+  return ['main', 'reasoner', 'dualbrain', 'context'].includes(activeTile.value)
 })
 
 const openAddDialog = () => {
@@ -115,6 +118,9 @@ onMounted(async () => {
         />
         <AiModelReasonerConfig
           v-if="activeTile === 'reasoner'"
+        />
+        <AiModelDualBrainConfig
+          v-if="activeTile === 'dualbrain'"
         />
         <AiModelContextConfig
           v-if="activeTile === 'context'"

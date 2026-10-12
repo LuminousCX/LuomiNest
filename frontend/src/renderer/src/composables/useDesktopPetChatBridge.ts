@@ -28,6 +28,7 @@ import { useAgentStore } from '../stores/agent'
 import type { ChatStreamChunk } from '../types'
 import { createLuomiNestRendererLogger } from '../utils/logger'
 import { createCodeBlockFilter } from '../utils/ttsTextFilter'
+import { resolveAvatarToolDrive } from '../utils/emotionTagInterceptor'
 import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('DesktopPetChatBridge')
@@ -78,6 +79,20 @@ export const useDesktopPetChatBridge = (): void => {
       driveEmotion: (emotionId: string) => {
         const resolved = resolveExpressionByModelUrl(modelUrl, emotionId)
         avatarControl.triggerExpression(resolved)
+      },
+      // W4 统一标签消费：桌宠模式下动作/皮套工具路由到桌宠 IPC
+      // （白名单校验与载荷规整已在上游 consumeChunkDirectives 完成）
+      driveAction: (action: string) => {
+        avatarControl.triggerMotion(action, 0)
+      },
+      driveAvatarTool: (tool: { name: string; args: Record<string, string> }) => {
+        const drive = resolveAvatarToolDrive(tool)
+        if (!drive) return
+        if (drive.kind === 'motion') {
+          avatarControl.triggerMotion(drive.target, drive.index)
+        } else {
+          avatarControl.triggerExpression(drive.target)
+        }
       },
       syncLipParam: (value: number) => {
         avatarControl.driveLipSync(value)

@@ -464,6 +464,7 @@
       "personaTitle": "人格とシステムプロンプト",
       "nameLabel": "メイン Agent 名",
       "namePlaceholder": "例: メインAgent、ルオミなど",
+      "defaultName": "メイン Agent",
       "nameHint": "この名称は連携プラットフォーム（Minecraft 内のエンティティ名およびチャットプレフィックス、QQ、WeChat、Discord など）およびワークベンチで統一されたエージェント名として同期されます",
       "systemPrompt": "システムプロンプト",
       "promptPlaceholder": "メインエージェントのシステムプロンプト。その役割・人格・行動規範を決定します。例：あなたはメインエージェントであり、ユーザーとの対话、記憶とツールの管理を担当します...",
@@ -509,6 +510,29 @@
       "gpuCountSuffix": "（GPU {n} 基）",
       "hintCuda": "GPU を検出{gpus}。CUDA アクセラレーション対応。Faster Whisper は GPU（CTranslate2）を自動利用でき、ローカル推論の遅延が低くなります。",
       "hintGpuNoCuda": "GPU を検出{gpus}。グラフィック／汎用計算に対応。CUDA 版 PyTorch が未インストールのため、ローカル STT は現在 CPU で推論します。オンライン STT はクラウドで認識するため、ローカルの制限を受けません。"
+    },
+    "mcp": {
+      "installed": {
+        "label": "インストール済みツール",
+        "desc": "インストール済みの MCP ツールを表示・管理",
+        "action": "表示"
+      },
+      "add": {
+        "label": "ツールを追加",
+        "desc": "マーケットまたはカスタムからツールをインストール",
+        "action": "追加"
+      },
+      "permissions": {
+        "label": "ツール権限",
+        "desc": "ツールのアクセス権限を管理",
+        "action": "設定"
+      },
+      "logs": {
+        "label": "実行ログ",
+        "desc": "ツールの実行ログを表示",
+        "action": "表示"
+      },
+      "devToast": "MCP ツール管理は開発中です。お楽しみに"
     }
   },
   "aiModel": {
@@ -670,6 +694,7 @@
       "baseUrlLabel": "API アドレス",
       "apiKeyLabel": "API Key",
       "apiKeyHint": "Ollama は自動入力されます。その他のプロバイダーは実際のキーが必要です",
+      "baseUrlHint": "Ollama: http://localhost:11434/v1 | その他: 末尾に /v1 を付けてください",
       "testTitle": "API 接続テスト",
       "testing": "テスト中...",
       "testButton": "API / TOKEN をテスト",

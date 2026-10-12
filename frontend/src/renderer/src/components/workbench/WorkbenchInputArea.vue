@@ -1,15 +1,12 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { computed, ref } from 'vue'
-import {
-  Send,
-  Square,
-  Wand2,
-} from 'lucide-vue-next'
+import { Wand2, Globe } from 'lucide-vue-next'
 import LumiButton from '../common/LumiButton.vue'
+import PromptBar from '../common/PromptBar.vue'
+import type { PromptBarMenuItem } from '../common/prompt-bar'
 import SkillsPicker from '../common/SkillsPicker.vue'
-import { useAutoResizeTextarea } from '../../composables/useAutoResizeTextarea'
-import { useModelStore } from '../../stores/model'
+import { useChatPromptPrefs } from '../../composables/useChatPromptPrefs'
 import type { ProviderLogo } from '../../types'
 import type { ChatModeLevel, WorkflowModeOption } from './types'
 
@@ -36,8 +33,8 @@ const emit = defineEmits<{
   'update:selectedSkillIds': [ids: string[]]
 }>()
 
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const { autoResize, resetTextareaHeight } = useAutoResizeTextarea(textareaRef)
+// PromptBar 自管 textarea 高度；保留旧接口供 useWorkbenchMessages 的 resetTextareaHeight 调用
+const promptBarRef = ref<InstanceType<typeof PromptBar> | null>(null)
 
 const inputTextModel = computed<string>({
   get: () => props.inputText,
@@ -46,15 +43,14 @@ const inputTextModel = computed<string>({
 
 const isWorkflowMode = computed(() => props.chatMode !== 'normal')
 
-// 徽章展示模型：普通模式 = 全局主模型（快速响应）；专业模式 = 推理模型
-// （未配置推理模型时 store 会回退主模型，与后端按轮路由行为一致）
-const modelStore = useModelStore()
-const badgeModel = computed(() => {
-  if (isWorkflowMode.value) {
-    return modelStore.resolveReasonerModel?.model || props.currentModel
-  }
-  return props.currentModel
-})
+// 模型菜单 + 响应档位（共享偏好：localStorage 落地，见 useChatPromptPrefs 的交接说明）
+const { modelOptions, selectedModelKey, effortKey } = useChatPromptPrefs()
+
+// 加号附件菜单：工作台无上传链路（canSend/发送均不含附件），两项目前均为占位
+const attachMenuItems = computed<PromptBarMenuItem[]>(() => [
+  { key: 'upload', name: t('chat.attach.upload'), description: t('chat.attach.uploadDesc'), disabled: true },
+  { key: 'web-search', icon: Globe, name: t('chat.attach.webSearch'), description: t('chat.attach.webSearchDesc'), disabled: true },
+])
 
 const selectMode = (value: ChatModeLevel) => {
   emit('select-chat-mode', value)
@@ -69,44 +65,40 @@ const toggleWorkflowMode = () => {
 }
 
 defineExpose({
-  resetTextareaHeight,
-  autoResize,
+  resetTextareaHeight: () => {},
+  autoResize: () => {},
+  focus: () => promptBarRef.value?.focus(),
 })
 </script>
 
 <template>
   <div class="input-area">
-    <div class="input-wrapper lumi-card">
-      <SkillsPicker
-        :selected-ids="selectedSkillIds"
-        class="input-skills-picker"
-        @update:selected-ids="emit('update:selectedSkillIds', $event)"
-      />
-      <textarea
-        ref="textareaRef"
+    <div class="input-wrapper">
+      <PromptBar
+        ref="promptBarRef"
         v-model="inputTextModel"
         :placeholder="t('workbench.input.placeholder')"
-        rows="1"
-        class="chat-input"
         :disabled="!isBackendReady"
-        @keydown.enter.exact.prevent="emit('send')"
-        @input="autoResize"
-      ></textarea>
-      <div class="input-toolbar">
-        <div class="toolbar-left lumi-row-2">
-          <!-- 2026-08 全局模型统一：工作台不提供模型切换，展示全局主模型；
-               点击徽章跳转到 设置 → 模型设置 -->
-          <div
-            class="model-badge"
-            :title="t('workbench.input.globalModelTitle')"
-            @click="emit('go-settings')"
-          >
-            <span v-if="currentProviderLogo.svgIcon" class="provider-icon-mini provider-svg-mini" v-html="currentProviderLogo.svgIcon"></span>
-            <span v-else class="provider-icon-mini" :style="{ background: currentProviderLogo.color }">
-              {{ currentProviderLogo.initials }}
-            </span>
-            <span class="model-btn-text">{{ badgeModel }}</span>
-          </div>
+        :busy="isStreaming"
+        :can-send="canSend"
+        :models="modelOptions"
+        :model-key="selectedModelKey"
+        v-model:effort="effortKey"
+        :menu-items="attachMenuItems"
+        show-model-settings
+        @update:model="selectedModelKey = $event"
+        @send="emit('send')"
+        @stop="emit('cancel')"
+        @model-settings="emit('go-settings')"
+      >
+        <template #top>
+          <SkillsPicker
+            :selected-ids="selectedSkillIds"
+            class="input-skills-picker"
+            @update:selected-ids="emit('update:selectedSkillIds', $event)"
+          />
+        </template>
+        <template #tools>
           <LumiButton
             :class="['workflow-toggle', { active: isWorkflowMode }]"
             variant="secondary"
@@ -132,37 +124,8 @@ defineExpose({
               {{ opt.label }}
             </LumiButton>
           </div>
-        </div>
-        <div class="toolbar-right lumi-row-2">
-          <LumiButton
-            v-if="isStreaming"
-            variant="danger"
-            size="md"
-            icon-only
-            :aria-label="t('workbench.input.stop')"
-            class="send-btn stop"
-            @click="emit('cancel')"
-          >
-            <template #icon>
-              <Square :size="16" />
-            </template>
-          </LumiButton>
-          <LumiButton
-            v-else
-            variant="primary"
-            size="md"
-            icon-only
-            :aria-label="t('workbench.input.send')"
-            class="send-btn"
-            :disabled="!canSend"
-            @click="emit('send')"
-          >
-            <template #icon>
-              <Send :size="17" />
-            </template>
-          </LumiButton>
-        </div>
-      </div>
+        </template>
+      </PromptBar>
     </div>
   </div>
 </template>
@@ -182,53 +145,10 @@ button:focus-visible {
 .input-wrapper {
   max-width: 820px;
   margin: 0 auto;
-  padding: var(--space-3);
-  border: 1px solid var(--border-light);
-  transition: border-color var(--transition-fast);
 }
 
 .input-skills-picker {
-  margin-bottom: var(--space-2);
   min-height: 0;
-}
-
-.input-skills-picker:empty {
-  display: none;
-}
-
-.input-wrapper:focus-within {
-  border-color: var(--lumi-primary);
-  box-shadow: 0 0 0 3px var(--lumi-primary-glow);
-}
-
-.chat-input {
-  width: 100%;
-  border: none;
-  outline: none;
-  background: transparent;
-  resize: none;
-  font-size: var(--text-md);
-  line-height: var(--leading-relaxed);
-  color: var(--text-primary);
-  font-family: inherit;
-  min-height: var(--space-6);
-  max-height: 120px;
-}
-
-.chat-input::placeholder {
-  color: var(--text-muted);
-}
-
-.chat-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.input-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: var(--space-2);
 }
 
 .workflow-toggle {
@@ -282,59 +202,5 @@ button:focus-visible {
 .mode-chip.active {
   color: var(--lumi-success);
   background: var(--lumi-success-light);
-}
-
-.model-btn-text {
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 2026-08 全局模型统一：工作台只读徽章展示全局主模型，点击跳转设置页 */
-.model-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full);
-  background: var(--surface-hover);
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  cursor: pointer;
-  user-select: none;
-  max-width: 220px;
-  transition: background var(--transition-fast) ease-in-out, color var(--transition-fast) ease-in-out;
-}
-
-.model-badge:hover {
-  background: var(--surface-active);
-  color: var(--text-primary);
-}
-
-.provider-icon-mini {
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-2xs);
-  font-weight: 700;
-  color: var(--text-inverse);
-  flex-shrink: 0;
-}
-
-.provider-svg-mini {
-  background: transparent !important;
-}
-
-.provider-svg-mini :deep(svg) {
-  width: var(--space-4);
-  height: var(--space-4);
-}
-
-.send-btn.lumi-btn {
-  width: 34px;
-  height: 34px;
 }
 </style>

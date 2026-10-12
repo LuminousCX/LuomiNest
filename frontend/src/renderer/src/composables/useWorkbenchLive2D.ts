@@ -21,6 +21,7 @@ import { useToast } from './useToast'
 import { getProviderLogo } from '../config/provider-logos'
 import { LUOMINEST_BUILTIN_MODELS, getAvatarBinding, resolveExpressionByModelUrl } from '../config/luominest-models'
 import { createCodeBlockFilter } from '../utils/ttsTextFilter'
+import { resolveAvatarToolDrive } from '../utils/emotionTagInterceptor'
 
 export interface UseWorkbenchLive2DOptions {
   isDesktopMode: ComputedRef<boolean>
@@ -45,6 +46,8 @@ export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
     error: loadError,
     loadModel,
     driveEmotion,
+    triggerMotion,
+    triggerExpression,
     syncLipParam,
     destroy: teardownLive2D,
   } = useLuomiNestLive2D(canvasRef)
@@ -82,6 +85,31 @@ export const useWorkbenchLive2D = (options: UseWorkbenchLive2DOptions) => {
           avatarControl.triggerExpression(resolved)
         } else {
           driveEmotion(emotionId)
+        }
+      },
+      // W4 统一标签消费：action 动作 → motion group（白名单已在上游校验，
+      // 模型缺失该 group 时由渲染层安全忽略）；motion 与表情不冲突，可并行
+      driveAction: (action: string) => {
+        if (isDesktopMode.value) {
+          avatarControl.triggerMotion(action, 0)
+        } else {
+          triggerMotion(action, 0)
+        }
+      },
+      // W4 统一标签消费：皮套工具（avatar_motion/avatar_expression）
+      driveAvatarTool: (tool: { name: string; args: Record<string, string> }) => {
+        const drive = resolveAvatarToolDrive(tool)
+        if (!drive) return
+        if (isDesktopMode.value) {
+          if (drive.kind === 'motion') {
+            avatarControl.triggerMotion(drive.target, drive.index)
+          } else {
+            avatarControl.triggerExpression(drive.target)
+          }
+        } else if (drive.kind === 'motion') {
+          triggerMotion(drive.target, drive.index)
+        } else {
+          triggerExpression(drive.target)
         }
       },
       syncLipParam: (value: number) => {

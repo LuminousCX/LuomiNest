@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import {
   Plus,
   MoreHorizontal,
@@ -9,7 +10,9 @@ import {
   Square
 } from 'lucide-vue-next'
 import type { CalendarDay, LuomiNestTask } from './types'
-import { statusLabel, priorityLabel } from './types'
+import { statusLabel, priorityLabel, timeSlotLabel } from './types'
+
+const { t } = useI18n()
 
 const props = defineProps<{
   cardDays: CalendarDay[]
@@ -45,7 +48,7 @@ const emit = defineEmits<{
 
     <div class="calendar-body">
       <div class="time-axis">
-        <div v-for="(slot, idx) in timeSlots.slice(2, 7)" :key="idx" class="time-slot-label">
+        <div v-for="slot in timeSlots.filter((_, i) => i % 2 === 0)" :key="slot" class="time-slot-label">
           {{ slot }}
         </div>
       </div>
@@ -76,7 +79,7 @@ const emit = defineEmits<{
               </div>
 
               <h3 class="card-title">{{ task.title }}</h3>
-              <p class="card-time">{{ task.timeSlot }}</p>
+              <p class="card-time">{{ timeSlotLabel(task.timeSlot) }}</p>
 
               <div v-if="task.status === 'progress'" class="progress-mini">
                 <div class="progress-bar-mini">
@@ -96,7 +99,7 @@ const emit = defineEmits<{
               </div>
 
               <div v-if="task.status === 'done'" class="completion-info">
-                <span>完成度 {{ completedSubTasks }}/{{ subTasks.length }}</span>
+                <span>{{ t('tasks.card.completion', { done: completedSubTasks, total: subTasks.length }) }}</span>
                 <div class="completion-bar">
                   <div class="completion-fill" :style="{ width: `${(completedSubTasks / subTasks.length) * 100}%` }"></div>
                 </div>
@@ -124,8 +127,8 @@ const emit = defineEmits<{
               </div>
 
               <div class="card-actions">
-                <button class="action-chip" title="编辑" @click.stop="emit('editTask', task)"><Edit3 :size="11" /></button>
-                <button class="action-chip danger" title="删除" @click.stop="emit('deleteTask', task.id)"><Trash2 :size="11" /></button>
+                <button class="action-chip" :title="t('tasks.card.edit')" @click.stop="emit('editTask', task)"><Edit3 :size="11" /></button>
+                <button class="action-chip danger" :title="t('tasks.card.delete')" @click.stop="emit('deleteTask', task.id)"><Trash2 :size="11" /></button>
               </div>
             </div>
 
@@ -134,7 +137,7 @@ const emit = defineEmits<{
                 <div class="add-circle">
                   <Plus :size="18" />
                 </div>
-                <span class="add-text">添加新任务</span>
+                <span class="add-text">{{ t('tasks.card.addTask') }}</span>
               </button>
             </div>
           </div>

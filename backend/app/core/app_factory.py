@@ -214,6 +214,15 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"[LuomiNest] Agent command permission init skipped: {e}")
 
+    # 权限三级 T2 信任档（W3）：恢复 config_items['permission.trusted_mode'] 到
+    # settings 运行时镜像，失败按关闭处理（fail-safe：默认全部走 T0/T1 分级确认）
+    try:
+        from app.core.agents.middleware.permission import load_trusted_mode_from_db
+
+        await load_trusted_mode_from_db()
+    except Exception as e:
+        logger.warning(f"[LuomiNest] Trusted mode init skipped: {e}")
+
     # 存储位置日志（开发/生产区分：dev=backend/data，打包=userData/Data/backend）
     logger.info(
         f"[LuomiNest] 存储位置: 模式={'打包生产(PyInstaller)' if settings.IS_FROZEN else '开发(源码)'}, "

@@ -352,6 +352,11 @@ export const useApi = () => {
             done: !!raw.done,
             suggested_questions: raw.suggested_questions || undefined,
             emotion: raw.emotion || undefined,
+            // W4 统一标签消费：四类结构化指令字段（全部可选，老模型不下发时为 undefined）
+            action: typeof raw.action === 'string' && raw.action ? raw.action : undefined,
+            navigate: typeof raw.navigate === 'string' && raw.navigate ? raw.navigate : undefined,
+            avatar_tool: raw.avatar_tool && typeof raw.avatar_tool === 'object' ? raw.avatar_tool : undefined,
+            task_dispatch: raw.task_dispatch && typeof raw.task_dispatch === 'object' ? raw.task_dispatch : undefined,
             tool_calls: raw.tool_calls || undefined,
             tool_event: raw.tool_event || undefined,
             subagent_event: raw.subagent_event || undefined,
