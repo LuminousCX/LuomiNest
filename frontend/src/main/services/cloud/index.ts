@@ -9,6 +9,8 @@ import type {
   CloudAuthStatus,
   CloudBackendStatus,
   CloudModelInfo,
+  CloudNotificationItem,
+  CloudNotificationsResult,
   CloudRoutingMode,
   CloudUsageEntry,
 } from '@shared/ipc-types'
@@ -62,6 +64,8 @@ const CLOUD_PATHS = {
   backendToken: '/api/v1/cloud/token',
   /** 本地后端：注入状态查询 */
   backendStatus: '/api/v1/cloud/status',
+  /** 主站：站内信（通行证 SAS 链，Bearer opaque 内省；LuomiNest 桌面端专用端点） */
+  notifications: '/connect/notifications',
 } as const
 
 let status: CloudAuthStatus = { state: 'loggedOut' }
@@ -637,6 +641,75 @@ const getBackendCloudStatus = async (): Promise<CloudBackendStatus | null> => {
   }
 }
 
+/* ── 主站站内信（/connect/notifications；2026-10-12 生态对接）── */
+
+/** 清洗站内信条目（id 缺失即丢弃；文本字段缺失降级 null） */
+const sanitizeNotificationItem = (item: unknown): CloudNotificationItem | null => {
+  if (!item || typeof item !== 'object') return null
+  const record = item as Record<string, unknown>
+  const id = typeof record.id === 'number' ? record.id : Number(record.id)
+  if (!Number.isFinite(id)) return null
+  return {
+    id,
+    title: typeof record.title === 'string' ? record.title : null,
+    content: typeof record.content === 'string' ? record.content : null,
+    type: typeof record.type === 'string' ? record.type : 'system',
+    refType: typeof record.refType === 'string' ? record.refType : null,
+    refId: typeof record.refId === 'number' ? record.refId : null,
+    actionUrl: typeof record.actionUrl === 'string' ? record.actionUrl : null,
+    isRead: record.isRead === true,
+    createdAt: typeof record.createdAt === 'string' ? record.createdAt : '',
+  }
+}
+
+/**
+ * 拉取主站站内信（GET {issuer}/connect/notifications?limit=20）。
+ * 未登录/失败返回 ok=false（error 为简短原因），渲染层铃铛静默降级为无未读。
+ */
+const fetchNotifications = async (): Promise<CloudNotificationsResult> => {
+  const tokens = loadCloudTokens()
+  if (!tokens?.accessToken) return { ok: false, error: 'logged_out' }
+  const { issuer } = configStore.getCloudConfig()
+  try {
+    const response = await fetch(`${issuer}${CLOUD_PATHS.notifications}?limit=20`, {
+      headers: { authorization: `Bearer ${tokens.accessToken}` },
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    })
+    if (!response.ok) return { ok: false, error: `http_${response.status}` }
+    const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null
+    if (!payload) return { ok: false, error: 'bad_payload' }
+    const rawItems = Array.isArray(payload.items) ? payload.items : []
+    const items = rawItems
+      .map(sanitizeNotificationItem)
+      .filter((item): item is CloudNotificationItem => item !== null)
+    const unread = typeof payload.unread === 'number' ? payload.unread : Number(payload.unread) || 0
+    return { ok: true, unread, items }
+  } catch (err) {
+    logger.warn('Failed to fetch notifications:', err instanceof Error ? err.message : err)
+    return { ok: false, error: 'network' }
+  }
+}
+
+/** 标记站内信已读（POST {issuer}/connect/notifications/read；body {id} 或 {all:true}）。失败返回 updated=0。 */
+const markNotificationsRead = async (payload: { id?: number; all?: boolean }): Promise<{ updated: number }> => {
+  const tokens = loadCloudTokens()
+  if (!tokens?.accessToken) return { updated: 0 }
+  const { issuer } = configStore.getCloudConfig()
+  try {
+    const response = await fetch(`${issuer}${CLOUD_PATHS.notifications}/read`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${tokens.accessToken}` },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(API_TIMEOUT_MS),
+    })
+    if (!response.ok) return { updated: 0 }
+    const data = (await response.json().catch(() => null)) as Record<string, unknown> | null
+    return { updated: data && typeof data.updated === 'number' ? data.updated : 0 }
+  } catch {
+    return { updated: 0 }
+  }
+}
+
 /** 启动时恢复上次登录态：令牌未过期直接进入 authorized，仅剩 refresh_token 则尝试续期 */
 const restoreSession = (): void => {
   const tokens = loadCloudTokens()
@@ -677,6 +750,8 @@ export const cloudAuth = {
   fetchModels,
   fetchUsage,
   getBackendCloudStatus,
+  fetchNotifications,
+  markNotificationsRead,
 }
 
 /** 401 时供其他云 API 客户端触发一次令牌续期（走 renewTokens 现有路径） */

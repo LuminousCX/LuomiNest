@@ -24,8 +24,11 @@ from app.runtime.platform.infrastructure.message_batch import TextBatchAggregato
 from app.runtime.platform.briefings import get_platform_briefing
 from app.runtime.platform.session import (
     MAIN_AGENT_ID,
-    create_new_conversation,
     get_or_create_conversation,
+)
+from app.runtime.platform.commands import (
+    CommandContext,
+    dispatch_platform_command,
 )
 from app.runtime.platform.main_agent_config import (
     load_luominest_main_agent_config,
@@ -203,28 +206,17 @@ class LuomiNestPlatformRouter:
             main_config = load_luominest_main_agent_config()
             agent_name = str(main_config.get("name") or "主Agent").strip()
             try:
-                # /new 命令：为当前平台会话创建新对话（参考 AstrBot 流程）
-                if (message.content or "").strip() == "/new":
-                    session_id = message.session_id or message.user_id
-                    try:
-                        await create_new_conversation(instance_id, session_id or "")
-                        platform_logger.log(
-                            instance_id, "success", "new_conversation_created",
-                            f"已为会话 {session_id} 创建新对话",
-                            adapter_type=adapter_type,
-                            details={"session": session_key, "command": "/new"},
-                        )
-                        return PlatformResponse(
-                            content=f"[{agent_name}] 已为您开启新对话，之前的上下文已保留在历史记录中。",
-                            message_type="text",
-                        )
-                    except Exception as e:
-                        # 服务端日志保留完整异常；对平台用户只返回固定提示，不暴露内部错误
-                        logger.error(f"[PlatformRouter] /new command failed: {e}", exc_info=True)
-                        return PlatformResponse(
-                            content=f"[{agent_name}] 新建对话失败，请稍后重试",
-                            message_type="text",
-                        )
+                # ─── 命令短路（2026-10-12 拍板：命令制；命中命令不进 LLM）───
+                # /help /new /memory 等，/new 是唯一的开新会话入口；
+                # 非命令文本走正常 LLM 路由（parse 失败返回 None）
+                command_response = await dispatch_platform_command(CommandContext(
+                    message=message,
+                    instance_id=instance_id,
+                    session_id=message.session_id or message.user_id or "",
+                    agent_name=agent_name,
+                ))
+                if command_response is not None:
+                    return command_response
 
                 response = await self._route_to_main_agent(message, instance_id, receive_time)
                 if response and response.content:

@@ -9,6 +9,7 @@ import type {
   CloudAuthStatus,
   CloudRoutingMode,
   OnboardingConfig,
+  NotificationPrefs,
   RemotePrefsAppliedEvent,
   ThemeConfig,
   ElectronApi,
@@ -84,6 +85,9 @@ const api: ElectronApi = {
     setSTT: (updates: Partial<STTConfig>) => invoke(IpcChannels.config.invoke.setSTT, updates),
     getLocale: () => invoke(IpcChannels.config.invoke.getLocale),
     setLocale: (locale: string) => invoke(IpcChannels.config.invoke.setLocale, locale),
+    getNotifications: () => invoke(IpcChannels.config.invoke.getNotifications),
+    setNotifications: (updates: Partial<NotificationPrefs>) =>
+      invoke(IpcChannels.config.invoke.setNotifications, updates),
     getAll: () => invoke(IpcChannels.config.invoke.getAll),
   },
 
@@ -210,6 +214,9 @@ const api: ElectronApi = {
     groupInvite: (groupId: string, userId: string) => invoke(IpcChannels.cloud.invoke.groupInvite, groupId, userId),
     groupMessages: (query: CloudGroupMessageQuery) => invoke(IpcChannels.cloud.invoke.groupMessages, query),
     groupSend: (groupId: string, content: string) => invoke(IpcChannels.cloud.invoke.groupSend, groupId, content),
+    notifications: () => invoke(IpcChannels.cloud.invoke.notifications),
+    notificationsRead: (payload: { id?: number; all?: boolean }) =>
+      invoke(IpcChannels.cloud.invoke.notificationsRead, payload),
     onStatus: (callback: (data: CloudAuthStatus) => void): (() => void) => {
       const handler = (_event: IpcRendererEvent, data: CloudAuthStatus) => callback(data)
       ipcRenderer.on(IpcChannels.cloud.push.status, handler)

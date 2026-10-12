@@ -14,7 +14,7 @@ import { createLuomiNestLogger } from './luomi-logger'
 import { logHub } from './log-hub'
 import { handleIpc } from './typed-ipc'
 import { IpcChannels } from '@shared/ipc-types'
-import type { TTSConfig, STTConfig, ThemeConfig, CloudRoutingMode, OnboardingConfig, LogQueryParams, LogUploadResult } from '@shared/ipc-types'
+import type { TTSConfig, STTConfig, ThemeConfig, CloudRoutingMode, OnboardingConfig, LogQueryParams, LogUploadResult, NotificationPrefs } from '@shared/ipc-types'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -125,6 +125,29 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (!assertTrustedSender(event)) return undefined
     return configStore.getTheme()
   })
+  handleIpc(IpcChannels.config.invoke.getNotifications, (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return undefined
+    return configStore.getNotifications()
+  })
+  handleIpc(
+    IpcChannels.config.invoke.setNotifications,
+    (event: IpcMainInvokeEvent, updates: Partial<NotificationPrefs>) => {
+      if (!assertTrustedSender(event)) return configStore.getNotifications()
+      const safe: Partial<NotificationPrefs> = {}
+      if (updates && typeof updates === 'object') {
+        if (typeof updates.desktopNotify === 'boolean') safe.desktopNotify = updates.desktopNotify
+        if (typeof updates.soundAlert === 'boolean') safe.soundAlert = updates.soundAlert
+        if (typeof updates.dndRange === 'string' && /^\d{2}:\d{2}-\d{2}:\d{2}$/.test(updates.dndRange)) {
+          safe.dndRange = updates.dndRange
+        }
+        if (typeof updates.messagePreview === 'boolean') safe.messagePreview = updates.messagePreview
+      }
+      const next = configStore.setNotifications(safe)
+      // 通知偏好属于云同步白名单（prefs-sync notifications 键），变更后触发节流上传
+      cloudPrefsSync.notifyLocalPrefChange()
+      return next
+    },
+  )
   handleIpc(IpcChannels.config.invoke.setTheme, (event: IpcMainInvokeEvent, theme: 'light' | 'dark' | 'system') => {
     if (!assertTrustedSender(event)) return
     configStore.setTheme(theme)
@@ -481,6 +504,27 @@ export function registerIpcHandlers(mainWindow: BrowserWindow | null): void {
     if (!assertTrustedSender(event)) return null
     return cloudAuth.getBackendCloudStatus()
   })
+
+  /* ── 主站站内信（/connect/notifications；铃铛未读 + 面板列表） ── */
+
+  handleIpc(IpcChannels.cloud.invoke.notifications, async (event: IpcMainInvokeEvent) => {
+    if (!assertTrustedSender(event)) return { ok: false, error: 'untrusted' as const }
+    return cloudAuth.fetchNotifications()
+  })
+
+  handleIpc(
+    IpcChannels.cloud.invoke.notificationsRead,
+    async (event: IpcMainInvokeEvent, payload: { id?: number; all?: boolean }) => {
+      if (!assertTrustedSender(event)) return { updated: 0 }
+      const safe: { id?: number; all?: boolean } = {}
+      if (payload && typeof payload === 'object') {
+        if (typeof payload.id === 'number' && Number.isFinite(payload.id)) safe.id = payload.id
+        if (payload.all === true) safe.all = true
+      }
+      if (safe.id === undefined && !safe.all) return { updated: 0 }
+      return cloudAuth.markNotificationsRead(safe)
+    },
+  )
 
   /* ── 云端群聊（cloud-groups；服务端未上线时各通道返回结构化错误，界面降级空态） ── */
 

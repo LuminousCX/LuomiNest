@@ -456,41 +456,9 @@ async def get_platform_conversations(
     return result
 
 
-class NewConversationRequest(BaseModel):
-    session_id: str | None = None
-
-    model_config = ConfigDict(populate_by_name=True)
-
-
-@router.post("/instances/{instance_id}/conversations/new")
-async def create_new_platform_conversation(instance_id: str, request: NewConversationRequest | None = None):
-    """为平台实例创建全新对话（对应 /new 命令）。
-
-    如果提供 session_id，则为该会话创建新对话；否则使用通用 session_id。
-    """
-    logger.info(f"[API] POST /platforms/instances/{instance_id}/conversations/new")
-    inst = require_value(get_instance(instance_id), "Platform instance", instance_id)
-
-    from app.runtime.platform.session import create_new_conversation
-
-    session_id = (request.session_id if request and request.session_id else None) or f"default-{instance_id[:8]}"
-
-    try:
-        result = await create_new_conversation(instance_id, session_id)
-    except Exception as e:
-        # 服务端日志保留完整异常信息用于诊断；对外只暴露固定错误消息，避免泄漏内部细节
-        logger.error(f"[API] Failed to create new conversation: {e}", exc_info=True)
-        raise LuomiNestError(
-            "Failed to create new conversation",
-            code="CONVERSATION_CREATE_FAILED",
-            status_code=500,
-        ) from e
-
-    return ok({
-        "id": result["id"],
-        "title": result["title"],
-        "created_at": result["created_at"],
-    })
+# 平台会话不支持手动新建（2026-10-12 拍板）：原 POST /conversations/new 端点
+# 已下线——它不带 session_id 时会造出 "unknown 私聊 default-xxx" 不可读会话。
+# 开新会话的唯一入口是平台消息里的 /new 命令（platform/commands.py）。
 
 
 @router.get("/instances/{instance_id}/conversations/{conversation_id}/messages")

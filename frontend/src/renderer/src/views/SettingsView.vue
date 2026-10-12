@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ChevronRight, User } from 'lucide-vue-next'
+import { useCloudAccountStore } from '../stores/cloud-account'
 
 interface SettingItem {
   label: string
@@ -21,6 +22,10 @@ defineProps<{
 
 const router = useRouter()
 const { t } = useI18n()
+const cloudAccount = useCloudAccountStore()
+
+// 用户资料处头像与左上角侧栏同源（生态站通行证账号）
+onMounted(() => cloudAccount.start())
 
 // 标签走 vue-i18n，语言切换时 computed 重新求值
 // 视觉取向：纯文字行（无图标 chip、无彩色点缀），层次靠留白与 hover 弱底色
@@ -69,7 +74,14 @@ const navigateTo = (route: string) => {
     <div class="settings-view__content">
       <div class="settings-hero animate-fade-in">
         <div class="settings-hero__avatar">
-          <User :size="28" />
+          <img
+            v-if="cloudAccount.avatar"
+            :src="cloudAccount.avatar"
+            :alt="cloudAccount.nickname || t('settings.title')"
+            class="settings-hero__avatar-img"
+            referrerpolicy="no-referrer"
+          />
+          <User v-else :size="28" />
         </div>
         <div class="settings-hero__content">
           <h1 class="settings-hero__title lumi-title-2xl">{{ t('settings.title') }}</h1>
@@ -168,6 +180,13 @@ const navigateTo = (route: string) => {
   border: 1px solid var(--border-light);
   color: var(--text-secondary);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.settings-hero__avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .settings-hero__content {

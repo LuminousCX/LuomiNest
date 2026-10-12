@@ -237,20 +237,23 @@ async def test_batch_disabled_by_default_routes_individually(monkeypatch, router
 
 
 async def test_batch_skips_commands_and_images(monkeypatch, router):
-    """命令与图片消息不参与聚合，立即按原内容路由。"""
+    """命令与图片消息不参与聚合：命令被命令层立即短路（不进 LLM），图片正常路由。"""
     _patch_batch_enabled(monkeypatch, True)
     router._batch_aggregator = TextBatchAggregator(aggregation_window=30.0)
 
+    # /status 是未知命令：命令层立即回复引导文案，不进 LLM、不等聚合窗口
     cmd = _msg(content="/status", message_id="cmd1")
     img = _msg(content="看这张", message_id="img1", image_urls=["https://example.com/a.png"])
 
     r1 = await router.handle_platform_message(cmd, "inst_batch_skip")
     r2 = await router.handle_platform_message(img, "inst_batch_skip")
 
-    assert r1 is not None and r2 is not None
-    assert router._route_to_main_agent.await_count == 2
+    assert r1 is not None
+    assert "未知命令" in r1.content and "/help" in r1.content
+    assert r2 is not None
+    assert router._route_to_main_agent.await_count == 1
     routed_contents = [c.args[0].content for c in router._route_to_main_agent.await_args_list]
-    assert routed_contents == ["/status", "看这张"]
+    assert routed_contents == ["看这张"]
     _cleanup_logs("inst_batch_skip")
 
 

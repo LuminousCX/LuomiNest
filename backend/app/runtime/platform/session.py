@@ -104,6 +104,71 @@ def _merge_legacy_json() -> None:
         logger.warning(f"[PlatformSession] Legacy JSON merge skipped: {e}")
 
 
+# ─── 历史垃圾会话清理（2026-10-12 拍板：平台会话不支持手动新建）───
+# "unknown 私聊 default-xxx" 类会话的唯一来源是已下线的手动新建端点
+# （POST /conversations/new 不带 session_id），路由器不会产生 default- 前缀
+# 的 session（适配器一律填 group_id/user_id）。存量按严格三条件判定后清理，
+# 复用迁移标记表保证进程内与跨重启均只跑一次。
+
+_CLEANUP_SOURCE = "platform_sessions_garbage_cleanup"
+_cleanup_done = False
+
+
+def _cleanup_garbage_sessions() -> None:
+    global _cleanup_done
+    if _cleanup_done:
+        return
+    _cleanup_done = True
+
+    try:
+        from app.infrastructure.database.migration.json_to_sqlite_migrator import (
+            _is_migrated,
+            _mark_migrated,
+        )
+
+        if _is_migrated(_CLEANUP_SOURCE):
+            return
+
+        removed = 0
+        for key, mapping in luominest_config_store.get_namespace(_SESSIONS_KEY_PREFIX).items():
+            if not isinstance(mapping, dict):
+                continue
+            # 严格判定（全部满足才删，宁缺毋滥）：
+            # session_id 以 default- 开头 + 平台名为 unknown（手动新建同源标记）
+            session_id = str(mapping.get("session_id", "") or "")
+            if not session_id.startswith("default-"):
+                continue
+            if mapping.get("platform_name") != "unknown":
+                continue
+            conv_id = str(mapping.get("conversation_id", "") or "")
+            conv = conversation_store.get(conv_id) if conv_id else None
+            if conv and conv.get("messages"):
+                # 有消息的异常存量仅解除映射并告警，不删用户数据
+                logger.warning(
+                    f"[PlatformSession] Garbage-lookalike session has messages, "
+                    f"unmapping only: {key}"
+                )
+            elif conv_id:
+                conversation_store.delete(conv_id)
+            luominest_config_store.delete(key)
+            removed += 1
+
+        _mark_migrated(_CLEANUP_SOURCE, removed)
+        if removed:
+            logger.info(
+                f"[PlatformSession] Cleaned {removed} legacy garbage session(s) "
+                f"(manual-create leftovers)"
+            )
+    except Exception as e:
+        logger.warning(f"[PlatformSession] Garbage session cleanup skipped: {e}")
+
+
+def _ensure_session_store_ready() -> None:
+    """首次访问前的存储维护：遗留 JSON 合并 + 历史垃圾会话清理（各自幂等一次）。"""
+    _merge_legacy_json()
+    _cleanup_garbage_sessions()
+
+
 async def get_or_create_conversation(
     instance_id: str,
     session_id: str,
@@ -116,7 +181,7 @@ async def get_or_create_conversation(
     每个平台实例 + 平台会话标识（user_id 或 group_id）映射到主 Agent 的一个独立 conversation。
     所有平台会话共享主 Agent 的记忆（agent_id=MAIN_AGENT_ID）。
     """
-    _merge_legacy_json()
+    _ensure_session_store_ready()
     key = _config_key(instance_id, session_id)
     mapping = luominest_config_store.get(key, {})
     if not isinstance(mapping, dict):
@@ -171,7 +236,7 @@ async def get_or_create_conversation(
 
 async def get_conversation_id(instance_id: str, session_id: str) -> str | None:
     """获取平台会话对应的 conversation_id（不创建）。"""
-    _merge_legacy_json()
+    _ensure_session_store_ready()
     mapping = luominest_config_store.get(_config_key(instance_id, session_id), {})
     if not isinstance(mapping, dict):
         return None
@@ -180,7 +245,7 @@ async def get_conversation_id(instance_id: str, session_id: str) -> str | None:
 
 def list_platform_sessions(instance_id: str | None = None) -> list[dict]:
     """列出平台会话映射。"""
-    _merge_legacy_json()
+    _ensure_session_store_ready()
     all_sessions = [
         v for v in luominest_config_store.get_namespace(_SESSIONS_KEY_PREFIX).values()
         if isinstance(v, dict)
@@ -192,21 +257,32 @@ def list_platform_sessions(instance_id: str | None = None) -> list[dict]:
     return all_sessions
 
 
-async def create_new_conversation(instance_id: str, session_id: str) -> dict:
+async def create_new_conversation(
+    instance_id: str,
+    session_id: str,
+    *,
+    platform_name: str = "",
+    sender_name: str = "",
+    is_group: bool | None = None,
+) -> dict:
     """为指定的平台实例和会话创建全新的对话（/new 命令）。
 
     清除旧的会话映射，创建新的 conversation，返回新对话信息。
+    平台会话不支持手动新建（2026-10-12 拍板）：本函数唯一的调用方是
+    /new 命令，元数据优先取消息侧实参（调用方显式传入），旧映射仅作回退，
+    不再出现 "unknown" 平台名的不可读标题。
     """
-    _merge_legacy_json()
+    _ensure_session_store_ready()
     key = _config_key(instance_id, session_id)
     old_mapping = luominest_config_store.get(key, {})
     if not isinstance(old_mapping, dict):
         old_mapping = {}
 
-    # 从旧映射中保留平台元信息
-    platform_name = old_mapping.get("platform_name", "unknown")
-    sender_name = old_mapping.get("sender_name", "")
-    is_group = old_mapping.get("is_group", False)
+    # 从消息侧实参与旧映射中保留平台元信息
+    platform_name = platform_name or old_mapping.get("platform_name", "unknown")
+    sender_name = sender_name or old_mapping.get("sender_name", "")
+    if is_group is None:
+        is_group = bool(old_mapping.get("is_group", False))
 
     conv_id = f"plat-{uuid.uuid4().hex[:12]}"
     now = utc_now()
@@ -255,5 +331,5 @@ async def create_new_conversation(instance_id: str, session_id: str) -> dict:
 
 def remove_platform_session(instance_id: str, session_id: str) -> bool:
     """移除平台会话映射（不删除 conversation）。"""
-    _merge_legacy_json()
+    _ensure_session_store_ready()
     return luominest_config_store.delete(_config_key(instance_id, session_id))

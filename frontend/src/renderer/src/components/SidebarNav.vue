@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -32,10 +32,13 @@ import { useTaskStreamStore } from '../stores/taskStream'
 import { useAgentStore } from '../stores/agent'
 import { useChatStore } from '../stores/chat'
 import { useChatTrashStore } from '../stores/chat-trash'
+import { useCloudAccountStore } from '../stores/cloud-account'
 import { cxContributionRegistry } from '../plugins'
 import { resolvePluginIcon } from '../plugins/plugin-icons'
 import BranchedMenu from './common/BranchedMenu.vue'
 import type { BranchedMenuItem } from './common/BranchedMenu.vue'
+import type { CloudNotificationItem } from '@shared/ipc-types'
+import { formatShortDateTime } from '../utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -44,18 +47,46 @@ const taskStreamStore = useTaskStreamStore()
 const agentStore = useAgentStore()
 const chatStore = useChatStore()
 const chatTrashStore = useChatTrashStore()
+const cloudAccount = useCloudAccountStore()
 
 const isNavCollapsed = ref(true)
 const navMenuRef = ref<InstanceType<typeof BranchedMenu> | null>(null)
 
 // 会话数据预取（原 LumiSidebar 职责，合并后由本组件承担）
 onMounted(async () => {
+  // 通行证账号状态（左上角生态站头像 + 铃铛未读）：订阅 main 推送并拉取一次
+  cloudAccount.start()
+  document.addEventListener('click', closeInbox)
   await agentStore.fetchAgents()
   if (agentStore.activeAgent?.id) {
     await chatStore.fetchConversations(agentStore.activeAgent.id)
     chatTrashStore.fetchTrash(agentStore.activeAgent.id)
   }
 })
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeInbox)
+})
+
+// ── 站内信面板（主站 /connect/notifications）──
+const inboxOpen = ref(false)
+/** 面板最多展示 10 条，完整记录以生态站 Web 端为准 */
+const inboxItems = computed<CloudNotificationItem[]>(() => cloudAccount.notifications.slice(0, 10))
+
+const formatMessageTime = (ts: string) => (ts ? formatShortDateTime(ts) : '')
+
+const toggleInbox = () => {
+  inboxOpen.value = !inboxOpen.value
+  if (inboxOpen.value) void cloudAccount.refreshNotifications()
+}
+
+const closeInbox = () => {
+  inboxOpen.value = false
+}
+
+const openNotification = (item: CloudNotificationItem) => {
+  if (!item.isRead) void cloudAccount.markNotificationRead({ id: item.id })
+}
 
 // 插件贡献的侧边栏视图（响应式，插件激活/停用时自动更新）
 const pluginSidebarViews = computed(() => cxContributionRegistry.sidebarPluginViews.value)
@@ -219,7 +250,15 @@ const handleNavigate = (path: string) => {
     <div class="nav-header">
       <div class="brand">
         <div class="brand-avatar">
-          <User :size="22" />
+          <!-- 生态站头像（通行证登录后拉取），未登录/缺失回退占位图标 -->
+          <img
+            v-if="cloudAccount.avatar"
+            :src="cloudAccount.avatar"
+            :alt="cloudAccount.nickname || 'LuomiNest'"
+            class="brand-avatar__img"
+            referrerpolicy="no-referrer"
+          />
+          <User v-else :size="22" />
         </div>
         <div v-if="!isNavCollapsed" class="brand-info">
           <span class="brand-name">LuomiNest</span>
@@ -227,15 +266,50 @@ const handleNavigate = (path: string) => {
         </div>
       </div>
       <div v-if="!isNavCollapsed" class="header-actions">
-        <button class="header-action-btn" :aria-label="t('nav.announcements')" :title="t('nav.announcements')">
+        <button
+          class="header-action-btn"
+          :class="{ 'has-unread': cloudAccount.unreadCount > 0 }"
+          :aria-label="t('nav.inbox')"
+          :title="t('nav.inbox')"
+          @click.stop="toggleInbox"
+        >
           <Bell :size="16" />
-          <span class="header-action-dot"></span>
+          <span v-if="cloudAccount.unreadCount > 0" class="header-action-dot"></span>
         </button>
       </div>
       <button class="collapse-toggle-btn" :aria-label="isNavCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')" :title="isNavCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')" @click="isNavCollapsed = !isNavCollapsed">
         <PanelLeftOpen v-if="isNavCollapsed" :size="18" />
         <PanelLeftClose v-else :size="18" />
       </button>
+
+      <!-- 站内信面板（主站 /connect/notifications；点击外部关闭） -->
+      <div v-if="inboxOpen" class="inbox-popover" @click.stop>
+        <div class="inbox-header">
+          <span class="inbox-title">{{ t('nav.inbox') }}</span>
+          <button
+            v-if="cloudAccount.unreadCount > 0"
+            class="inbox-mark-all"
+            @click="cloudAccount.markNotificationRead({ all: true })"
+          >
+            {{ t('nav.markAllRead') }}
+          </button>
+        </div>
+        <div class="inbox-list">
+          <template v-if="cloudAccount.status.state === 'authorized'">
+            <div
+              v-for="item in inboxItems"
+              :key="item.id"
+              :class="['inbox-item', { unread: !item.isRead }]"
+              @click="openNotification(item)"
+            >
+              <span class="inbox-item-title">{{ item.title || item.type }}</span>
+              <span class="inbox-item-time">{{ formatMessageTime(item.createdAt) }}</span>
+            </div>
+            <div v-if="inboxItems.length === 0" class="inbox-empty">{{ t('nav.inboxEmpty') }}</div>
+          </template>
+          <div v-else class="inbox-empty">{{ t('nav.loginToView') }}</div>
+        </div>
+      </div>
     </div>
 
     <div v-if="!isNavCollapsed" class="nav-search">
@@ -367,6 +441,7 @@ const handleNavigate = (path: string) => {
   justify-content: space-between;
   padding: var(--space-3) var(--space-4) var(--space-2);
   flex-shrink: 0;
+  position: relative;
 }
 
 .sidebar-nav-panel.collapsed .nav-header {
@@ -394,6 +469,13 @@ const handleNavigate = (path: string) => {
   justify-content: center;
   color: var(--text-secondary);
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.brand-avatar__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .brand-info {
@@ -438,6 +520,106 @@ const handleNavigate = (path: string) => {
 .header-action-btn:hover {
   background: var(--surface-active);
   color: var(--text-primary);
+}
+
+/* ── 站内信面板 ── */
+.inbox-popover {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: var(--space-4);
+  width: 300px;
+  max-height: 380px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+  overflow: hidden;
+}
+
+.inbox-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.inbox-title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.inbox-mark-all {
+  border: none;
+  background: none;
+  padding: 2px var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--lumi-brand);
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+}
+
+.inbox-mark-all:hover {
+  background: var(--surface-hover);
+}
+
+.inbox-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.inbox-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+}
+
+.inbox-item:hover {
+  background: var(--surface-hover);
+}
+
+.inbox-item.unread .inbox-item-title {
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.inbox-item-title {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inbox-item.unread .inbox-item-title::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--lumi-brand);
+  margin-right: var(--space-1);
+  vertical-align: middle;
+}
+
+.inbox-item-time {
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.inbox-empty {
+  padding: var(--space-5) var(--space-3);
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 .header-action-dot {

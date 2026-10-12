@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { PATHS } from './paths'
-import type { ThemeConfig, CloudRoutingMode, OnboardingConfig } from '@shared/ipc-types'
+import type { ThemeConfig, CloudRoutingMode, OnboardingConfig, NotificationPrefs } from '@shared/ipc-types'
 
 interface WindowBounds {
   x?: number
@@ -86,6 +86,8 @@ interface AppConfig {
   cloud: CloudConfig
   /** 首次启动引导记录：协议/隐私同意版本与时间、新手教程完成标记 */
   onboarding: OnboardingConfig
+  /** 通知偏好（设置 → 通知；云同步经从站 preferences 的 notifications 键） */
+  notifications: NotificationPrefs
   /** 统一日志上传端点（log:upload 使用） */
   logUpload: LogUploadConfig
 }
@@ -132,6 +134,12 @@ const DEFAULT_CONFIG: AppConfig = {
     prefSyncEnabled: true,
   },
   onboarding: DEFAULT_ONBOARDING,
+  notifications: {
+    desktopNotify: true,
+    soundAlert: true,
+    dndRange: '22:00-08:00',
+    messagePreview: true,
+  },
   logUpload: {
     endpoint: '',
   },
@@ -182,6 +190,7 @@ const loadConfig = (): AppConfig => {
       window: { ...DEFAULT_CONFIG.window, ...parsed.window },
       cloud: resolveCloudConfig(parsed.cloud),
       onboarding: { ...DEFAULT_ONBOARDING, ...parsed.onboarding },
+      notifications: { ...DEFAULT_CONFIG.notifications, ...parsed.notifications },
       logUpload: { ...DEFAULT_CONFIG.logUpload, ...parsed.logUpload },
     }
     // 旧默认端点升级后回写落盘，避免下次启动重复迁移（dev 环境变量覆盖不落盘）
@@ -281,6 +290,15 @@ export const configStore = {
   getLocale: (): string => loadConfig().locale,
   setLocale: (locale: string): void => {
     configStore.set('locale', locale)
+  },
+
+  getNotifications: (): NotificationPrefs => loadConfig().notifications,
+  /** 部分更新通知偏好（合并写入；调用方负责触发云同步上传） */
+  setNotifications: (updates: Partial<NotificationPrefs>): NotificationPrefs => {
+    const config = loadConfig()
+    config.notifications = { ...config.notifications, ...updates }
+    saveConfig(config)
+    return config.notifications
   },
 
   getCloudConfig: (): CloudConfig => loadConfig().cloud,

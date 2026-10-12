@@ -87,6 +87,8 @@ export interface AppConfig {
 export interface RemotePrefsAppliedEvent {
   locale?: string
   theme?: string
+  /** 通知偏好（完整对象，仅在有变化时携带） */
+  notifications?: NotificationPrefs
 }
 
 /* ============================================================================
@@ -417,6 +419,37 @@ export interface CloudAuthStatus {
   error?: string
 }
 
+/** 通知偏好（设置 → 通知；本地 configStore 持久化，云同步走从站 preferences 的 notifications 键） */
+export interface NotificationPrefs {
+  /** 桌面通知总开关（关闭时同步抑制站内信提醒） */
+  desktopNotify: boolean
+  soundAlert: boolean
+  /** 免打扰时段 HH:mm-HH:mm */
+  dndRange: string
+  messagePreview: boolean
+}
+
+/** 主站站内信条目（GET {issuer}/connect/notifications 的 items 元素） */
+export interface CloudNotificationItem {
+  id: number
+  title?: string | null
+  content?: string | null
+  type: string
+  refType?: string | null
+  refId?: number | null
+  actionUrl?: string | null
+  isRead: boolean
+  createdAt: string
+}
+
+/** 站内信拉取结果（失败 ok=false，error 为简短原因；界面静默降级） */
+export interface CloudNotificationsResult {
+  ok: boolean
+  unread?: number
+  items?: CloudNotificationItem[]
+  error?: string
+}
+
 /**
  * 首次启动引导记录（config.json onboarding 键）。
  * agreementVersion / privacyVersion 非空即代表用户已同意对应版本的协议与隐私政策
@@ -561,6 +594,8 @@ export const IpcChannels = {
       setSTT: 'config:setSTT',
       getLocale: 'config:getLocale',
       setLocale: 'config:setLocale',
+      getNotifications: 'config:getNotifications',
+      setNotifications: 'config:setNotifications',
       getAll: 'config:getAll',
     },
   },
@@ -721,6 +756,9 @@ export const IpcChannels = {
       groupInvite: 'cloud:groupInvite',
       groupMessages: 'cloud:groupMessages',
       groupSend: 'cloud:groupSend',
+      // 主站站内信（/connect/notifications；铃铛未读轮询 + 面板列表）
+      notifications: 'cloud:notifications',
+      notificationsRead: 'cloud:notificationsRead',
     },
     push: {
       // 登录状态机变化时 main 广播（login/status/logout/续期失败等均会触发）
@@ -906,6 +944,8 @@ export interface ElectronApi {
     setSTT: (updates: Partial<STTConfig>) => Promise<void>
     getLocale: () => Promise<string | undefined>
     setLocale: (locale: string) => Promise<void>
+    getNotifications: () => Promise<NotificationPrefs>
+    setNotifications: (updates: Partial<NotificationPrefs>) => Promise<NotificationPrefs>
     getAll: () => Promise<AppConfig>
   }
   cache: {
@@ -1005,6 +1045,10 @@ export interface ElectronApi {
     groupMessages: (query: CloudGroupMessageQuery) => Promise<CloudGroupResult<CloudGroupMessageVo[]>>
     /** 发送云端群消息（content ≤ 2000） */
     groupSend: (groupId: string, content: string) => Promise<CloudGroupResult<CloudGroupMessageVo>>
+    /** 拉取主站站内信（最近列表 + 未读数；未登录/失败返回 ok=false，界面静默降级） */
+    notifications: () => Promise<CloudNotificationsResult>
+    /** 标记站内信已读：传 id 标单条，传 all=true 全部已读；返回更新条数 */
+    notificationsRead: (payload: { id?: number; all?: boolean }) => Promise<{ updated: number }>
     /** 订阅登录状态推送，返回取消订阅函数 */
     onStatus: (callback: (data: CloudAuthStatus) => void) => () => void
   }

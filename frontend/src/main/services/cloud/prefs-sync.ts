@@ -23,7 +23,7 @@ import { configStore } from '../config-store'
 import { loadCloudTokens } from './token-store'
 import { createLuomiNestLogger } from '../luomi-logger'
 import { IpcChannels } from '@shared/ipc-types'
-import type { RemotePrefsAppliedEvent } from '@shared/ipc-types'
+import type { RemotePrefsAppliedEvent, NotificationPrefs } from '@shared/ipc-types'
 
 const logger = createLuomiNestLogger('CloudPrefsSync')
 
@@ -57,6 +57,8 @@ interface SyncedPrefs {
     privacyVersion?: string
     agreedAt?: string
   }
+  /** 通知偏好（2026-10-12 生态对接：设置 → 通知四项；旧客户端会整对象覆盖丢失，v1 语义内可接受） */
+  notifications?: NotificationPrefs
 }
 
 /** 服务端偏好载荷语义 */
@@ -92,6 +94,7 @@ const buildLocalPrefs = (): SyncedPrefs => {
       privacyVersion: onboarding.privacyVersion || undefined,
       agreedAt: onboarding.agreedAt || undefined,
     },
+    notifications: { ...configStore.getNotifications() },
   }
 }
 
@@ -110,7 +113,27 @@ const sanitizeRemotePrefs = (raw: unknown): SyncedPrefs => {
       agreedAt: typeof ob.agreedAt === 'string' ? ob.agreedAt : undefined,
     }
   }
+  const notifications = sanitizeNotificationPrefs(source.notifications)
+  if (notifications) result.notifications = notifications
   return result
+}
+
+/** 免打扰时段形态：HH:mm-HH:mm（时段合法性不深究，交由 UI 层选择器保证） */
+const DND_RANGE_PATTERN = /^\d{2}:\d{2}-\d{2}:\d{2}$/
+
+/** 清洗远端通知偏好：逐字段校验，全部非法 → undefined（不触碰本地默认值） */
+const sanitizeNotificationPrefs = (raw: unknown): NotificationPrefs | undefined => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const source = raw as Record<string, unknown>
+  const partial: Partial<NotificationPrefs> = {}
+  if (typeof source.desktopNotify === 'boolean') partial.desktopNotify = source.desktopNotify
+  if (typeof source.soundAlert === 'boolean') partial.soundAlert = source.soundAlert
+  if (typeof source.dndRange === 'string' && DND_RANGE_PATTERN.test(source.dndRange)) {
+    partial.dndRange = source.dndRange
+  }
+  if (typeof source.messagePreview === 'boolean') partial.messagePreview = source.messagePreview
+  if (Object.keys(partial).length === 0) return undefined
+  return partial as NotificationPrefs
 }
 
 /** 远端偏好与本地是否一致（避免无意义回写） */
@@ -124,12 +147,17 @@ const sameAsLocal = (prefs: SyncedPrefs): boolean => {
     if (prefs.onboarding.privacyVersion && prefs.onboarding.privacyVersion !== lo.privacyVersion) return false
     if (prefs.onboarding.agreedAt && prefs.onboarding.agreedAt !== lo.agreedAt) return false
   }
+  if (prefs.notifications) {
+    const ln: Partial<NotificationPrefs> = local.notifications ?? {}
+    return (Object.keys(prefs.notifications) as (keyof NotificationPrefs)[])
+      .every((key) => prefs.notifications![key] === ln[key])
+  }
   return true
 }
 
-/** 把远端偏好应用的变更广播到全部窗口（渲染层 locale/theme store 监听后即时生效） */
+/** 把远端偏好应用的变更广播到全部窗口（渲染层 locale/theme/通知设置监听后即时生效） */
 const broadcastRemotePrefsApplied = (applied: RemotePrefsAppliedEvent): void => {
-  if (!applied.locale && !applied.theme) return
+  if (!applied.locale && !applied.theme && !applied.notifications) return
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed()) continue
     try {
@@ -170,7 +198,17 @@ const applyRemotePrefs = (prefs: SyncedPrefs): void => {
       logger.info('Applied remote onboarding consent record')
     }
   }
-  if (applied.locale || applied.theme) {
+  if (prefs.notifications) {
+    const local = configStore.getNotifications()
+    const changed = (Object.keys(prefs.notifications) as (keyof NotificationPrefs)[])
+      .some((key) => prefs.notifications![key] !== local[key])
+    if (changed) {
+      configStore.setNotifications(prefs.notifications)
+      applied.notifications = { ...local, ...prefs.notifications }
+      logger.info('Applied remote notification prefs')
+    }
+  }
+  if (applied.locale || applied.theme || applied.notifications) {
     // 开启防回环抑制窗口：渲染层应用推送后的同值回写不触发上传
     remoteApplyGuardUntil = Date.now() + REMOTE_APPLY_GUARD_MS
     broadcastRemotePrefsApplied(applied)
