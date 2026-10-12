@@ -7,19 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> 本轮为「2026-10-05 链路审查修复包」（审查报告见 文档/2026年10月5日链路审查/，五链路 11 个跨链路 P0 与 10 个 P1 精选全部处置）：
+## [0.8.4] - 2026-10-12
+
+> 本轮含两个批次：①「2026-10-05 链路审查修复包」（审查报告见 文档/2026年10月5日链路审查/，五链路 11 个跨链路 P0 与 10 个 P1 精选全部处置）：
 > 平台对接安全止血（QQ 官方验签、微信个人版三连、WS 网关鉴权、Telegram/rest_api 入站死路打通）、
 > 对话链路可靠性（workflow 落库、SSE 契约对齐、suggestions 竞态、regenerate 三重缺陷、消息持久 id）、
 > 存储链路产品化（备份排除凭据 + 恢复上线、记忆 fail-loud、平台凭据加密入库）、
-> 无头部署基线（DEPLOYMENT_MODE 双形态开关、SECRET_KEY 口令恢复包、Docker 单容器资产），以及一批接线债清偿与单测补强。
+> 无头部署基线（DEPLOYMENT_MODE 双形态开关、SECRET_KEY 口令恢复包、Docker 单容器资产），以及一批接线债清偿与单测补强；
+> ②「平台会话命令制 + 辰汐生态对接」（交接文档 2026-10-12）：平台域命令体系、生态头像通行证拉取、主站站内信全链路与通知偏好云同步。
 >
-> This round is the "2026-10-05 chain-audit fix package" (all 11 cross-chain P0s and 10 selected P1s addressed):
+> This round ships two batches: ① the "2026-10-05 chain-audit fix package" (all 11 cross-chain P0s and 10 selected P1s addressed):
 > platform-ingress security hardening (QQ official webhook signature, wechat_personal triple fix, WS-gateway auth, Telegram/rest_api inbound paths),
 > conversation reliability (workflow persistence, SSE contract alignment, suggestions race, regenerate triple defect, message persistent ids),
 > storage productization (credential-free backups + restore shipped, memory fail-loud, platform credentials encrypted at rest),
-> and the headless-deployment baseline (DEPLOYMENT_MODE switch, SECRET_KEY recovery package, single-container Docker assets).
+> and the headless-deployment baseline (DEPLOYMENT_MODE switch, SECRET_KEY recovery package, single-container Docker assets);
+> ② "platform command governance + Chenxi ecosystem integration" (handoff 2026-10-12): platform command set, ecosystem avatar via passport, main-site inbox end-to-end and cloud-synced notification preferences.
 
 ### Added（新增）
+
+- 平台命令体系（命令制拍板落地）：`/help`（命令清单）、`/new`（唯一开新会话入口）、`/memory`（用户轨记忆摘要，群聊只出全局画像防私聊记忆泄露）；命令在 LLM 之前短路、未知命令回复引导不进模型，`/usr/local` 等非命令形态不误伤 — Platform command set: /help, /new (the only way to open a new platform conversation), /memory (user-track facts, group chats see global-scope only for privacy); commands short-circuit before the LLM, unknown commands get guidance instead of model calls, and path-like text is never mistaken for a command
+- 平台会话存量垃圾清理：历史手动新建产生的「unknown 私聊 default-*」映射与空会话一次性幂等清理（有消息的异常存量仅解除映射不删数据） — One-time idempotent cleanup of legacy "unknown private default-*" sessions left by the removed manual-create endpoint (message-bearing oddities are unmapped, not deleted)
+- 生态头像通行证拉取：主进程共享 `cloud-account` store（登录状态推送订阅 + 60s 站内信轮询），左上角侧栏与设置页用户资料处同步展示生态站头像，未登录回退占位图标 — Ecosystem avatar via passport: shared cloud-account store drives the sidebar brand avatar and settings-page profile avatar, with an icon fallback when logged out
+- 主站站内信全链路：主站 `/connect/notifications`（通行证 SAS 链 opaque 内省鉴权）+ 桌面端 IPC `cloud:notifications/notificationsRead` + 左上角铃铛未读红点与消息面板（60s 轮询、单条/全部已读、未登录提示） — Main-site inbox end-to-end: /connect/notifications (passport SAS opaque introspection) + desktop IPC + top-left bell unread dot and message panel (60s polling, per-item/mark-all read)
+- 通知偏好云同步：设置→通知四项（桌面通知/免打扰时段/声音/消息预览）从 localStorage demo 升级为 configStore 持久化 + 从站偏好云同步（`notifications` 键），多端一致、远端修改即时回显 — Notification preferences (desktop notify / DND range / sound / preview) migrated from the localStorage demo to configStore + sub-site cloud sync (notifications key), consistent across devices with live remote apply
+
+### Changed（变更）
+
+- 平台会话不再支持手动新建：删除 `POST /platforms/instances/{id}/conversations/new` 端点（前端按钮已于 0.8.3 批次移除），开新会话唯一入口为平台消息 `/new` 命令 — Manual platform-conversation creation removed (API endpoint deleted; /new command is the only entry)
 
 - 备份/恢复产品化：`GET/POST /api/v1/backup/{list,create,restore,delete}` 四端点 + 设置→隐私与安全页「数据备份与恢复」卡片（强确认对话框、恢复后凭据重配清单）；备份包排除全部凭据文件（auth_token/secret_key*/jwt_secret_key*）并写入 `_backup_manifest.json` 指引；恢复优先经 sqlite3 backup API 按页写回现库（运行中热恢复），损坏库回退整文件替换 — Backup/restore productization: four API endpoints + settings-page card with confirm dialog and credential re-setup checklist; backups exclude all credential files and embed a manifest; restore prefers paged write-back via the sqlite3 backup API (hot restore while running)
 - SECRET_KEY 口令恢复包：`python -m app.security.crypto.secret_key_manager create-recovery|recover`（PBKDF2-HMAC-SHA256 600k 迭代加密密钥副本，口令不落盘）；换机/容器重建后凭恢复包找回全部加密数据，无包时报错给出三条出路指引 — SECRET_KEY recovery package CLI (passphrase-encrypted key copy, passphrase never stored); recover all encrypted data after machine migration, with actionable guidance when absent
