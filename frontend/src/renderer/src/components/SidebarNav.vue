@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -36,9 +36,8 @@ import { useCloudAccountStore } from '../stores/cloud-account'
 import { cxContributionRegistry } from '../plugins'
 import { resolvePluginIcon } from '../plugins/plugin-icons'
 import BranchedMenu from './common/BranchedMenu.vue'
+import InboxModal from './common/InboxModal.vue'
 import type { BranchedMenuItem } from './common/BranchedMenu.vue'
-import type { CloudNotificationItem } from '@shared/ipc-types'
-import { formatShortDateTime } from '../utils/format'
 
 const route = useRoute()
 const router = useRouter()
@@ -56,7 +55,6 @@ const navMenuRef = ref<InstanceType<typeof BranchedMenu> | null>(null)
 onMounted(async () => {
   // 通行证账号状态（左上角生态站头像 + 铃铛未读）：订阅 main 推送并拉取一次
   cloudAccount.start()
-  document.addEventListener('click', closeInbox)
   await agentStore.fetchAgents()
   if (agentStore.activeAgent?.id) {
     await chatStore.fetchConversations(agentStore.activeAgent.id)
@@ -64,28 +62,12 @@ onMounted(async () => {
   }
 })
 
-onUnmounted(() => {
-  document.removeEventListener('click', closeInbox)
-})
-
-// ── 站内信面板（主站 /connect/notifications）──
+// ── 站内信弹窗（主站 /connect/notifications；铃铛为入口，列表在弹窗中展示）──
 const inboxOpen = ref(false)
-/** 面板最多展示 10 条，完整记录以生态站 Web 端为准 */
-const inboxItems = computed<CloudNotificationItem[]>(() => cloudAccount.notifications.slice(0, 10))
 
-const formatMessageTime = (ts: string) => (ts ? formatShortDateTime(ts) : '')
-
-const toggleInbox = () => {
-  inboxOpen.value = !inboxOpen.value
-  if (inboxOpen.value) void cloudAccount.refreshNotifications()
-}
-
-const closeInbox = () => {
-  inboxOpen.value = false
-}
-
-const openNotification = (item: CloudNotificationItem) => {
-  if (!item.isRead) void cloudAccount.markNotificationRead({ id: item.id })
+const openInbox = () => {
+  inboxOpen.value = true
+  void cloudAccount.refreshNotifications()
 }
 
 // 插件贡献的侧边栏视图（响应式，插件激活/停用时自动更新）
@@ -271,7 +253,7 @@ const handleNavigate = (path: string) => {
           :class="{ 'has-unread': cloudAccount.unreadCount > 0 }"
           :aria-label="t('nav.inbox')"
           :title="t('nav.inbox')"
-          @click.stop="toggleInbox"
+          @click="openInbox"
         >
           <Bell :size="16" />
           <span v-if="cloudAccount.unreadCount > 0" class="header-action-dot"></span>
@@ -281,35 +263,6 @@ const handleNavigate = (path: string) => {
         <PanelLeftOpen v-if="isNavCollapsed" :size="18" />
         <PanelLeftClose v-else :size="18" />
       </button>
-
-      <!-- 站内信面板（主站 /connect/notifications；点击外部关闭） -->
-      <div v-if="inboxOpen" class="inbox-popover" @click.stop>
-        <div class="inbox-header">
-          <span class="inbox-title">{{ t('nav.inbox') }}</span>
-          <button
-            v-if="cloudAccount.unreadCount > 0"
-            class="inbox-mark-all"
-            @click="cloudAccount.markNotificationRead({ all: true })"
-          >
-            {{ t('nav.markAllRead') }}
-          </button>
-        </div>
-        <div class="inbox-list">
-          <template v-if="cloudAccount.status.state === 'authorized'">
-            <div
-              v-for="item in inboxItems"
-              :key="item.id"
-              :class="['inbox-item', { unread: !item.isRead }]"
-              @click="openNotification(item)"
-            >
-              <span class="inbox-item-title">{{ item.title || item.type }}</span>
-              <span class="inbox-item-time">{{ formatMessageTime(item.createdAt) }}</span>
-            </div>
-            <div v-if="inboxItems.length === 0" class="inbox-empty">{{ t('nav.inboxEmpty') }}</div>
-          </template>
-          <div v-else class="inbox-empty">{{ t('nav.loginToView') }}</div>
-        </div>
-      </div>
     </div>
 
     <div v-if="!isNavCollapsed" class="nav-search">
@@ -399,6 +352,18 @@ const handleNavigate = (path: string) => {
         <span v-if="!isNavCollapsed">{{ t('nav.settings') }}</span>
       </button>
     </div>
+
+    <!-- 站内信弹窗（主站 /connect/notifications；铃铛入口，列表在弹窗中完整展示） -->
+    <InboxModal
+      :visible="inboxOpen"
+      :items="cloudAccount.notifications"
+      :unread-count="cloudAccount.unreadCount"
+      :logged-in="cloudAccount.status.state === 'authorized'"
+      :loading="cloudAccount.notificationsLoading"
+      @update:visible="inboxOpen = $event"
+      @refresh="cloudAccount.refreshNotifications()"
+      @mark-read="cloudAccount.markNotificationRead($event)"
+    />
   </div>
 </template>
 
@@ -520,106 +485,6 @@ const handleNavigate = (path: string) => {
 .header-action-btn:hover {
   background: var(--surface-active);
   color: var(--text-primary);
-}
-
-/* ── 站内信面板 ── */
-.inbox-popover {
-  position: absolute;
-  top: calc(100% + var(--space-1));
-  right: var(--space-4);
-  width: 300px;
-  max-height: 380px;
-  display: flex;
-  flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  z-index: 60;
-  overflow: hidden;
-}
-
-.inbox-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--border-light);
-  flex-shrink: 0;
-}
-
-.inbox-title {
-  font-size: var(--text-sm);
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-}
-
-.inbox-mark-all {
-  border: none;
-  background: none;
-  padding: 2px var(--space-1);
-  font-size: var(--text-xs);
-  color: var(--lumi-brand);
-  cursor: pointer;
-  border-radius: var(--radius-xs);
-}
-
-.inbox-mark-all:hover {
-  background: var(--surface-hover);
-}
-
-.inbox-list {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.inbox-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: var(--space-2) var(--space-3);
-  cursor: pointer;
-}
-
-.inbox-item:hover {
-  background: var(--surface-hover);
-}
-
-.inbox-item.unread .inbox-item-title {
-  font-weight: var(--font-semibold);
-  color: var(--text-primary);
-}
-
-.inbox-item-title {
-  font-size: var(--text-xs);
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inbox-item.unread .inbox-item-title::before {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-full);
-  background: var(--lumi-brand);
-  margin-right: var(--space-1);
-  vertical-align: middle;
-}
-
-.inbox-item-time {
-  font-size: var(--text-2xs);
-  color: var(--text-muted);
-}
-
-.inbox-empty {
-  padding: var(--space-5) var(--space-3);
-  text-align: center;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
 }
 
 .header-action-dot {

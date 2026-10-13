@@ -187,7 +187,7 @@ onMounted(() => {
   </div>
 </template>
 
-<style scoped src="./preset-avatar-shared.css"></style>
+<style scoped src="../common/preset-avatar-shared.css"></style>
 
 <style scoped>
 /* 预设头像网格样式见 preset-avatar-shared.css（与 WorkspaceDialogs 共享） */
