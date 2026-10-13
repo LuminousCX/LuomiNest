@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-10-13
+
+> 返修批：修复主智能体设置页共享样式引用路径错误（同一错误曾令 v0.8.4 三平台打包全部失败，并在 dev 模式下毒害 vite 模块图——报错遮罩挡住全部交互、定时任务时间轴样式塌陷）；站内信从左上角窄弹层改为居中弹窗。
+> Fix batch: shared-style import path fix (the same error failed all three v0.8.4 packaging jobs and poisoned the dev-mode vite module graph — error overlay blocked all interaction and the task-timeline styles collapsed); the inbox moved from the cramped top-left popover to a centered dialog.
+
+### Fixed（修复）
+
+- 主智能体设置页 `<style scoped src>` 路径 `./preset-avatar-shared.css` → `../common/preset-avatar-shared.css`：dev 下该 ENOENT 毒害 vite 模块图（报错遮罩挡住全部交互、通行证登录不可用；定时任务时间轴 scoped 样式块丢失致高度塌陷只剩标题条），CI 下三平台打包全部失败 — Fixed the shared-style import path: the dev-mode ENOENT poisoned the vite module graph (error overlay blocked all interaction including passport login; task timeline lost its scoped styles and collapsed to a title strip), and the same path failed all three v0.8.4 packaging jobs
+
+### Changed（变更）
+
+- 站内信改版：左上角 300px 窄弹层（标题截断、无正文、贴边）改为 640px 居中弹窗 InboxModal——未读计数、一键全部已读、标题+正文两行+时间、可滚动列表；左上角铃铛保留未读红点作为唯一入口；三语 i18n 对齐 — Inbox redesign: the 300px top-left popover (truncated titles, no content) is replaced by a 640px centered dialog with unread count, one-click mark-all-read, title + 2-line content + time, and a scrollable list; the bell keeps its unread dot as the entry; i18n aligned across zh/en/ja
+
 ## [0.8.4] - 2026-10-12
 
 > 本轮含两个批次：①「2026-10-05 链路审查修复包」（审查报告见 文档/2026年10月5日链路审查/，五链路 11 个跨链路 P0 与 10 个 P1 精选全部处置）：
