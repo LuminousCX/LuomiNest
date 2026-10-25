@@ -632,13 +632,19 @@ Your name is {agent_name}, {agent_description}.
             blocks: list[str] = []
 
             # ① owner 轨（主人记忆优先，§8.5.5）
-            # build_context 的同步组装含 SQLite 读，放 to_thread 执行避免阻塞事件循环
+            # build_context 的同步组装含 SQLite 读，放 to_thread 执行避免阻塞事件循环。
+            # G0-E：召回切 hybrid_search 主路径（向量+BM25 RRF）——召回必须在外层
+            # 异步完成（worker 线程内无法 await），结果以 relevant_fact_ids 传入。
             owner_engine = _owner_engine_for(agent_id)
+            owner_relevant_ids = await owner_engine.retrieve_relevant_ids(
+                query, k=10, allowed_scopes=allowed_scopes,
+            )
             owner_ctx = await asyncio.to_thread(
                 owner_engine.build_context_sync,
                 query=query,
                 conversation_id=thread_id,
                 allowed_scopes=allowed_scopes,
+                relevant_fact_ids=owner_relevant_ids or None,
             )
             if owner_ctx:
                 blocks.append(owner_ctx)
@@ -647,11 +653,15 @@ Your name is {agent_name}, {agent_description}.
             if is_group and policy.group_track_key:
                 try:
                     group_engine = get_track_engine(TRACK_GROUPS, policy.group_track_key)
+                    group_relevant_ids = await group_engine.retrieve_relevant_ids(
+                        query, k=10, allowed_scopes={"global", "group"},
+                    )
                     group_ctx = await asyncio.to_thread(
                         group_engine.build_context_sync,
                         query=query,
                         conversation_id=thread_id,
                         allowed_scopes={"global", "group"},
+                        relevant_fact_ids=group_relevant_ids or None,
                     )
                     if group_ctx:
                         blocks.append(f"[群聊画像 · 群体设定]\n{group_ctx}")
@@ -662,11 +672,15 @@ Your name is {agent_name}, {agent_description}.
             if policy.memory_track == TRACK_USERS and track_key:
                 try:
                     user_engine = get_track_engine(TRACK_USERS, track_key)
+                    user_relevant_ids = await user_engine.retrieve_relevant_ids(
+                        query, k=10, allowed_scopes=allowed_scopes,
+                    )
                     user_ctx = await asyncio.to_thread(
                         user_engine.build_context_sync,
                         query=query,
                         conversation_id=thread_id,
                         allowed_scopes=allowed_scopes,
+                        relevant_fact_ids=user_relevant_ids or None,
                     )
                     if user_ctx:
                         blocks.append(f"[当前用户记忆]\n{user_ctx}")

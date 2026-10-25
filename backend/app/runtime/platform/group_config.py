@@ -25,6 +25,35 @@ DEFAULT_GROUP_CONFIG: dict = {
     "respond_mode": "at",
     "memory_enabled": True,
     "interject_rate": 0.0,
+    # ── G0-C 群上下文扩容（2026-10-25 拍板⑪）────────────────────────
+    # 注入上下文的原始消息条数上限（默认 100；快脑会话实际取
+    # min(context_limit, FAST_BRAIN_RECENT_MESSAGES)——快脑吃「摘要+近 50 条」，
+    # 慢脑 dispatch 吃「摘要+全量」，见 platform_router）
+    "context_limit": 100,
+    # ── G0-D 分段发送服务（2026-10-25 拍板⑫；参数照 AstrBot 实测口径）──
+    # 分段总开关；segmenter.py 承载纯逻辑
+    "segment_enabled": True,
+    # 总长超此值放弃切分直接整发（防刷屏碎条）
+    "segment_max_chars": 150,
+    # 段间延迟模式："log"（y=log_base(段字数) 秒）| "random"（均匀区间）
+    "segment_delay_mode": "log",
+    "segment_log_base": 2.6,
+    "segment_delay_min": 1.5,
+    "segment_delay_max": 3.5,
+    # 回复前思考延迟：base + uniform(0, jitter) 秒
+    "segment_think_base": 1.2,
+    "segment_think_jitter": 2.0,
+}
+
+# 数值型字段的取值边界（写入时夹取；边界外静默夹回，不报错）
+_NUMERIC_FIELD_BOUNDS: dict[str, tuple[float, float]] = {
+    "context_limit": (10, 500),
+    "segment_max_chars": (50, 2000),
+    "segment_log_base": (1.5, 10.0),
+    "segment_delay_min": (0.0, 30.0),
+    "segment_delay_max": (0.0, 60.0),
+    "segment_think_base": (0.0, 30.0),
+    "segment_think_jitter": (0.0, 30.0),
 }
 
 # respond_mode 合法值（写入时校验，非法值拒绝并保留旧值）
@@ -61,7 +90,7 @@ def safe_get_group_config(instance_id: str, group_id: str) -> dict:
 
 
 def set_group_config(instance_id: str, group_id: str, patch: Mapping) -> dict:
-    """增量更新群配置（仅接受已知字段；respond_mode 非法值拒绝）。"""
+    """增量更新群配置（仅接受已知字段；respond_mode 非法值拒绝，数值字段夹取）。"""
     key = _config_key(instance_id, str(group_id))
     current = luominest_config_store.get(key)
     merged = _merge(current if isinstance(current, Mapping) else None)
@@ -72,6 +101,16 @@ def set_group_config(instance_id: str, group_id: str, patch: Mapping) -> dict:
             raise ValueError(f"respond_mode 必须是 {_VALID_RESPOND_MODES} 之一，收到 {v!r}")
         if k == "interject_rate":
             v = max(0.0, min(1.0, float(v)))
+        if k in _NUMERIC_FIELD_BOUNDS:
+            low, high = _NUMERIC_FIELD_BOUNDS[k]
+            try:
+                v = max(low, min(high, float(v)))
+            except (TypeError, ValueError):
+                continue  # 非法数值静默忽略，保留旧值
+            if k == "context_limit":
+                v = int(v)
+        if k == "segment_delay_mode" and v not in ("log", "random"):
+            raise ValueError(f"segment_delay_mode 必须是 log/random 之一，收到 {v!r}")
         merged[k] = v
     luominest_config_store.set(key, merged)
     return merged

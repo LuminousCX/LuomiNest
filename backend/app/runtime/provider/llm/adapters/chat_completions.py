@@ -717,6 +717,12 @@ class OpenAICompatibleProvider(ProviderClientMixin, LLMProvider):
         reasoning_effort = request.extra.get("reasoning_effort")
         if reasoning_effort:
             payload.update(self._build_thinking_params(request.model, str(reasoning_effort)))
+        # G0-B Ollama 快脑补丁（拍板⑩）：显式透传 think 开关。快脑为快速响应存在，
+        # 思考模式（Ollama 0.9+ think 参数）直接拖慢首 token；不支持该字段的
+        # 服务端按 OpenAI 兼容惯例忽略未知字段，无害。
+        think = request.extra.get("think")
+        if think is not None:
+            payload["think"] = bool(think)
         if request.tools:
             sanitized_tools = []
             for t in request.tools:

@@ -38,6 +38,7 @@ from app.core.tags.definitions import (
     TASK_DISPATCH_DETECTED_KEY,
     TASK_DISPATCH_FINGERPRINTS_KEY,
     TASK_DISPATCH_MAX_DEPTH,
+    TASK_DISPATCH_RESULTS_KEY,
     TASK_DISPATCH_STATS_KEY,
 )
 from app.core.utils import sse_data
@@ -46,6 +47,8 @@ from app.core.utils import sse_data
 _DISPATCH_RESULT_PREFIX = "[派发任务]"
 # 慢脑任务附加上下文里携带的来源会话快照长度上限（字符）
 _CONTEXT_SNIPPET_MAX = 400
+# G0-C dispatch_context 注入快照的长度上限（滚动摘要 + 近期消息全量的裁剪线）
+_DISPATCH_CONTEXT_MAX = 8000
 # done 事件 summary 摘要长度上限（一段话口径）
 _SUMMARY_MAX = 200
 
@@ -188,8 +191,10 @@ class DispatchMiddleware(AgentMiddleware):
         self, ctx: AgentContext, response: Any
     ) -> None:
         """流式模型输出后消费本户新增的 detected 事件（游标推进防重复消费）。"""
-        if ctx.extra.get("scene", "chat") not in ("", "chat"):
-            return  # 仅主对话场景派发（subagent/group 由各自管道约束）
+        # G0-A：platform 非流式管道同样挂载（慢脑派发进平台域）；SSE 事件在
+        # 无发射器时静默跳过，结果经 TASK_DISPATCH_RESULTS_KEY 由路由器回投。
+        if ctx.extra.get("scene", "chat") not in ("", "chat", "platform"):
+            return  # 仅主对话/平台场景派发（subagent/group 由各自管道约束）
 
         detected = ctx.state.get(TASK_DISPATCH_DETECTED_KEY) or []
         consumed = ctx.state.get(TASK_DISPATCH_CONSUMED_KEY, 0)
@@ -268,6 +273,16 @@ class DispatchMiddleware(AgentMiddleware):
 
         summary = self._summarize(result)
         await self._emit(ctx, task, "done", task_id, summary)
+        # G0-A 平台回投挂点：非流式管道没有 SSE 下发，platform_router 从
+        # ctx.state[TASK_DISPATCH_RESULTS_KEY] 读取 done 结果经适配器发回平台会话。
+        results = ctx.state.setdefault(TASK_DISPATCH_RESULTS_KEY, [])
+        if isinstance(results, list):
+            results.append({
+                "task_id": task_id,
+                "task": task,
+                "summary": summary,
+                "result": result,
+            })
         await self._backfill_result(ctx, task_id, task, result)
 
     # ── 慢脑执行（复用既有子 Agent 路径，安全中间件全部在位）──────────
@@ -299,7 +314,17 @@ class DispatchMiddleware(AgentMiddleware):
 
     @staticmethod
     def _context_snapshot(ctx: AgentContext) -> str:
-        """必要上下文快照：来源会话最近一条 user 消息节选（慢脑无父对话历史）。"""
+        """必要上下文快照：慢脑执行附加上下文。
+
+        G0-C：调用方可经 ctx.extra["dispatch_context"] 注入完整快照
+        （滚动摘要 + 近期消息全量，platform_router 组装）；未提供时回退
+        既有行为——来源会话最近一条 user 消息节选（慢脑无父对话历史）。
+        """
+        injected = str(ctx.extra.get("dispatch_context") or "").strip()
+        if injected:
+            if len(injected) > _DISPATCH_CONTEXT_MAX:
+                injected = injected[:_DISPATCH_CONTEXT_MAX] + "…"
+            return injected
         for msg in reversed(ctx.messages):
             if not isinstance(msg, dict) or msg.get("role") != "user":
                 continue

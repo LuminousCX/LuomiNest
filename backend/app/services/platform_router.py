@@ -5,6 +5,7 @@ import time
 import traceback
 import uuid
 from dataclasses import replace
+from typing import Any
 from loguru import logger
 
 from app.core.utils import AsyncKeyLocks, extract_llm_text, utc_now
@@ -17,10 +18,10 @@ from app.runtime.platform.base import (
     PlatformMessage,
     PlatformResponse,
     filter_tools_by_risk,
-    get_standard_tools_for_platform,
 )
 from app.runtime.platform.infrastructure.dedup import MessageDeduplicator
 from app.runtime.platform.infrastructure.message_batch import TextBatchAggregator
+from app.runtime.platform.segmenter import SegmentParams, segment_reply_plan
 from app.runtime.platform.briefings import get_platform_briefing
 from app.runtime.platform.session import (
     MAIN_AGENT_ID,
@@ -42,8 +43,16 @@ from app.runtime.platform.registry import (
 )
 from app.runtime.platform.platform_logger import platform_logger
 from app.infrastructure.database.conversation_store import conversation_store
+from app.infrastructure.database.config_store import luominest_config_store
 from app.services.context_service import context_service
+from app.core.agents.middleware.base import AgentContext
+from app.core.tags.definitions import (
+    TASK_DISPATCH_DETECTED_KEY,
+    TASK_DISPATCH_RESULTS_KEY,
+)
+from app.core.tags.parser import TagStreamParser
 from app.core.context import get_context_manager
+from app.core.tools.orchestrator import tool_orchestrator
 from app.runtime.provider.llm.adapter import llm_adapter
 from app.runtime.provider.llm.types import RouteHint
 
@@ -52,6 +61,27 @@ from app.runtime.provider.llm.types import RouteHint
 # 默认关闭：同步响应契约下开启会给所有文本消息引入一个窗口期的固定延迟，
 # 且拉长 qq_onebot 这类内联 emit 适配器的读循环阻塞时间（报告 P2-1 队头阻塞面）。
 MESSAGE_BATCH_ENABLED_KEY = "message_batch_enabled"
+
+# ── G0-C/G0-D 常量（2026-10-25 拍板⑪⑫，赛博生命升格计划书 §6.1）──────────
+# 私聊/未配置群的历史注入条数（原 20 条冲刷扩容至 100；AstrBot 佐证：其默认
+# 不限条数 + 按 token 压缩，插件生态常开 100+）
+PLATFORM_HISTORY_LIMIT_DEFAULT = 100
+# 快脑会话实际注入条数：快脑吃「滚动摘要 + 近 50 条」，慢脑 dispatch 吃全量
+FAST_BRAIN_RECENT_MESSAGES = 50
+# 滚动摘要低频维护触发阈值：会话消息距上次摘要新增 ≥N 条时重新生成
+ROLLING_SUMMARY_TRIGGER = 40
+# 滚动摘要存储命名空间（config_items 键 platform.summaries.{conv_id}）。
+# 独立于 conv 对象存储：后台摘要写与热路径会话写并发时互不覆盖（append-only 键）。
+SUMMARY_NAMESPACE = "platform.summaries."
+
+# 滚动摘要生成提示词（拍板⑪：纯事实性压缩，与 G1 reflection 的认知性升华相邻不合并）
+_ROLLING_SUMMARY_SYSTEM_PROMPT = (
+    "你是对话记录归档员。把既有摘要与新增消息合并为一份更新的事实性滚动摘要：\n"
+    "- 只记录事实：谁说了什么、决定了什么、发生了什么、提到的实体/关系/数字/时间；\n"
+    "- 不要评价、不要建议、不要总结感受（那是另一条认知管线的职责）；\n"
+    "- 保留人名、时间、数字等关键信息；冲突信息以更新后的为准；\n"
+    "- 控制在 500 字以内，直接输出摘要正文，不要任何前后缀。"
+)
 
 
 class LuomiNestPlatformRouter:
@@ -415,11 +445,14 @@ class LuomiNestPlatformRouter:
             )
 
         # 使用 context_service 的完整系统提示词构建流程（含人设、身份、规则）
+        # G0-B：传 provider/model——快脑会话自动切换为合同风格提示块（W2 分册 10 §18）
         user_text = message.content or ""
         base_system = context_service.build_system_prompt(
             MAIN_AGENT_ID,
             user_context=user_text,
             include_avatar_emotion=False,
+            provider=provider,
+            model=model,
         )
         # W3-3/平台 briefing：风险开关提前计算（工具注入面与本 briefing 共用同一判定）
         risk_enabled = self._is_platform_risk_enabled(instance_id)
@@ -439,12 +472,37 @@ class LuomiNestPlatformRouter:
         )
         full_system = f"{base_system}\n\n{platform_context}"
 
-        history_messages = self._load_history_messages(conv)
+        # ── G0-C 三层上下文（拍板⑪）：快脑吃「摘要+近 50」，慢脑吃「摘要+全量」──
+        group_id_val = message.group_id or (message.session_id if message.is_group else "")
+        group_cfg: dict = {}
+        if message.is_group and (group_id_val or "").strip():
+            group_cfg = safe_get_group_config(instance_id, group_id_val)
+        is_fast_brain = context_service.is_fast_brain_model(provider, model)
+        context_limit = (
+            int(group_cfg.get("context_limit") or PLATFORM_HISTORY_LIMIT_DEFAULT)
+            if message.is_group else PLATFORM_HISTORY_LIMIT_DEFAULT
+        )
+        effective_limit = (
+            min(context_limit, FAST_BRAIN_RECENT_MESSAGES) if is_fast_brain else context_limit
+        )
+        # 滚动摘要注入（低频维护，独立存储键；读取失败静默跳过不断流）
+        try:
+            _summary_entry = await luominest_config_store.get_async(f"{SUMMARY_NAMESPACE}{conv_id}")
+            _rolling_summary = str(_summary_entry.get("summary") or "") if isinstance(_summary_entry, dict) else ""
+        except Exception as e:
+            _rolling_summary = ""
+            logger.debug(f"[PlatformRouter] 滚动摘要读取失败（跳过注入）: {e}")
+        if _rolling_summary:
+            full_system += (
+                f"\n\n[会话滚动摘要 · 事实性压缩]\n{_rolling_summary}\n"
+                f"（以上是更早对话的摘要，与近期消息共同构成完整上下文）"
+            )
+
+        history_messages = self._load_history_messages(conv, limit=effective_limit)
         user_message = self._build_user_message(message, supports_vision)
         messages = [{"role": "system", "content": full_system}] + history_messages + [user_message]
 
         messages = context_service.inject_timestamp_prompt(messages)
-        group_id_val = message.group_id or (message.session_id if message.is_group else "")
         # 记忆注入（DomainPolicy，§9）：平台域读 owner（优先）+ 群组画像(若群聊) + 说话成员用户轨
         # （私聊 = conv.user_key；群聊 = 粉丝成员轨 + 群聊专属记忆，防隐私泄露）+ 在场成员群友画像块
         messages = await context_service.inject_memory(
@@ -464,6 +522,17 @@ class LuomiNestPlatformRouter:
         ctx_mgr = get_context_manager(provider, model, threshold_override=0.70)
         process_result = await ctx_mgr.process(messages, chat_mode="platform")
         messages = process_result["messages"]
+
+        # 快脑合同四段式改写最后一跳 user 消息（W2 分册 10 §18.1；chat_service 同款，
+        # G0-B：is_fast_brain_ctx 判定自此覆盖平台路径）
+        if is_fast_brain:
+            messages = context_service.inject_fast_brain_protocol(
+                messages,
+                agent_id=MAIN_AGENT_ID,
+                session_mode="group_chat" if message.is_group else "private_chat",
+                is_owner=False,
+                speaker_name=message.sender_name,
+            )
 
         self._save_user_message(conv, message, user_message)
 
@@ -490,35 +559,118 @@ class LuomiNestPlatformRouter:
             f"history={len(history_messages)}"
         )
 
-        # ─── 平台工具注入（tool-opt §4.7 T9）───
-        # 双层注入：standard 子集 + 平台专用工具
+        # ─── 平台工具注入（G0-A 拍板⑨：工具面全量放开，三级注入照常生效）───
+        # 第一层：全量注册表三级注入（常驻/召回层完整 schema + 长尾摘要；
+        # W7 高权限裁剪与能力表检查在 orchestrator 内照常生效）
         platform_adapter = get_adapter(instance_id)
-        platform_tools: list[dict] = []
-        # 第一层：标准工具子集
-        standard_tools = get_standard_tools_for_platform(provider, model)
-        platform_tools.extend(standard_tools)
+        schemas, tool_digest = tool_orchestrator.get_tools_for_llm_tiered(
+            provider, model, scope=None, query=user_text,
+        )
+        platform_tools: list[dict] = list(schemas)
         # 第二层：适配器声明的平台专用工具
         # 风险闸门（W3-3，默认关闭）：risk_enabled 已在上方构建平台 briefing 时计算，
-        # 两处共用同一判定（inst.config["platform_tools_risk_enabled"]）
+        # 两处共用同一判定（inst.config["platform_tools_risk_enabled"]）——双闸保留
         if platform_adapter and hasattr(platform_adapter, 'available_tools'):
             adapter_tools = platform_adapter.available_tools
             platform_tools.extend(filter_tools_by_risk(adapter_tools, risk_enabled))
 
         use_tools = bool(platform_tools) and llm_adapter.supports_tool_calls(provider, model)
 
+        # 长尾工具摘要块进 system（快脑会话由 ToolFilterMiddleware 整块剥除，W3 口径）
+        if tool_digest and use_tools and messages and messages[0].get("role") == "system":
+            messages[0]["content"] = (
+                messages[0]["content"]
+                + "\n\n<tool_index>\n以下工具未注入完整参数定义（节省 token）。"
+                "使用其中某个工具前，先调用 tool_explore(tool_name='工具名') 获取完整定义，"
+                "探索到的工具即可直接调用：\n"
+                + tool_digest
+                + "\n</tool_index>"
+            )
+
         llm_start = time.time()
         try:
-            result = await llm_adapter.chat(
+            # ── G0-A 平台管道收敛（拍板⑧）：scene="platform" 非流式独立挂载组 ──
+            # MemoryAccess/ToolFilter/ContextTrim/LoopGuard/PermissionGate/Dispatch/
+            # ToolExecution/UsageTrack 全在位；工具循环由 AgentRunner.run_non_stream
+            # 承载（原自建 function-calling 循环已删，与 chat 非流式同构）。
+            # execute_fn 用平台执行器：适配器专用工具/内部工具三层查找 + 高风险执行侧
+            # 兜底闸门（_execute_platform_tool）不可绕开。
+            async def platform_execute_fn(tool_call: dict) -> dict:
+                func_info = tool_call.get("function", {})
+                tool_name = func_info.get("name", "")
+                raw_args = func_info.get("arguments", {})
+                if isinstance(raw_args, str):
+                    try:
+                        arguments = json.loads(raw_args) if raw_args.strip() else {}
+                    except json.JSONDecodeError:
+                        arguments = {}
+                else:
+                    arguments = raw_args or {}
+                tool_result = await self._execute_platform_tool(
+                    tool_name, arguments, platform_adapter,
+                    instance_id=instance_id,
+                )
+                content = (
+                    tool_result.get("output")
+                    or tool_result.get("error")
+                    or "{}"
+                )
+                if not str(content).strip():
+                    content = "{}"
+                out: dict[str, Any] = {
+                    "role": "tool",
+                    "tool_call_id": tool_call.get("id", ""),
+                    "name": tool_name,
+                    "content": str(content),
+                }
+                if tool_result.get("metadata"):
+                    out["metadata"] = tool_result["metadata"]
+                return out
+
+            runner = tool_orchestrator.create_runner({
+                "scene": "platform",
+                "is_stream": False,
+                "max_iterations": 10,
+                "execute_fn": platform_execute_fn,
+            })
+            agent_ctx = AgentContext(
                 messages=messages,
-                stream=False,
-                provider_name=provider,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                route_hint=RouteHint.CHAT,
-                return_raw=True,
                 tools=platform_tools if use_tools else None,
+                route_hint=RouteHint.CHAT,
+                state={"provider": provider, "model": model, "chat_id": conv_id},
+                extra={
+                    "scene": "platform",
+                    "is_stream": False,
+                    "agent_id": MAIN_AGENT_ID,
+                    # dispatch 结果回填目标会话（DispatchMiddleware._backfill_result 惯例）
+                    "conv_id": conv_id,
+                    "supports_vision": supports_vision,
+                    # G0-C：慢脑派发可见「滚动摘要 + 近期消息全量」（中间件侧裁剪 8000 字）
+                    "dispatch_context": await self._build_dispatch_context(conv_id, context_limit),
+                },
             )
+
+            async def llm_call_fn(call_ctx: AgentContext):
+                extra_kwargs: dict = {}
+                # G0-B Ollama 快脑补丁（拍板⑩）：关思考模式——快脑为快速响应存在
+                if provider == "ollama" and is_fast_brain:
+                    extra_kwargs["think"] = False
+                result = await llm_adapter.chat(
+                    messages=call_ctx.messages,
+                    tools=call_ctx.tools,
+                    stream=False,
+                    provider_name=provider,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    route_hint=RouteHint.CHAT,
+                    return_raw=True,
+                    **extra_kwargs,
+                )
+                # 标签协议覆盖平台域（G0）：剥五族合同标签 + dispatch 挂点写入
+                return self._normalize_platform_llm_result(call_ctx, result)
+
+            result_state = await runner.run_non_stream(agent_ctx, llm_call_fn)
         except Exception as e:
             error_tb = traceback.format_exc()
             llm_elapsed = round(time.time() - llm_start, 3)
@@ -543,116 +695,9 @@ class LuomiNestPlatformRouter:
                 message_type="text",
             )
 
-        # ─── function calling 循环 ───
-        max_tool_iterations = 10  # 平台域限制迭代次数（避免无限循环）
-        tool_iteration = 0
-
-        while use_tools and tool_iteration < max_tool_iterations:
-            tool_calls = self._extract_tool_calls(result)
-            if not tool_calls:
-                break
-
-            tool_iteration += 1
-            logger.info(
-                f"[PlatformRouter] Function calling iteration {tool_iteration}: "
-                f"{len(tool_calls)} tool call(s)"
-            )
-
-            # 提取 assistant 响应中的文本和思考内容
-            assistant_content = ""
-            reasoning_content = ""
-            if isinstance(result, dict):
-                assistant_content = result.get("content") or ""
-                reasoning_content = result.get("reasoning") or result.get("reasoning_content") or ""
-            else:
-                assistant_content = getattr(result, "content", "") or ""
-                reasoning_content = getattr(result, "reasoning", "") or ""
-
-            # 追加单个 Assistant 消息（OpenAI / DeepSeek 标准：所有 tool_calls 归于同一个 assistant 消息）
-            assistant_msg: dict[str, Any] = {
-                "role": "assistant",
-                "content": assistant_content,
-                "tool_calls": tool_calls,
-            }
-            if reasoning_content:
-                assistant_msg["reasoning_content"] = reasoning_content
-            messages.append(assistant_msg)
-
-            turn_screenshots: list[str] = []
-            for tc in tool_calls:
-                tool_name = tc.get("function", {}).get("name", "")
-                tool_args = tc.get("function", {}).get("arguments", {})
-                tc_id = tc.get("id", f"call_{tool_iteration}")
-
-                # 解析 arguments（可能是 JSON 字符串）
-                if isinstance(tool_args, str):
-                    try:
-                        tool_args = json.loads(tool_args)
-                    except json.JSONDecodeError:
-                        tool_args = {}
-
-                # 执行工具（执行侧兜底校验高风险闸门，instance_id 用于读取实例开关）
-                tool_result = await self._execute_platform_tool(
-                    tool_name, tool_args, platform_adapter,
-                    instance_id=instance_id,
-                )
-
-                sc = (tool_result.get("metadata") or {}).get("screenshot")
-                if sc:
-                    turn_screenshots.append(sc)
-
-                # 获取工具输出（确保非空字符串，避免下游被清洗或 LLM 抛 400）
-                tool_output = (
-                    tool_result.get("output")
-                    or tool_result.get("error")
-                    or (json.dumps(tool_result, ensure_ascii=False) if tool_result else "{}")
-                )
-                if not tool_output or not str(tool_output).strip():
-                    tool_output = "{}"
-
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tc_id,
-                    "content": str(tool_output),
-                })
-
-            if turn_screenshots and supports_vision:
-                # 复用 runner 的注入逻辑：同一会话内仅保留最新一张截图反馈
-                from app.core.agents.middleware.runner import AgentRunner
-                AgentRunner._append_vision_feedback(messages, turn_screenshots[-1])
-
-            # 再次调用 LLM（带工具结果）
-            try:
-                result = await llm_adapter.chat(
-                    messages=messages,
-                    stream=False,
-                    provider_name=provider,
-                    model=model,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    route_hint=RouteHint.CHAT,
-                    return_raw=True,
-                    tools=platform_tools,
-                )
-            except Exception as e:
-                logger.error(f"[PlatformRouter] Follow-up LLM call failed: {e}")
-                # 回退：使用已积累的内容作为最终响应
-                assistant_text = self._extract_assistant_text(result) if result else ""
-                usage = self._extract_usage(result) if result else {}
-                llm_elapsed = round(time.time() - llm_start, 3)
-                self._save_assistant_message(conv, assistant_text, provider, model)
-                await self._persist_conv(conv_id, conv)
-                increment_message_count(instance_id)
-                agent_name = str(load_luominest_main_agent_config().get("name") or "主Agent").strip()
-                return PlatformResponse(
-                    content=assistant_text or f"[{agent_name}] 工具调用后模型响应失败",
-                    message_type="text",
-                    reply_to=message.message_id,
-                )
-
         llm_elapsed = round(time.time() - llm_start, 3)
-        assistant_text = self._extract_assistant_text(result)
-        usage = self._extract_usage(result)
+        assistant_text = str(result_state.get("content") or "").strip()
+        usage = result_state.get("usage") or {}
 
         self._save_assistant_message(conv, assistant_text, provider, model)
         await self._persist_conv(conv_id, conv)
@@ -705,6 +750,58 @@ class LuomiNestPlatformRouter:
             group_id=group_id_val,
             memory_write=memory_write_enabled,
         ))
+
+        # ── G0-C 滚动摘要低频维护（后台；拍板⑪：慢脑维护，新增 ≥N 条触发）───
+        self._spawn_background_task(self._maybe_update_rolling_summary(
+            conv_id, provider, model,
+        ))
+
+        # ── G0-A 派发结果回投 + G0-D 分段发送（拍板⑧⑫）──────────────────
+        # 非流式管道没有 SSE：DispatchMiddleware 把 done 结果登记在
+        # ctx.state[TASK_DISPATCH_RESULTS_KEY]，此处经适配器补发到平台会话。
+        dispatch_results = [
+            dr for dr in (result_state.get(TASK_DISPATCH_RESULTS_KEY) or [])
+            if isinstance(dr, dict) and str(dr.get("result") or "").strip()
+        ]
+
+        seg_params: SegmentParams | None = None
+        send_target = ""
+        if message.is_group and (group_id_val or "").strip():
+            send_target = group_id_val or message.session_id or message.user_id or ""
+            if bool(group_cfg.get("segment_enabled", True)):
+                seg_params = self._build_segment_params(group_cfg)
+
+        if seg_params is not None and send_target and (assistant_text or dispatch_results):
+            # 分段模式：主回复与派发结果都由后台任务按计划延迟逐段发送，
+            # 返回 None 让适配器跳过同步回包（延迟不阻塞适配器读循环）
+            if assistant_text:
+                self._spawn_background_task(self._send_platform_text(
+                    instance_id, send_target, assistant_text,
+                    reply_to=message.message_id, params=seg_params,
+                ))
+            for dr in dispatch_results:
+                title = str(dr.get("task") or "")[:40] or "任务"
+                self._spawn_background_task(self._send_platform_text(
+                    instance_id, send_target,
+                    f"[派发任务]《{title}》执行完成：\n{dr.get('result')}",
+                    reply_to=message.message_id, params=seg_params,
+                ))
+            return None
+
+        # 非分段路径：主回复走同步回包；派发结果单条补发
+        for dr in dispatch_results:
+            title = str(dr.get("task") or "")[:40] or "任务"
+            fallback_target = message.session_id or message.user_id or ""
+            if fallback_target:
+                self._spawn_background_task(self._send_platform_text(
+                    instance_id, fallback_target,
+                    f"[派发任务]《{title}》执行完成：\n{dr.get('result')}",
+                    reply_to=message.message_id,
+                ))
+
+        if not assistant_text:
+            # 全部输出为标签/派发垫话缺失等净化后为空：不回空消息
+            return None
 
         return PlatformResponse(
             content=assistant_text,
@@ -784,9 +881,15 @@ class LuomiNestPlatformRouter:
         return f"{base_prompt}\n\n{platform_context}"
 
     @staticmethod
-    def _load_history_messages(conv: dict) -> list[dict]:
+    def _load_history_messages(conv: dict, limit: int | None = None) -> list[dict]:
+        """加载历史消息（G0-C 拍板⑪：条数可配，默认 100——原 20 条冲刷已扩容）。
+
+        limit 为注入条数上限；快脑会话由调用方传入 min(context_limit, 50)，
+        慢脑/默认吃全量。非法/缺省回退 PLATFORM_HISTORY_LIMIT_DEFAULT。
+        """
+        keep = int(limit) if (limit is not None and int(limit) > 0) else PLATFORM_HISTORY_LIMIT_DEFAULT
         history: list[dict] = []
-        for msg in conv.get("messages", [])[-20:]:
+        for msg in conv.get("messages", [])[-keep:]:
             role = msg.get("role")
             content = msg.get("content")
             if not role or not content:
@@ -847,48 +950,6 @@ class LuomiNestPlatformRouter:
             "provider": provider,
         }
         conv.setdefault("messages", []).append(entry)
-
-    @staticmethod
-    def _extract_assistant_text(result) -> str:
-        # choices[0].message.content / content 字段提取已收口到 core.utils.extract_llm_text
-        return extract_llm_text(result)
-
-    @staticmethod
-    def _extract_usage(result) -> dict:
-        """从 LLM 响应中提取 token 用量统计。"""
-        if not isinstance(result, dict):
-            return {}
-        usage = result.get("usage")
-        if isinstance(usage, dict):
-            return {
-                "prompt_tokens": usage.get("prompt_tokens") or usage.get("input_tokens"),
-                "completion_tokens": usage.get("completion_tokens") or usage.get("output_tokens"),
-                "total_tokens": usage.get("total_tokens"),
-            }
-        return {}
-
-    @staticmethod
-    def _extract_tool_calls(result) -> list[dict]:
-        """从 LLM chat 结果中提取 tool_calls。
-
-        支持 return_raw=True 返回的 dict 格式（含顶层 tool_calls 键）
-        以及 OpenAI choices[].message.tool_calls 格式。
-        """
-        if not isinstance(result, dict):
-            return []
-        # return_raw=True 格式：顶层 tool_calls 键
-        tool_calls = result.get("tool_calls")
-        if tool_calls:
-            return tool_calls
-        # OpenAI choices 格式
-        choices = result.get("choices", [])
-        if choices:
-            first = choices[0]
-            if isinstance(first, dict):
-                msg = first.get("message", {})
-                if isinstance(msg, dict):
-                    return msg.get("tool_calls") or []
-        return []
 
     async def _execute_platform_tool(
         self,
@@ -959,6 +1020,191 @@ class LuomiNestPlatformRouter:
                 return {"success": False, "output": "", "error": str(e)}
 
         return {"success": False, "output": "", "error": f"工具未找到: {tool_name}"}
+
+    # ── G0 新增辅助（平台管道收敛 / 三层上下文 / 分段发送）─────────────
+
+    @staticmethod
+    def _normalize_platform_llm_result(ctx: AgentContext, result) -> Any:
+        """标签协议覆盖平台域（G0，计划书 §6 G0 行）：content 过五类合同标签
+        解析器剥离（QQ 等文本渠道不渲染表情/皮套标签），dispatch 标签写入挂点
+        供 DispatchMiddleware 消费。解析器任何异常都放行原文（绝不中断路由）。"""
+        try:
+            if not isinstance(result, dict):
+                return result
+            content = result.get("content")
+            if not (isinstance(content, str) and content):
+                return result
+            parser = TagStreamParser()
+            clean, events = parser.feed(content)
+            tail, tail_events = parser.flush()
+            events = list(events) + list(tail_events)
+            clean_text = (clean + tail).strip()
+            # dispatch 挂点（多轮工具循环每轮都会解析，游标消费防重复）
+            for ev in events:
+                if getattr(ev, "kind", "") == "dispatch" and isinstance(getattr(ev, "value", None), dict):
+                    ctx.state.setdefault(TASK_DISPATCH_DETECTED_KEY, []).append(ev.value)
+            result["content"] = clean_text
+            return result
+        except Exception as e:
+            logger.debug(f"[PlatformRouter] 标签解析跳过（放行原文）: {e}")
+            return result
+
+    @staticmethod
+    def _build_segment_params(group_cfg: dict) -> SegmentParams:
+        """群配置 → 分段参数（G0-D；字段缺省回退 AstrBot 实测口径）。"""
+        try:
+            return SegmentParams(
+                max_chars=int(group_cfg.get("segment_max_chars") or 150),
+                delay_mode=str(group_cfg.get("segment_delay_mode") or "log"),
+                log_base=float(group_cfg.get("segment_log_base") or 2.6),
+                delay_min=float(group_cfg.get("segment_delay_min") or 1.5),
+                delay_max=float(group_cfg.get("segment_delay_max") or 3.5),
+                think_base=float(group_cfg.get("segment_think_base") or 1.2),
+                think_jitter=float(group_cfg.get("segment_think_jitter") or 2.0),
+            )
+        except (TypeError, ValueError):
+            return SegmentParams()
+
+    async def _send_platform_text(
+        self,
+        instance_id: str,
+        target: str,
+        text: str,
+        *,
+        reply_to: str | None = None,
+        params: SegmentParams | None = None,
+    ) -> None:
+        """经适配器发送文本（G0-D：params 非空时按分段计划延迟逐段发送）。
+
+        思考延迟/段间延迟都在本协程内 sleep——调用方必须以后台任务运行，
+        绝不占用适配器读循环（P2-1 队头阻塞教训）。
+        """
+        text = (text or "").strip()
+        if not text or not (target or "").strip():
+            return
+        adapter = get_adapter(instance_id)
+        if adapter is None:
+            logger.warning(f"[PlatformRouter] 分段发送跳过：实例 {instance_id} 无适配器")
+            return
+        plan = segment_reply_plan(text, params) if params is not None else [(text, 0.0)]
+        sent = 0
+        for seg, delay in plan:
+            if delay > 0:
+                await asyncio.sleep(delay)
+            try:
+                ok = await adapter.send_message(
+                    PlatformResponse(content=seg, message_type="text", reply_to=reply_to),
+                    target,
+                )
+                if ok:
+                    sent += 1
+            except Exception as e:
+                logger.warning(f"[PlatformRouter] 分段发送失败（段 {sent + 1}/{len(plan)}）: {e}")
+        platform_logger.log(
+            instance_id, "success", "segmented_sent",
+            f"分段发送完成: {sent}/{len(plan)} 段",
+            details={"target": target, "total_chars": len(text)},
+        )
+
+    async def _build_dispatch_context(self, conv_id: str, limit: int) -> str:
+        """G0-C：慢脑派发附加上下文 = 滚动摘要 + 最近 limit 条全量。
+
+        经 ctx.extra["dispatch_context"] 传入派发中间件（_context_snapshot 优先
+        消费，8000 字符裁剪在中间件侧）；构建失败回退空串（最小快照兜底）。
+        """
+        try:
+            parts: list[str] = []
+            summary_entry = await luominest_config_store.get_async(f"{SUMMARY_NAMESPACE}{conv_id}")
+            if isinstance(summary_entry, dict) and str(summary_entry.get("summary") or "").strip():
+                parts.append(f"[会话滚动摘要（事实性压缩）]\n{str(summary_entry['summary']).strip()}")
+            conv = await conversation_store.get_async(conv_id)
+            lines: list[str] = []
+            for msg in (conv or {}).get("messages", [])[-int(limit):]:
+                role = msg.get("role")
+                content = msg.get("content")
+                if not role or not content:
+                    continue
+                text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+                lines.append(f"{role}: {text}")
+            if lines:
+                parts.append("[近期消息全量]\n" + "\n".join(lines))
+            return "\n\n".join(parts)
+        except Exception as e:
+            logger.debug(f"[PlatformRouter] dispatch_context 构建失败（回退最小快照）: {e}")
+            return ""
+
+    async def _maybe_update_rolling_summary(
+        self, conv_id: str, session_provider: str, session_model: str,
+    ) -> None:
+        """G0-C 滚动摘要低频维护（拍板⑪）：慢脑维护，新增 ≥N 条触发。
+
+        摘要 = 纯事实性压缩（谁说了什么/决定了什么/关键实体与数字），与 G1
+        reflection 的认知性升华相邻不合并。存储于 config_items 独立键
+        （platform.summaries.{conv_id}），不写回 conv 对象——后台写与热路径
+        会话写并发时互不覆盖。
+        """
+        try:
+            conv = await conversation_store.get_async(conv_id)
+            messages = (conv or {}).get("messages") or []
+            key = f"{SUMMARY_NAMESPACE}{conv_id}"
+            entry = await luominest_config_store.get_async(key)
+            if not isinstance(entry, dict):
+                entry = {}
+            upto = int(entry.get("upto_count") or 0)
+            if len(messages) - upto < ROLLING_SUMMARY_TRIGGER:
+                return
+            prev_summary = str(entry.get("summary") or "")
+            incremental: list[str] = []
+            for msg in messages[upto:]:
+                role = msg.get("role")
+                content = msg.get("content")
+                if not role or not content:
+                    continue
+                text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False)
+                incremental.append(f"{role}: {text}")
+            if not incremental:
+                return
+
+            # 慢脑优先（拍板⑪），未配置慢脑回退会话模型
+            provider, model = session_provider, session_model
+            try:
+                from app.core.agents.middleware.dispatch import resolve_slow_brain
+                slow = resolve_slow_brain()
+                if slow and slow.get("provider"):
+                    provider = slow["provider"]
+                    model = slow.get("model") or model
+            except Exception as e:
+                logger.debug(f"[PlatformRouter] 慢脑解析失败，摘要回退会话模型: {e}")
+
+            result = await llm_adapter.chat(
+                messages=[
+                    {"role": "system", "content": _ROLLING_SUMMARY_SYSTEM_PROMPT},
+                    {"role": "user", "content": (
+                        f"[既有摘要]\n{prev_summary or '（无）'}\n\n"
+                        f"[新增消息]\n" + "\n".join(incremental[-120:])
+                    )},
+                ],
+                stream=False,
+                provider_name=provider,
+                model=model,
+                temperature=0.2,
+                max_tokens=800,
+                route_hint=RouteHint.CHAT,
+            )
+            new_summary = extract_llm_text(result).strip() if result else ""
+            if not new_summary:
+                return
+            await luominest_config_store.set_async(key, {
+                "summary": new_summary,
+                "upto_count": len(messages),
+                "updated_at": utc_now(),
+            })
+            logger.info(
+                f"[PlatformRouter] 滚动摘要已更新: conv={conv_id}, "
+                f"upto={len(messages)}, chars={len(new_summary)}"
+            )
+        except Exception as e:
+            logger.warning(f"[PlatformRouter] 滚动摘要维护失败（静默跳过）: {e}")
 
     @staticmethod
     async def _persist_conv(conv_id: str, conv: dict) -> None:

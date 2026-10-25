@@ -467,6 +467,35 @@ class MemoryEngine:
 
     # --- 上下文 ---
 
+    async def retrieve_relevant_ids(
+        self, query: str, k: int = 10, allowed_scopes: set[str] | None = None,
+    ) -> set[str]:
+        """G0-E：混合检索（向量 + BM25 RRF 融合）取相关事实 ID 集，供注入主路径。
+
+        向量腿门控在「向量管理器已初始化」上：懒初始化由写路径（vector_dedup/
+        rebuild）负责，注入热路径绝不主动触碰 embedding provider——未配置
+        embedding 的环境每次注入都白试一次请求，且破坏注入不触碰 embedding
+        的既有契约；有向量库的环境（manager 已存在）混合召回照常生效。
+        失败返回空集（context_builder 回退关键词排序，绝不阻断注入）。
+        """
+        if not (query or "").strip():
+            return set()
+        try:
+            from .hybrid_search import hybrid_search
+
+            results, meta = await hybrid_search(
+                self, query, k=k, allowed_scopes=allowed_scopes,
+                use_vector=self._vector_manager is not None,
+            )
+            logger.debug(
+                f"[MemoryEngine] hybrid recall: mode={meta.mode}, hits={len(results)}, "
+                f"vector_ok={meta.vector_ok}, bm25_ok={meta.bm25_ok}"
+            )
+            return {r.fact_id for r in results}
+        except Exception as e:
+            logger.warning(f"[MemoryEngine] hybrid recall failed (fallback to keyword): {e}")
+            return set()
+
     async def build_context_async(
         self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None, allowed_scopes: set[str] | None = None
     ) -> str:
@@ -474,15 +503,10 @@ class MemoryEngine:
         if conversation_id:
             conv_store = self._get_conv_store(conversation_id)
 
-        # 如果有查询，尝试向量召回增强
+        # G0-E：混合召回（向量 + BM25 RRF）替代纯向量腿；失败回退关键词排序
         retrieved_ids: set[str] | None = None
         if query:
-            try:
-                retrieved = await self.vector_retrieve(query, k=10)
-                if retrieved:
-                    retrieved_ids = {r.fact_id for r in retrieved}
-            except Exception as e:
-                logger.warning(f"[Memory] Vector retrieve failed: {e}")
+            retrieved_ids = await self.retrieve_relevant_ids(query, k=10, allowed_scopes=allowed_scopes) or None
 
         return self._context_builder.build_context(
             max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id,
@@ -490,18 +514,22 @@ class MemoryEngine:
         )
 
     def build_context_sync(
-        self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None, allowed_scopes: set[str] | None = None
+        self, max_chars: int | None = None, query: str = "", conversation_id: str | None = None,
+        allowed_scopes: set[str] | None = None, relevant_fact_ids: set[str] | None = None,
     ) -> str:
-        """同步上下文组装（与 build_context 的事件循环内回退分支相同，不含向量召回）。
+        """同步上下文组装（与 build_context 的事件循环内回退分支相同，不含召回）。
 
         供 async 调用方配合 asyncio.to_thread 使用：worker 线程中检测不到运行中的
         事件循环，不能走 build_context 的分支（否则会嵌套 asyncio.run）。
+        G0-E：相关事实 ID 由调用方先经 retrieve_relevant_ids（混合检索）取得后
+        传入——worker 线程内无法 await，召回必须在外层异步完成。
         """
         conv_store = None
         if conversation_id:
             conv_store = self._get_conv_store(conversation_id)
         return self._context_builder.build_context(
-            max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id, allowed_scopes=allowed_scopes,
+            max_chars, query=query, conversation_store=conv_store, conversation_id=conversation_id,
+            relevant_fact_ids=relevant_fact_ids, allowed_scopes=allowed_scopes,
         )
 
     def build_context(

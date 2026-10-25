@@ -64,6 +64,9 @@ TASK_DISPATCH_DEPTH_KEY = "task_dispatch_depth"
 TASK_DISPATCH_FINGERPRINTS_KEY = "task_dispatch_fingerprints"
 # 防环兜底硬上限：单次会话轮派发执行深度 ≤10（分册 10 §18.3 第三关）
 TASK_DISPATCH_MAX_DEPTH = 10
+# 已完成的派发结果登记（G0-A：平台非流式管道无 SSE，platform_router 从该挂点
+# 读取 done 结果并经适配器回投平台会话；list[dict{task_id, task, summary, result}]）
+TASK_DISPATCH_RESULTS_KEY = "task_dispatch_results"
 
 # 已知标签名（前缀挂起判定用）：exp / act / ui / tool / dispatch 五族
 TAG_FAMILY_NAMES: tuple[str, ...] = ("exp", "act", "ui", "tool", "dispatch")

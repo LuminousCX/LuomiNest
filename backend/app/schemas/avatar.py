@@ -120,6 +120,10 @@ class AvatarDrivePacket(BaseModel):
     type: Literal["emotion_drive"] = "emotion_drive"
     timestamp: int = Field(..., description="毫秒级时间戳")
     data: AvatarDriveData
+    # 广播路由键（G0-F 修复：此前协议无此字段，服务端曾误用 emotion 值当
+    # model_id 寻址，广播永远落不到订阅连接）。空 = 服务端回环给发送者
+    # 已订阅的模型（摄像头追踪等自驱动客户端的典型用法）。
+    model_id: str = Field("", description="目标模型 ID（广播路由键）；空 = 发送者已订阅的模型")
 
 
 # ---------------------------------------------------------------------------

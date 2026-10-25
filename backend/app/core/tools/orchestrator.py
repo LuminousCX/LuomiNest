@@ -437,15 +437,20 @@ class ToolOrchestrator:
         4. SubagentCancelMiddleware（before_model 检查取消，仅 subagent）
         5. LoopGuardMiddleware（after_model 检测循环边界）
         6. PermissionGateMiddleware（wrap_tool_call 三档确认，T0/T1/T2）
-        7. DispatchMiddleware（after_model 派发网关，仅 chat 流式）
+        7. DispatchMiddleware（after_model 派发网关，仅 chat 流式 / platform 非流式）
         8. SSEEmitMiddleware（after_model/after_tool_call 发射 SSE，仅流式）
         9. ToolExecutionMiddleware（wrap_tool_call 执行工具）
         10. SpecialToolMiddleware（wrap_tool_call 处理特殊工具，仅 chat 流式）
         11. UsageTrackMiddleware（after_agent 记录 usage）
 
+        G0-A 平台非流式独立挂载组（scene="platform"，2026-10-25 拍板⑧）：
+        MemoryAccess / ToolFilter / ContextTrim / LoopGuard / PermissionGate /
+        Dispatch / ToolExecution / UsageTrack；不挂 SSEEmit / SpecialTool /
+        SubagentCancel（流式与子 Agent 专用），工具循环由 runner.run_non_stream 承载。
+
         Args:
             extra: 调用方配置字典，识别以下键：
-                - scene: "chat" / "subagent" / "group"（默认 "chat"）
+                - scene: "chat" / "subagent" / "group" / "platform"（默认 "chat"）
                 - is_stream: 是否流式模式（默认 True）
                 - max_iterations: 覆盖编排器的 max_iterations（可选）
 
@@ -485,12 +490,13 @@ class ToolOrchestrator:
         # 命令确认闸门在 SSEEmit/ToolExecution 外层：permission_request 先于 started 到达
         middlewares.append(PermissionGateMiddleware())
 
-        # W3 dispatch 派发网关：仅主对话流式场景挂载。位于 SSEEmit 之前
-        # （after_model 反序执行 → SSEEmit 的 tool_calls 公告先落 buffer，
+        # W3 dispatch 派发网关：主对话流式与平台非流式（G0-A）挂载。位于 SSEEmit
+        # 之前（after_model 反序执行 → SSEEmit 的 tool_calls 公告先落 buffer，
         # 派发 start/done/error 随后），runner 在 after_model 返回后立即
-        # 排水 buffer，事件可达前端；非流式/子 Agent/群聊场景不挂载
-        # （detected 事件就地终结，优雅降级同 W2 口径）。
-        if scene == "chat" and is_stream:
+        # 排水 buffer，事件可达前端；非流式 chat / 子 Agent / 群聊场景不挂载
+        # （platform 挂载：派发结果经 ctx.state 登记后由 platform_router 回投平台，
+        # SSE 事件在非流式管道中静默跳过，见 DispatchMiddleware._emit 的空发射器守卫）。
+        if (scene == "chat" and is_stream) or scene == "platform":
             middlewares.append(DispatchMiddleware())
 
         if is_stream:

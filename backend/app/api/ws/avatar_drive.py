@@ -72,6 +72,12 @@ class AvatarDriveConnectionManager:
                 self._connections[websocket].clear()
         logger.debug(f"[AvatarDriveWS] Unsubscribed: {websocket.client}")
 
+    async def subscribed_models(self, websocket: WebSocket) -> list[str]:
+        """查询连接当前订阅的模型 ID 列表（G0-F：客户端自驱动包的回环路由）。"""
+        async with self._lock:
+            models = self._connections.get(websocket)
+            return list(models) if models else []
+
     async def broadcast(self, model_id: str, packet: AvatarDrivePacket) -> None:
         """向所有订阅了 model_id 的连接广播驱动包。"""
         message = packet.model_dump_json()
@@ -142,10 +148,16 @@ async def avatar_drive_endpoint(websocket: WebSocket):
                 }))
             elif msg_type == "emotion_drive":
                 # 客户端主动推送驱动包（如摄像头追踪驱动 VRM）
-                # 验证并广播给其他订阅同一模型的连接
+                # 验证并广播给订阅该模型的连接（G0-F 修复：原实现误用 emotion 值
+                # 当 model_id 寻址，广播永远落空；现按包内 model_id 路由，
+                # 未携带时回环给发送者已订阅的模型）
                 try:
                     packet = AvatarDrivePacket.model_validate(msg)
-                    await avatar_drive_ws_manager.broadcast(packet.data.emotion or "", packet)
+                    if packet.model_id:
+                        await avatar_drive_ws_manager.broadcast(packet.model_id, packet)
+                    else:
+                        for subscribed in await avatar_drive_ws_manager.subscribed_models(websocket):
+                            await avatar_drive_ws_manager.broadcast(subscribed, packet)
                 except Exception as e:
                     logger.warning(f"[AvatarDriveWS] Invalid drive packet: {e}")
             else:

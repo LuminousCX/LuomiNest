@@ -113,6 +113,7 @@ async def hybrid_search(
     k: int = 5,
     category: str | None = None,
     allowed_scopes: set[str] | None = None,
+    use_vector: bool = True,
 ) -> tuple[list[ScoredFact], HybridSearchMeta]:
     """对单个记忆引擎执行「向量 + BM25」两路召回与 RRF 融合。
 
@@ -122,6 +123,8 @@ async def hybrid_search(
         k: 返回条数上限
         category: 记忆分类过滤（可选）
         allowed_scopes: 作用域白名单（None=不限；防泄露场景传 {"global","group"}）
+        use_vector: 是否启用向量腿（G0-E：注入热路径在向量管理器未初始化时
+            传 False，单 BM25 腿——避免为一次检索懒初始化 embedding provider）
 
     Returns:
         (ScoredFact 列表, HybridSearchMeta 召回路径元信息)
@@ -129,13 +132,14 @@ async def hybrid_search(
     fetch_k = max(k * 3, 15)
 
     # ── 腿 1：向量语义召回（embedding 不可用时降级，不阻断） ──
-    vector_ok = True
+    vector_ok = use_vector
     vector_leg: list[ScoredFact] = []
-    try:
-        vector_leg = await engine.vector_retrieve(query, k=fetch_k)
-    except Exception as e:
-        vector_ok = False
-        logger.warning(f"[HybridSearch] Vector leg failed (degrade to BM25): {e}")
+    if use_vector:
+        try:
+            vector_leg = await engine.vector_retrieve(query, k=fetch_k)
+        except Exception as e:
+            vector_ok = False
+            logger.warning(f"[HybridSearch] Vector leg failed (degrade to BM25): {e}")
 
     # ── 腿 2：SQLite FTS5 BM25 召回（同步 SQLite 读，to_thread 执行） ──
     # search_facts_bm25 内部自带惰性自愈（DDL 曾失败的场景会在检索时重试）；
