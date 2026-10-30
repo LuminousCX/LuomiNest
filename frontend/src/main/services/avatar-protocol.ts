@@ -6,6 +6,7 @@ import { ImportedModelRecord, loadImportedModels, saveImportedModels } from './d
 import { createLuomiNestLogger } from './luomi-logger'
 import { handleIpc } from './typed-ipc'
 import { IpcChannels } from '@shared/ipc-types'
+import type { AvatarResourceCheck, AvatarDiagnosticsResult } from '@shared/ipc-types'
 
 const logger = createLuomiNestLogger('Avatar')
 
@@ -190,19 +191,106 @@ export function registerAvatarProtocol(): void {
   logger.info(`  resourcesPath -> ${process.resourcesPath}`)
 }
 
-export function verifyAvatarResources(): void {
-  const verifyResourcePath = (label: string, path: string, sampleFile: string): boolean => {
-    const fullPath = join(path, sampleFile)
-    const exists = existsSync(fullPath)
-    if (!exists) {
-      logger.warn(`${label} path check FAILED: ${path} (sample: ${fullPath})`)
-    } else {
-      logger.info(`${label} path OK: ${path}`)
-    }
-    return exists
+/**
+ * 后端 PyInstaller 产物内的 avatar-manifest.json 路径（工坊 UI 的单一真相源）。
+ *
+ * 历史根因（v0.8.0）：该文件未随打包落盘 → 后端 /avatar/manifest 返回空清单 →
+ * 打包版内置模型全部不可见。诊断把它列为第一检查项，让"装包缺文件"一眼可见：
+ * - 打包态：resources/backend/_internal/app/data/avatar-manifest.json（spec 的 ('app/data') 打入 _internal）
+ * - 开发态：仓库根 backend/app/data/avatar-manifest.json（__dirname = out/main，'../../..' 到仓库根，
+ *   与 services/backend/index.ts 的 projectRoot 推导保持一致）
+ */
+const getBackendManifestPath = (): string => {
+  return isDev
+    ? join(__dirname, '../../..', 'backend', 'app', 'data', 'avatar-manifest.json')
+    : join(process.resourcesPath, 'backend', '_internal', 'app', 'data', 'avatar-manifest.json')
+}
+
+/** 按 luominest-avatar:// 协议相同解析顺序（imported → builtin）返回某相对路径的候选绝对路径 */
+const resolveManifestResourceCandidates = (relPath: string): string[] => {
+  let decodedPath: string
+  try {
+    decodedPath = decodeURIComponent(relPath)
+  } catch {
+    decodedPath = relPath
   }
 
-  verifyResourcePath('Builtin Live2D', builtinBasePath, 'llny/llny.model3.json')
+  const firstSeg = decodedPath.split('/')[0]
+  if (isModelTypePrefix(firstSeg)) {
+    const rest = decodedPath.slice(firstSeg.length + 1)
+    return [
+      resolve(getImportedBasePath(firstSeg), rest),
+      resolve(getBuiltinBasePath(firstSeg), rest)
+    ]
+  }
+
+  // 旧格式回退："{model}/{file}"（与 resolveModelFile 的 legacy 分支一致）
+  return [
+    resolve(PATHS.live2d, decodedPath),
+    resolve(builtinBasePath, decodedPath)
+  ]
+}
+
+const runResourceCheck = (label: string, candidates: string[]): AvatarResourceCheck => {
+  let ok = false
+  for (const p of candidates) {
+    try {
+      if (existsSync(p) && statSync(p).isFile()) {
+        ok = true
+        break
+      }
+    } catch {
+      // 单个候选不可访问不判定失败，继续下一个候选
+    }
+  }
+  if (!ok) {
+    logger.warn(`Avatar diagnose MISS: ${label} (searched: ${candidates.join(' | ')})`)
+  }
+  return { label, ok, paths: candidates }
+}
+
+/**
+ * 内置资源一键诊断（工坊错误卡片"一键诊断"按钮 / 启动自检共用）。
+ *
+ * 检查三层（对齐审计 §1.4-3"失败显式化"）：
+ * 1. 后端 avatar-manifest.json 是否随包落盘（缺失 = 打包版内置模型全部不可见的历史根因）
+ * 2. 内置 Live2D 样例（llny.model3.json）是否在位
+ * 3. 渲染层上报的 manifest 模型 path/thumbnail 逐项是否存在
+ */
+export function diagnoseAvatarResources(modelPaths: string[] = []): AvatarDiagnosticsResult {
+  const checks: AvatarResourceCheck[] = [
+    runResourceCheck('backend/avatar-manifest.json', [getBackendManifestPath()]),
+    runResourceCheck('live2d builtin sample: llny/llny.model3.json', [
+      resolve(builtinBasePath, 'llny', 'llny.model3.json')
+    ]),
+    ...modelPaths.map(p => runResourceCheck(p, resolveManifestResourceCandidates(p)))
+  ]
+  const missing = checks.filter(c => !c.ok)
+  return {
+    ok: missing.length === 0,
+    isPackaged: app.isPackaged,
+    builtinBasePath,
+    manifestModelCount: modelPaths.length,
+    checks,
+    missing
+  }
+}
+
+/**
+ * 启动自检（main/index.ts 启动时调用）。行为与历史版本兼容：结果仅写日志、
+ * 不弹 UI；结构化结果经 avatar:diagnoseResources IPC 提供给渲染层主动查询。
+ */
+export function verifyAvatarResources(): AvatarDiagnosticsResult {
+  const result = diagnoseAvatarResources([])
+  if (!result.ok) {
+    logger.warn(`Avatar resource self-check FAILED: ${result.missing.length} item(s) missing`)
+    for (const m of result.missing) {
+      logger.warn(`  missing: ${m.label}`)
+    }
+  } else {
+    logger.info('Avatar resource self-check OK')
+  }
+  return result
 }
 
 export function registerAvatarIpc(): void {
@@ -314,5 +402,14 @@ export function registerAvatarIpc(): void {
 
   handleIpc(IpcChannels.avatar.invoke.getImportedModelsPath, () => {
     return PATHS.live2d
+  })
+
+  // 一键诊断：渲染层传 manifest 模型的 path/thumbnail 相对路径（可为空 = 只查样例与后端清单），
+  // 主进程按协议解析顺序逐项核对文件存在性，结果供工坊错误卡片展示
+  handleIpc(IpcChannels.avatar.invoke.diagnoseResources, (_e: IpcMainInvokeEvent, modelPaths?: unknown) => {
+    const paths = Array.isArray(modelPaths)
+      ? modelPaths.filter((p): p is string => typeof p === 'string' && p.length > 0)
+      : []
+    return diagnoseAvatarResources(paths)
   })
 }

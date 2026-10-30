@@ -28,7 +28,16 @@
       "noModelAvailable": "No model available for this type yet. Import one from the library.",
       "deleteBuiltinBlocked": "Built-in models cannot be deleted. Hide them from the library instead.",
       "bindingUpdated": "Binding configuration updated",
-      "updateFailed": "Update failed: {message}"
+      "updateFailed": "Update failed: {message}",
+      "manifestEmpty": "Model manifest is empty: no builtin or imported models found — bundled resources may be missing from this build",
+      "errorCardTitle": "Avatar resources unavailable",
+      "errorCardHint": "Builtin models cannot be loaded. Common causes: resource files missing from the installer, or a corrupted backend manifest. Reinstalling the latest version is recommended; you can also run \"Run diagnostics\" to see exactly what is missing and report it to us with the results.",
+      "diagnoseButton": "Run diagnostics",
+      "diagnoseRunning": "Diagnosing…",
+      "diagnosePassed": "Self-check passed: no missing builtin resources (the backend service may not be ready — restart the app and try again)",
+      "diagnoseMissing": "{count} missing or broken resources found:",
+      "diagnoseFailed": "Diagnostics failed: cannot reach the main process. Restart the app and try again.",
+      "retryButton": "Retry loading"
     },
     "live2d": {
       "cubismCoreMissing": "Live2DCubismCore is not loaded. Please check that cubism-core/live2dcubismcore.min.js exists.",

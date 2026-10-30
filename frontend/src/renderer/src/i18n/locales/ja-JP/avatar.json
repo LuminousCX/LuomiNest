@@ -28,7 +28,16 @@
       "noModelAvailable": "このタイプで利用できるモデルはまだありません。ライブラリからインポートできます。",
       "deleteBuiltinBlocked": "内蔵モデルは削除できません。非表示にするにはライブラリの非表示ボタンを使ってください。",
       "bindingUpdated": "バインディング設定を更新しました",
-      "updateFailed": "更新に失敗しました：{message}"
+      "updateFailed": "更新に失敗しました：{message}",
+      "manifestEmpty": "モデル一覧が空です：内蔵・インポート済みモデルが見つかりません。同梱リソースがインストーラーに含まれていない可能性があります",
+      "errorCardTitle": "アバターリソースに異常があります",
+      "errorCardHint": "内蔵モデルを読み込めません。原因として、インストーラーへのリソース同梱漏れ、またはバックエンドのマニフェスト破損が考えられます。最新版の再インストールを推奨します。「診断を実行」で不足しているリソースを確認し、結果を開発者へお知らせください。",
+      "diagnoseButton": "診断を実行",
+      "diagnoseRunning": "診断中…",
+      "diagnosePassed": "セルフチェック合格：欠落している内蔵リソースはありません（バックエンドサービスが未起動の可能性があります。アプリを再起動してお試しください）",
+      "diagnoseMissing": "{count} 件の欠落・異常リソースが見つかりました：",
+      "diagnoseFailed": "診断に失敗しました：メインプロセスに接続できません。アプリを再起動してお試しください。",
+      "retryButton": "再読み込み"
     },
     "live2d": {
       "cubismCoreMissing": "Live2DCubismCore が読み込まれていません。cubism-core/live2dcubismcore.min.js が存在するか確認してください。",

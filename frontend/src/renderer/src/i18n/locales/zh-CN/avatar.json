@@ -28,7 +28,16 @@
       "noModelAvailable": "该类型暂无可用模型，可在右侧模型库导入",
       "deleteBuiltinBlocked": "内置模型不可删除，如需隐藏可在模型库点击隐藏按钮",
       "bindingUpdated": "绑定配置已更新",
-      "updateFailed": "更新失败：{message}"
+      "updateFailed": "更新失败：{message}",
+      "manifestEmpty": "模型清单为空：未找到任何内置或导入的模型，内置资源可能未随安装包发布",
+      "errorCardTitle": "头像资源异常",
+      "errorCardHint": "内置模型无法加载，常见原因是安装包缺失资源文件或后端清单损坏。建议重新安装最新版本；也可以点击\"一键诊断\"查看具体缺失项，并带着结果向我们反馈。",
+      "diagnoseButton": "一键诊断",
+      "diagnoseRunning": "正在诊断…",
+      "diagnosePassed": "自检通过：未发现缺失的内置资源（可能是后端服务未就绪，请重启应用后重试）",
+      "diagnoseMissing": "发现 {count} 个缺失/异常资源：",
+      "diagnoseFailed": "诊断执行失败：无法连接主进程，请重启应用后重试",
+      "retryButton": "重试加载"
     },
     "live2d": {
       "cubismCoreMissing": "Live2DCubismCore 未加载，请检查 cubism-core/live2dcubismcore.min.js 是否存在",

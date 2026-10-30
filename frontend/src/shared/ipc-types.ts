@@ -652,6 +652,8 @@ export const IpcChannels = {
       listImportedModels: 'avatar:listImportedModels',
       deleteModel: 'avatar:deleteModel',
       getImportedModelsPath: 'avatar:getImportedModelsPath',
+      // 内置资源一键诊断（avatar-protocol.ts diagnoseAvatarResources，工坊错误卡片使用）
+      diagnoseResources: 'avatar:diagnoseResources',
       // 协作者头像缓存（collaborator-avatars.ts）
       getCollaboratorAvatar: 'avatar:getCollaboratorAvatar',
       updateCollaboratorAvatars: 'avatar:updateCollaboratorAvatars',
@@ -897,6 +899,32 @@ export interface AvatarDeleteResult {
   error?: string
 }
 
+/** 单项内置资源自检结果 */
+export interface AvatarResourceCheck {
+  /** 检查项说明（原始相对路径或样例标签，供错误卡片展示/用户反馈） */
+  label: string
+  /** 是否存在（imported → builtin 搜索顺序任一命中即算存在） */
+  ok: boolean
+  /** 参与检查的候选绝对路径（缺失时全部列出，便于定位是哪个分支缺文件） */
+  paths: string[]
+}
+
+/** avatar:diagnoseResources 返回的一键诊断结果 */
+export interface AvatarDiagnosticsResult {
+  /** 全部检查通过 */
+  ok: boolean
+  /** 运行模式（打包/开发，影响后端清单路径分支） */
+  isPackaged: boolean
+  /** 内置 Live2D 资源基路径（luominest-avatar:// 协议主基路径） */
+  builtinBasePath: string
+  /** 渲染层上报的 manifest 模型路径数量（0 = 清单为空/未加载） */
+  manifestModelCount: number
+  /** 全部检查项 */
+  checks: AvatarResourceCheck[]
+  /** ok=false 时为缺失项子集，ok=true 时为空数组 */
+  missing: AvatarResourceCheck[]
+}
+
 /** 协作者头像缓存查询结果：缓存文件存在时 url 为 luominest-avatar://cached/ 协议地址，否则为 null */
 export interface CollaboratorAvatarResult {
   key: string
@@ -985,6 +1013,8 @@ export interface ElectronApi {
     listImportedModels: () => Promise<PetModelInfo[]>
     deleteModel: (modelName: string) => Promise<AvatarDeleteResult>
     getImportedModelsPath: () => Promise<string>
+    /** 内置资源一键诊断（工坊错误卡片按钮；modelPaths 为 manifest 模型 path/thumbnail 相对路径） */
+    diagnoseResources: (modelPaths?: string[]) => Promise<AvatarDiagnosticsResult>
     getCollaboratorAvatar: (key: string) => Promise<CollaboratorAvatarResult>
     updateCollaboratorAvatars: () => Promise<Record<string, boolean>>
   }

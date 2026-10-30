@@ -134,6 +134,8 @@ const api: ElectronApi = {
     listImportedModels: () => invoke(IpcChannels.avatar.invoke.listImportedModels),
     deleteModel: (modelName: string) => invoke(IpcChannels.avatar.invoke.deleteModel, modelName),
     getImportedModelsPath: () => invoke(IpcChannels.avatar.invoke.getImportedModelsPath),
+    diagnoseResources: (modelPaths?: string[]) =>
+      invoke(IpcChannels.avatar.invoke.diagnoseResources, modelPaths ?? []),
     getCollaboratorAvatar: (key: string) => invoke(IpcChannels.avatar.invoke.getCollaboratorAvatar, key),
     updateCollaboratorAvatars: () => invoke(IpcChannels.avatar.invoke.updateCollaboratorAvatars),
   },

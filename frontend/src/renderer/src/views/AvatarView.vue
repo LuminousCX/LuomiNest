@@ -20,6 +20,7 @@ import PngTuberStage from '@/components/avatar/PngTuberStage.vue'
 import AvatarControls from '@/components/avatar/AvatarControls.vue'
 import AvatarSkinSidebar from '@/components/avatar/AvatarSkinSidebar.vue'
 import StageBackgroundMenu from '@/components/avatar/StageBackgroundMenu.vue'
+import AvatarWorkshopErrorCard from '@/components/avatar/AvatarWorkshopErrorCard.vue'
 import type { AvatarMode, AvatarEmotion, AvatarMotion, IdleAnimation, ManifestSkinItem } from '@/components/avatar/types'
 import type { AvatarRendererType, AvatarManifestModel } from '@/types/avatar'
 import type { ChatStreamChunk } from '@/types'
@@ -65,6 +66,9 @@ const {
   manifest,
   importedModels,
   hiddenBuiltinModels,
+  workshopError,
+  diagnostics,
+  isRunningDiagnostics,
 } = workshop
 
 // ===========================================================================
@@ -524,6 +528,19 @@ watch(isDesktopMode, () => {
 })
 
 // ===========================================================================
+// 工坊显式失败：一键诊断 + 重试（错误卡片，见 AvatarWorkshopErrorCard）
+// ===========================================================================
+
+async function handleWorkshopDiagnose() {
+  await workshop.runDiagnostics()
+}
+
+async function handleWorkshopRetry() {
+  // 重走 init：重新拉取 manifest 并按需回退选中模型（清单为空/加载失败共用）
+  await workshop.init()
+}
+
+// ===========================================================================
 // 模型导入
 // ===========================================================================
 
@@ -899,6 +916,20 @@ onBeforeUnmount(() => {
           .avatar-stage 自身也是 overflow:hidden，但舞台高度通常远超菜单下拉长度，不会被截断。
         -->
         <StageBackgroundMenu class="stage-bg-menu-float" />
+
+        <!--
+          工坊显式错误卡片：清单为空 / 清单加载失败时取代静默空白
+          （桌宠模式下舞台是提示页，模型问题在回到内嵌模式后展示）
+        -->
+        <AvatarWorkshopErrorCard
+          v-if="workshopError && !isDesktopMode"
+          class="workshop-error-float"
+          :error="workshopError"
+          :is-diagnosing="isRunningDiagnostics"
+          :diagnostics="diagnostics"
+          @diagnose="handleWorkshopDiagnose"
+          @retry="handleWorkshopRetry"
+        />
       </div>
 
       <AvatarSkinSidebar
@@ -967,5 +998,19 @@ onBeforeUnmount(() => {
   top: var(--space-4);
   right: var(--space-4);
   z-index: 25;
+}
+
+/* 工坊错误卡片：覆盖舞台居中展示（z-index 低于背景菜单，避免挡住入口） */
+.workshop-error-float {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  right: auto;
+  bottom: auto;
+  inset: auto;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100% - 2 * var(--space-4)));
+  max-height: calc(100% - 2 * var(--space-4));
+  z-index: 22;
 }
 </style>

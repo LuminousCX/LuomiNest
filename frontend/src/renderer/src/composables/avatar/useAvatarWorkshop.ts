@@ -37,7 +37,7 @@ import {
   type ModelTypeInfo,
   type WorkshopState,
 } from '@/types/avatar'
-import type { PetModelInfo } from '@shared/ipc-types'
+import type { PetModelInfo, AvatarDiagnosticsResult } from '@shared/ipc-types'
 import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('AvatarWorkshop')
@@ -108,8 +108,12 @@ export function useAvatarWorkshop() {
   const isSwitchingModel = ref(false)
   const isSwitchingDisplayMode = ref(false)
 
-  /** 工坊级错误（manifest 加载失败等） */
+  /** 工坊级错误（manifest 加载失败 / 清单为空等，工坊 UI 据此显示显式错误卡片） */
   const workshopError = ref<string | null>(null)
+
+  /** 最近一次一键诊断结果（avatar:diagnoseResources IPC，null = 尚未诊断） */
+  const diagnostics = ref<AvatarDiagnosticsResult | null>(null)
+  const isRunningDiagnostics = ref(false)
 
   /** 通过 Electron IPC 管理的本地导入模型（与 manifest 中的 imported 模型对应） */
   const importedModels = ref<PetModelInfo[]>([])
@@ -187,12 +191,47 @@ export function useAvatarWorkshop() {
     try {
       const result = await api.apiGet<AvatarManifest>('/avatar/manifest')
       manifest.value = result
-      logger.info(`Manifest loaded: ${result.models.length} models`)
+      if (result.models.length === 0) {
+        // 显式失败：清单为空说明内置资源未随包落盘或后端清单损坏，
+        // 不再静默空白（历史"默认模型全部不显示"体验的来源），由错误卡片提示用户
+        workshopError.value = i18n.global.t('avatar.workshop.manifestEmpty')
+        logger.warn('Manifest loaded but EMPTY: no builtin/imported models — bundled resources likely missing')
+      } else {
+        logger.info(`Manifest loaded: ${result.models.length} models`)
+      }
     } catch (err) {
       workshopError.value = err instanceof Error ? err.message : i18n.global.t('avatar.workshop.manifestLoadFailed')
       logger.error('fetchManifest failed', err)
     } finally {
       isLoadingManifest.value = false
+    }
+  }
+
+  /**
+   * 一键诊断：把 manifest 模型的 path/thumbnail 交给主进程按协议解析顺序逐项核对。
+   *
+   * 走 Electron IPC 而非后端 API，后端未就绪/清单加载失败时诊断依然可用；
+   * 结果写入 diagnostics，由工坊错误卡片展示（缺失清单 + 重装/反馈建议）。
+   */
+  async function runDiagnostics(): Promise<AvatarDiagnosticsResult | null> {
+    if (isRunningDiagnostics.value) return null
+    isRunningDiagnostics.value = true
+    try {
+      const modelPaths = (manifest.value?.models ?? [])
+        .flatMap(m => [m.path, m.thumbnail])
+        .filter((p): p is string => typeof p === 'string' && p.length > 0)
+      const result = await window.api.avatar.diagnoseResources(modelPaths)
+      diagnostics.value = result
+      logger.info(
+        `Avatar diagnostics finished: ok=${result.ok}, missing=${result.missing.length}, checked=${result.checks.length}`,
+      )
+      return result
+    } catch (err) {
+      logger.error('runDiagnostics failed', err)
+      toast.error(i18n.global.t('avatar.workshop.diagnoseFailed'))
+      return null
+    } finally {
+      isRunningDiagnostics.value = false
     }
   }
 
@@ -554,6 +593,10 @@ export function useAvatarWorkshop() {
     isSwitchingModel: readonly(isSwitchingModel),
     isSwitchingDisplayMode: readonly(isSwitchingDisplayMode),
     workshopError: readonly(workshopError),
+    // diagnostics 不包 readonly：AvatarDiagnosticsResult 含数组字段，readonly 包装会产生
+    // 深只读类型无法赋给组件 prop；该对象只在 runDiagnostics 内整体替换，不提供写方法即可
+    diagnostics,
+    isRunningDiagnostics: readonly(isRunningDiagnostics),
     importedModels: readonly(importedModels),
 
     // 计算属性
@@ -569,6 +612,7 @@ export function useAvatarWorkshop() {
     // 方法
     init,
     fetchManifest,
+    runDiagnostics,
     fetchBinding,
     fetchCapabilities,
     switchMode,
