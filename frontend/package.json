@@ -92,7 +92,9 @@
           "**/*.motion3.json",
           "**/*.userdata3.json",
           "**/*.png",
-          "**/*.jpg"
+          "**/*.jpg",
+          "**/*.webp",
+          "**/*.gif"
         ]
       },
       {

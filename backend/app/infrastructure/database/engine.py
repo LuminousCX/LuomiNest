@@ -24,7 +24,7 @@ from app.infrastructure.database.base import Base
 
 # 列迁移 schema 版本：_migrate_columns_sync 内新增任何列/回填/索引逻辑时必须 +1，
 # 否则已达标旧库会跳过新迁移。旧库首次升级（user_version=0）会完整执行一遍并回写。
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 @contextlib.contextmanager
@@ -374,6 +374,17 @@ def _migrate_columns_sync(sync_conn) -> None:
             _alter_safe(
                 "ALTER TABLE tool_call_records ADD COLUMN tool_type VARCHAR(32)",
                 "tool_call_records table: added tool_type column",
+            )
+
+    # SCHEMA v6（refresh 轮换/重放检测）：users 表 refresh jti 存活名单列。
+    # 新建库由 create_all 建列；存量库 ALTER 补齐，旧行默认 '[]'（空名单 =
+    # 升级前签发的无 jti refresh 首刷走兼容路径放行，见 endpoints/auth.py）
+    if "users" in inspector.get_table_names():
+        user_cols = {c["name"] for c in inspector.get_columns("users")}
+        if "active_refresh_jtis" not in user_cols:
+            _alter_safe(
+                "ALTER TABLE users ADD COLUMN active_refresh_jtis JSON DEFAULT '[]'",
+                "users table: added active_refresh_jtis column",
             )
 
     # skills 表（洋葱架构 §11.1）：新建库由 create_all 建表；

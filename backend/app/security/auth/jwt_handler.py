@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import timedelta
 from enum import Enum
 
@@ -106,8 +107,8 @@ def create_refresh_token(
     user_id: str,
     device_id: str,
     token_version: int = 1,
-) -> str:
-    """签发 Refresh Token。
+) -> tuple[str, str]:
+    """签发 Refresh Token（含唯一 jti，供轮换与重用检测）。
 
     Args:
         user_id: 用户 ID。
@@ -115,11 +116,13 @@ def create_refresh_token(
         token_version: 用户当前 token_version，用于登出/吊销后使旧 refresh token 失效。
 
     Returns:
-        编码后的 JWT 字符串。
+        (编码后的 JWT 字符串, jti 唯一标识) 二元组；jti 由调用方登记到
+        存活名单（users.active_refresh_jtis），轮换时旧 jti 移出名单立即失效。
     """
     secret = _ensure_jwt_secret()
     now = utc_now_dt()
     expires = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    jti = uuid.uuid4().hex
 
     payload = {
         "sub": user_id,
@@ -128,8 +131,9 @@ def create_refresh_token(
         "exp": expires,
         "iat": now,
         "ver": token_version,
+        "jti": jti,
     }
-    return jwt.encode(payload, secret, algorithm="HS256")
+    return jwt.encode(payload, secret, algorithm="HS256"), jti
 
 
 # ── 验证 ──────────────────────────────────────────────────────────────────────

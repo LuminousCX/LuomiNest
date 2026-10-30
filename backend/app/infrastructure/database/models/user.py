@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.utils import utc_now_dt
@@ -31,6 +31,9 @@ class User(Base):
     display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
     token_version: Mapped[int] = mapped_column(Integer, default=1)
+    # refresh jti 存活名单（refresh 轮换/重用检测，见 endpoints/auth.py）：
+    # 多端各自登录各持一个 jti，超出上限按 FIFO 淘汰；旧库由 engine.py 列迁移补齐
+    active_refresh_jtis: Mapped[list[str]] = mapped_column(JSON, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=utc_now_dt

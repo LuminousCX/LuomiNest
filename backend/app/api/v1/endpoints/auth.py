@@ -14,7 +14,7 @@ import asyncio
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from loguru import logger
 
 from app.core.config import settings
@@ -28,7 +28,7 @@ from app.security.auth.jwt_handler import (
     verify_token as jwt_verify_token,
     TokenError,
 )
-from app.security.auth.password import hash_password, verify_password
+from app.security.auth.password import hash_password_async, verify_password_async
 from app.security.rate_limiter import limiter, RATE_AUTH
 
 
@@ -36,6 +36,13 @@ from app.security.rate_limiter import limiter, RATE_AUTH
 _LOGIN_FAILURE_DELAY = 1.5
 # 最小用户名校验长度
 _USERNAME_MIN_LENGTH = 3
+# 单用户存续的 refresh jti 存活名单上限（多端各自登录持有；超出按 FIFO 淘汰最旧）
+_MAX_ACTIVE_REFRESH_JTIS = 10
+
+# 进程内串行化 login/refresh 对 jti 存活名单的「读-改-写」：
+# 并发提交同一 jti 时后到者必见名单已更新而按重放处理（轮换语义下的确定性结果），
+# 避免双读旧名单各自签发造成轮换分叉、稍后误触发全量吊销（单用户桌面应用，无吞吐顾虑）
+_REFRESH_STATE_LOCK = asyncio.Lock()
 
 
 # ── Pydantic 请求/响应模型 ─────────────────────────────────────────────────────
@@ -117,11 +124,11 @@ async def register(request: Request, body: RegisterRequest):
         if existing.scalar_one_or_none():
             raise ValidationError(f"用户名 '{body.username}' 已被占用")
 
-        # 创建用户
+        # 创建用户（bcrypt 哈希走线程池，避免阻塞事件循环）
         user = User(
             username=body.username,
             display_name=body.display_name,
-            password_hash=hash_password(body.password),
+            password_hash=await hash_password_async(body.password),
             token_version=1,
             is_active=True,
         )
@@ -165,7 +172,7 @@ async def login(request: Request, body: LoginRequest):
     if not user.is_active:
         await asyncio.sleep(_LOGIN_FAILURE_DELAY)
         raise AuthenticationError("用户已被禁用")
-    if not verify_password(body.password, user.password_hash):
+    if not await verify_password_async(body.password, user.password_hash):
         await asyncio.sleep(_LOGIN_FAILURE_DELAY)
         raise AuthenticationError("用户名或密码错误")
 
@@ -178,11 +185,29 @@ async def login(request: Request, body: LoginRequest):
         roles=roles,
         token_version=user.token_version,
     )
-    refresh_token = create_refresh_token(
+    refresh_token, refresh_jti = create_refresh_token(
         user_id=user.id,
         device_id=device_id,
         token_version=user.token_version,
     )
+
+    # 登记新 refresh token 的 jti（轮换/重用检测的存活名单，见 refresh 端点；
+    # 多端各自登录各持一个 jti，超出上限按 FIFO 淘汰最旧）。
+    # 锁内重读名单 + 窄列 UPDATE：不回写整行，防止把并发登出刚递增的
+    # token_version 用本请求加载的旧值冲掉
+    async with _REFRESH_STATE_LOCK:
+        async with async_session_factory() as session:
+            current = await session.execute(
+                select(User.active_refresh_jtis).where(User.id == user.id)
+            )
+            active_jtis = list(current.scalar_one() or [])
+            active_jtis.append(refresh_jti)
+            await session.execute(
+                update(User)
+                .where(User.id == user.id)
+                .values(active_refresh_jtis=active_jtis[-_MAX_ACTIVE_REFRESH_JTIS:])
+            )
+            await session.commit()
 
     logger.success(f"[Auth] 用户登录成功: username={body.username}")
 
@@ -199,9 +224,12 @@ async def login(request: Request, body: LoginRequest):
 @router.post("/refresh")
 @limiter.limit(RATE_AUTH)
 async def refresh_token(request: Request, body: RefreshRequest):
-    """刷新 Access Token。
+    """刷新 Access Token（refresh 轮换 + 重用检测）。
 
-    验证 refresh_token，检查 token type 和 token_version，签发新的 access_token。
+    每次刷新签发新 refresh token（携带新 jti），旧 jti 随即移出存活名单立即失效；
+    检测到名单外 jti（已轮换/已吊销的 token 被重放）时递增 token_version，
+    吊销该用户全部 refresh/access token，防泄露后的静默续用。
+    兼容说明：升级前签发的 refresh token 无 jti 声明，首次刷新按旧值放行并纳入轮换。
     """
     # 验证 refresh_token（expected_type="refresh"：access token 不能用于刷新）
     try:
@@ -217,51 +245,105 @@ async def refresh_token(request: Request, body: RefreshRequest):
     if not user_id:
         raise AuthenticationError("令牌中缺少用户信息")
 
-    async with async_session_factory() as session:
-        result = await session.execute(
-            select(User).where(User.id == user_id)
+    async with _REFRESH_STATE_LOCK:
+        async with async_session_factory() as session:
+            result = await session.execute(
+                select(User).where(User.id == user_id)
+            )
+            user = result.scalar_one_or_none()
+
+        if not user:
+            raise AuthenticationError("用户不存在")
+        if not user.is_active:
+            raise AuthenticationError("用户已被禁用")
+
+        # 比对 token_version：登出/吊销后旧 refresh token 不能再换取新 access token
+        # （兼容说明：升级前签发的 refresh token 无 ver 声明，按 1 处理；已登出的用户需重新登录）
+        if int(payload.get("ver", 1) or 1) != user.token_version:
+            raise AuthenticationError("令牌已失效，请重新登录")
+
+        # 重用检测：jti 不在存活名单 = 已轮换/已吊销的 refresh 被重放
+        # → 递增 token_version 吊销该用户全部 refresh 与 access token（fail-closed）
+        jti = payload.get("jti")
+        active_jtis = list(user.active_refresh_jtis or [])
+        if jti is None and not active_jtis:
+            # 升级前签发的无 jti 旧 refresh：仅当名单为空（升级后尚无新登录）时
+            # 走此兼容路径放行一次，本次刷新即纳入轮换名单
+            pass
+        elif jti not in active_jtis:
+            # 含名单非空时出现的无 jti 旧 token：与重放同口径 fail-closed 处理
+            # （窄列原子更新：版本号 DB 侧 +1，不回写整行避免覆盖并发变更）
+            async with async_session_factory() as session:
+                await session.execute(
+                    update(User)
+                    .where(User.id == user_id)
+                    .values(token_version=User.token_version + 1, active_refresh_jtis=[])
+                )
+                await session.commit()
+
+            # 立即清除认证中间件的版本缓存，吊销不留 TTL 残留窗口
+            from app.security.auth.middleware import invalidate_token_version_cache
+
+            invalidate_token_version_cache(user_id)
+            logger.warning(
+                f"[Auth] 检测到 refresh token 重用，已吊销该用户全部会话: "
+                f"user_id={user_id}, jti={jti}"
+            )
+            raise AuthenticationError("检测到令牌重用，全部会话已吊销，请重新登录")
+
+        # 轮换：签发新 refresh token（新 jti），旧 jti 移出存活名单立即失效
+        device_id = payload.get("device_id", "")
+        roles = ["user"]
+
+        access_token = create_access_token(
+            user_id=user.id,
+            device_id=device_id,
+            roles=roles,
+            token_version=user.token_version,
         )
-        user = result.scalar_one_or_none()
+        new_refresh_token, new_jti = create_refresh_token(
+            user_id=user.id,
+            device_id=device_id,
+            token_version=user.token_version,
+        )
+        if jti in active_jtis:
+            active_jtis.remove(jti)
+        active_jtis.append(new_jti)
+        async with async_session_factory() as session:
+            await session.execute(
+                update(User)
+                .where(User.id == user_id)
+                .values(active_refresh_jtis=active_jtis[-_MAX_ACTIVE_REFRESH_JTIS:])
+            )
+            await session.commit()
 
-    if not user:
-        raise AuthenticationError("用户不存在")
-    if not user.is_active:
-        raise AuthenticationError("用户已被禁用")
+        logger.info(f"[Auth] Refresh token 轮换完成: user_id={user_id}")
 
-    # 比对 token_version：登出/吊销后旧 refresh token 不能再换取新 access token
-    # （兼容说明：升级前签发的 refresh token 无 ver 声明，按 1 处理；已登出的用户需重新登录）
-    if int(payload.get("ver", 1) or 1) != user.token_version:
-        raise AuthenticationError("令牌已失效，请重新登录")
-
-    # 签发新的 access_token
-    device_id = payload.get("device_id", "")
-    roles = ["user"]
-
-    access_token = create_access_token(
-        user_id=user.id,
-        device_id=device_id,
-        roles=roles,
-        token_version=user.token_version,
-    )
-
-    return ok(
-        {
-            "access_token": access_token,
-            "token_type": "bearer",
-        },
-        message="刷新成功",
-    )
+        return ok(
+            {
+                "access_token": access_token,
+                "refresh_token": new_refresh_token,
+                "token_type": "bearer",
+            },
+            message="刷新成功",
+        )
 
 
 @router.post("/logout")
 async def logout(user: User = Depends(get_current_user)):
     """登出（吊销当前设备 Token）。
 
-    递增用户的 token_version，使旧 JWT 因版本不匹配而失效。
+    递增用户的 token_version，使旧 JWT 因版本不匹配而失效；
+    同时清空 refresh jti 存活名单（全部 refresh token 随版本号一并失效）。
     """
+    new_version = user.token_version + 1
+    # 窄列更新：不回写整行，避免覆盖并发请求对其他列的变更
     async with async_session_factory() as session:
-        user.token_version += 1
-        session.add(user)
+        await session.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(token_version=new_version, active_refresh_jtis=[])
+        )
         await session.commit()
 
     # 立即清除认证中间件的版本缓存，旧 token 不残留 TTL 窗口
@@ -269,7 +351,7 @@ async def logout(user: User = Depends(get_current_user)):
 
     invalidate_token_version_cache(user.id)
 
-    logger.success(f"[Auth] 用户登出成功: username={user.username}, new_version={user.token_version}")
+    logger.success(f"[Auth] 用户登出成功: username={user.username}, new_version={new_version}")
 
     return ok(None, message="登出成功")
 
