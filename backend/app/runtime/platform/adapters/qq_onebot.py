@@ -16,6 +16,10 @@ from app.runtime.platform.infrastructure.exposure import (
     is_loopback_host,
     warn_inbound_without_credential,
 )
+from app.runtime.platform.infrastructure.ws_gateway_auth import (
+    is_loopback_peer,
+    resolve_ws_bind_host,
+)
 from app.runtime.platform.infrastructure.token_manager import parse_target
 
 
@@ -83,7 +87,9 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
 
     def initialize(self, config: dict[str, Any]) -> None:
         super().initialize(config)
-        self._ws_host = config.get("ws_host", "0.0.0.0")
+        # P1 收口（2026-11-05 终检）：对齐游戏类 WS 网关的 Fail-Closed 基线——
+        # 默认 127.0.0.1（原 0.0.0.0 全网开放），显式配置仍可覆盖
+        self._ws_host = resolve_ws_bind_host(config.get("ws_host"))
         self._ws_port = int(config.get("ws_port", 8080))
         self._access_token = config.get("access_token", "")
         self._enable_group = bool(config.get("enable_group", True))
@@ -103,12 +109,14 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
     # ------------------------------------------------------------------
 
     async def start(self) -> None:
-        # P0-3 传输安全：绑定非 loopback 且未配置 access_token 时打告警（不打断运行）
+        # 传输安全：绑定非 loopback 且未配置 access_token 时打告警（不打断运行）。
+        # 此时握手层已 Fail-Closed：非 loopback 对端会被 _verify_handshake 拒绝，
+        # 告警提示用户——跨机 NapCat 必须配置 access_token 才能接入。
         if not self._access_token and not is_loopback_host(self._ws_host):
             warn_inbound_without_credential(
                 "QQ OneBot 反向 WS",
                 self._ws_host,
-                "access_token（协议端将无法通过握手校验）",
+                "access_token（未配置时非本机来源将被拒绝接入，跨机 NapCat 必须配 token）",
             )
         await self._start_server()
         # 启动消息队列后台重试任务
@@ -164,18 +172,21 @@ class LuomiNestQQOneBotAdapter(BasePlatformAdapter):
     # ------------------------------------------------------------------
 
     def _verify_handshake(self, websocket: Any) -> bool:
-        """校验反向 WS 握手凭证（P0-3）。
+        """校验反向 WS 握手凭证（P0-3 鉴权 + P0-4 Fail-Closed 基线）。
 
         OneBot v11 协议端两种携带方式均认可：
         1. Authorization: Bearer <access_token> 请求头；
         2. ?access_token=<token> 查询参数（部分实现使用）。
 
         Returns:
-            True 表示允许接入；实例未配置 token 时恒为 True（开放接入，
-            此时若绑定非 loopback，start() 已打安全告警）。
+            配置了 token：凭证常量时间比较通过才允许接入；
+            未配置 token：仅允许 loopback 来源匿名接入（Fail-Closed，
+            对齐游戏类 WS 网关基线）——非本机来源一律拒绝，跨机 NapCat
+            必须配 access_token。
         """
         if not self._access_token:
-            return True
+            # Fail-Closed：对端地址不可知/解析失败一律视为非回环拒绝
+            return is_loopback_peer(getattr(websocket, "remote_address", None))
 
         auth_value, raw_path = self._extract_handshake_credentials(websocket)
 

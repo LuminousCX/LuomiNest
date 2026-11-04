@@ -10,6 +10,7 @@
 from contextlib import asynccontextmanager
 
 import pytest
+from typing import Any
 
 from app.core.tools.mcp.models import McpServerConfig, McpTransportType
 
@@ -221,7 +222,7 @@ async def test_middleware_token_reset_takes_effect(monkeypatch):
 # 3. QQ OneBot 反向 WS 握手鉴权
 # ------------------------------------------------------------------
 
-def _make_handshake(auth_header: str = "", path: str = "/"):
+def _make_handshake(auth_header: str = "", path: str = "/", remote_address: Any = None):
     """构造带握手信息的假 websocket（模拟 websockets 新实现的 request 结构）。"""
     from websockets.datastructures import Headers
 
@@ -235,6 +236,8 @@ def _make_handshake(auth_header: str = "", path: str = "/"):
     class _FakeWS:
         def __init__(self) -> None:
             self.request = _FakeRequest()
+            if remote_address is not None:
+                self.remote_address = remote_address
 
     return _FakeWS()
 
@@ -277,9 +280,16 @@ def test_qq_handshake_rejects_missing_credentials():
     assert adapter._verify_handshake(_make_handshake("s3cret")) is False
 
 
-def test_qq_handshake_open_when_token_not_configured():
+def test_qq_handshake_fail_closed_when_token_not_configured():
+    """无 token 时 Fail-Closed（对齐 P0-4 游戏网关基线）：仅 loopback 来源匿名放行。"""
     adapter = _make_adapter("")
-    assert adapter._verify_handshake(_make_handshake()) is True
+    # 对端地址不可知（模拟器无 remote_address）→ 拒绝，绝不因解析失败放行
+    assert adapter._verify_handshake(_make_handshake()) is False
+    # loopback 来源 → 匿名放行（本机协议端直连场景）
+    assert adapter._verify_handshake(_make_handshake(remote_address=("127.0.0.1", 51234))) is True
+    assert adapter._verify_handshake(_make_handshake(remote_address=("::1", 51234))) is True
+    # 局域网/外网来源 → 拒绝（跨机 NapCat 必须配 access_token）
+    assert adapter._verify_handshake(_make_handshake(remote_address=("192.168.1.50", 51234))) is False
 
 
 @pytest.mark.asyncio
