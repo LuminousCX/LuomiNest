@@ -1,11 +1,16 @@
 """LuomiNest 认证 API 端点。
 
-提供用户注册、登录、Token 刷新、登出及当前用户信息查询。
+提供用户注册、登录、Token 刷新、改密、登出及当前用户信息查询。
 仅在 AUTH_MODE="jwt" 时有实际意义。
 
 安全特性：
 - 登录失败统一返回"用户名或密码错误"（不泄露用户是否存在）
 - 登录失败延迟响应（防暴力破解，参考 AstrBot 登录防爆破模式）
+
+找回密码（产品裁定）：本地单用户场景不实现 /auth/forgot-password——
+后端无任何邮件/验证码基建，硬造找回链路只会引入新的攻击面；密码丢失
+走云端通行证侧自助找回（本地库凭据由通行证侧重新建立，或最终兜底删库重建）。
+见审计报告（_审计调查_20261103/01_LuomiNest.md）§九-4。
 """
 
 from __future__ import annotations
@@ -36,12 +41,21 @@ from app.security.rate_limiter import limiter, RATE_AUTH
 _LOGIN_FAILURE_DELAY = 1.5
 # 最小用户名校验长度
 _USERNAME_MIN_LENGTH = 3
-# 单用户存续的 refresh jti 存活名单上限（多端各自登录持有；超出按 FIFO 淘汰最旧）
+# 单用户存续的 refresh jti 存活名单上限（多端各自登录持有；超出按 FIFO 淘汰最旧）。
+# 误伤语义（有意接受的取舍，登记/轮换两处截断同此口径）：第 11 端登录淘汰的
+# 最旧 jti 所属端，下次刷新会因 jti 不在名单内被判"重放"→ 按 fail-closed 口径
+# 递增 token_version 全量吊销该用户所有会话（见 refresh 端点重放检测分支），
+# 即"新端登录挤掉旧端"表现为"旧端把全员踢下线"。单用户桌面场景多端数极少
+# 触顶，可接受；若放开多端规模，需同步放宽上限或改为「淘汰时写墓碑名单」判定。
 _MAX_ACTIVE_REFRESH_JTIS = 10
 
 # 进程内串行化 login/refresh 对 jti 存活名单的「读-改-写」：
 # 并发提交同一 jti 时后到者必见名单已更新而按重放处理（轮换语义下的确定性结果），
-# 避免双读旧名单各自签发造成轮换分叉、稍后误触发全量吊销（单用户桌面应用，无吞吐顾虑）
+# 避免双读旧名单各自签发造成轮换分叉、稍后误触发全量吊销（单用户桌面应用，无吞吐顾虑）。
+# 部署约束：asyncio.Lock 仅进程内有效——若未来以多 worker/多实例方式部署后端，
+# 各进程各持一把锁，跨进程并发轮换的防分叉防线失效（名单仍以 DB 窄列 UPDATE
+# 收敛为最后一致，但「后到者必判重放」的确定性不再成立）。当前产品形态为
+# 本地单进程部署，该约束成立；改多进程时需换跨进程锁或 DB 行级原子操作重建。
 _REFRESH_STATE_LOCK = asyncio.Lock()
 
 
@@ -61,6 +75,12 @@ class LoginRequest(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    # 新密码复用注册端点的既有策略（同 RegisterRequest.password：min 6 / max 128）
+    new_password: str = Field(..., min_length=6, max_length=128)
 
 
 # ── Router ─────────────────────────────────────────────────────────────────────
@@ -192,7 +212,8 @@ async def login(request: Request, body: LoginRequest):
     )
 
     # 登记新 refresh token 的 jti（轮换/重用检测的存活名单，见 refresh 端点；
-    # 多端各自登录各持一个 jti，超出上限按 FIFO 淘汰最旧）。
+    # 多端各自登录各持一个 jti，超出上限按 FIFO 淘汰最旧——被淘汰端下次刷新
+    # 会被判重放并触发全量吊销，误伤语义见 _MAX_ACTIVE_REFRESH_JTIS 处说明）。
     # 锁内重读名单 + 窄列 UPDATE：不回写整行，防止把并发登出刚递增的
     # token_version 用本请求加载的旧值冲掉
     async with _REFRESH_STATE_LOCK:
@@ -309,6 +330,7 @@ async def refresh_token(request: Request, body: RefreshRequest):
         if jti in active_jtis:
             active_jtis.remove(jti)
         active_jtis.append(new_jti)
+        # 截断同样可能挤出其他端的最旧 jti（误伤语义见 _MAX_ACTIVE_REFRESH_JTIS 处说明）
         async with async_session_factory() as session:
             await session.execute(
                 update(User)
@@ -327,6 +349,45 @@ async def refresh_token(request: Request, body: RefreshRequest):
             },
             message="刷新成功",
         )
+
+
+@router.post("/change-password")
+@limiter.limit(RATE_AUTH)
+async def change_password(
+    request: Request, body: ChangePasswordRequest, user: User = Depends(get_current_user)
+):
+    """修改密码（需登录态）。
+
+    校验旧密码 → 新密码过注册同款策略 → 递增 token_version 并清空 refresh jti
+    存活名单：该用户全部旧会话（所有端的 access 与 refresh token）立即失效，
+    需重新登录。吊销写法与 /refresh 重放检测分支同款（DB 侧窄列原子更新 +
+    清认证中间件版本缓存，不留 TTL 残留窗口）。
+    本地单用户场景的"忘记旧密码"不在此解决（无邮件/验证码基建），
+    走云端通行证侧找回，见模块 docstring 产品裁定。
+    """
+    if not await verify_password_async(body.old_password, user.password_hash):
+        raise AuthenticationError("旧密码错误")
+
+    # 窄列原子更新：token_version DB 侧 +1（不回写整行，避免覆盖并发请求刚写入的其他列），
+    # 同时清空 refresh jti 存活名单，全部旧 refresh token 随版本号一并失效
+    async with async_session_factory() as session:
+        await session.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(token_version=User.token_version + 1, active_refresh_jtis=[])
+        )
+        await session.commit()
+
+    # 立即清除认证中间件的版本缓存，吊销不留 TTL 残留窗口
+    from app.security.auth.middleware import invalidate_token_version_cache
+
+    invalidate_token_version_cache(user.id)
+
+    logger.success(
+        f"[Auth] 用户修改密码成功，全部旧会话已吊销: username={user.username}"
+    )
+
+    return ok(None, message="密码修改成功，请重新登录")
 
 
 @router.post("/logout")

@@ -4,6 +4,7 @@ import { API_ENDPOINTS } from '../config/api'
 import { i18n } from '../i18n'
 import { whenBackendReady } from './useBackendGate'
 import { createLuomiNestRendererLogger } from '../utils/logger'
+import { clearStoredTokens, getStoredRefreshToken, setStoredTokens } from '../utils/authToken'
 import { toErrorMessage } from '@/utils/error'
 
 const logger = createLuomiNestRendererLogger('Api')
@@ -64,6 +65,47 @@ const getAuthHeaders = async (): Promise<Record<string, string>> => {
     }
   }
   return cachedAuthToken ? { Authorization: `Bearer ${cachedAuthToken}` } : {}
+}
+
+// 这些端点的 401 语义是「凭据错误」或 refresh 流程自身失败，而非会话过期：
+// 不做刷新重试（避免错误密码的登录失败也触发一轮无谓的 refresh token 轮换）。
+const NO_REFRESH_RETRY_PATHS = new Set(['/auth/login', '/auth/register', '/auth/refresh'])
+
+/**
+ * 用 refresh token 换新会话（POST /auth/refresh，审计 P2：客户端接通会话续期）。
+ * 直连 fetch 而非走 request()：防止 401 处理内部再触发 401 重试递归。
+ * 成功：按轮换语义落盘新 access/refresh token（旧 refresh token 随即失效）并返回 true；
+ * 失败：清掉死 token（与向导/登录页的清 token 行为一致，回到未登录态）并返回 false。
+ * 仅当 localStorage 存有 refresh token（走过 /auth/login 流程）才会真正发请求——
+ * AUTH_MODE=local 下请求鉴权走静态本地 token、JWT 不参与（产品双轨问题，另批拍板），
+ * 纯 local 状态无 refresh token，本流程天然不触发。
+ */
+const refreshSession = async (): Promise<boolean> => {
+  const refreshToken = getStoredRefreshToken()
+  if (!refreshToken) return false
+  try {
+    const resp = await fetch(getApiUrl('/auth/refresh'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!resp.ok) throw new Error(`refresh failed: HTTP ${resp.status}`)
+    const parsed = (await resp.json()) as {
+      code?: number
+      data?: { access_token?: string; refresh_token?: string }
+    }
+    // 后端统一信封 {code, message, data}：code===0 且带双 token 才视为续期成功
+    const newAccess = parsed?.code === 0 ? parsed.data?.access_token : undefined
+    const newRefresh = parsed?.code === 0 ? parsed.data?.refresh_token : undefined
+    if (!newAccess || !newRefresh) throw new Error('refresh response malformed')
+    setStoredTokens(newAccess, newRefresh)
+    return true
+  } catch (e) {
+    logger.warn('Refresh token 换新失败，清除本地死 token:', e)
+    clearStoredTokens()
+    return false
+  }
 }
 
 /** 后端错误响应体（兼容多种错误格式） */
@@ -159,7 +201,30 @@ export const useApi = () => {
         fetchOptions.body = JSON.stringify(body)
       }
 
-      const resp = await fetch(getApiUrl(path), fetchOptions)
+      let resp = await fetch(getApiUrl(path), fetchOptions)
+
+      // 会话续期重试（审计 P2）：401 且持有 refresh token 时换新会话并重试原请求一次；
+      // 刷新失败或无 refresh token 则不重试，走下方原有错误路径（由各消费方清 token 处理）。
+      // 注意 Authorization 头仍走 getAuthHeaders 的静态本地 token——JWT 是否直接参与
+      // 请求鉴权属产品双轨问题，不在本批拍板；本流程先保证 JWT 会话本身不静默过期。
+      if (
+        resp.status === 401 &&
+        !NO_REFRESH_RETRY_PATHS.has(path) &&
+        (await refreshSession())
+      ) {
+        logger.info('收到 401，已用 refresh token 续期，重试原请求:', path)
+        // 重试需新的超时信号（原 timeoutSignal 已随首次请求计时消耗）
+        const retryTimeoutSignal = AbortSignal.timeout(timeout)
+        const retryOptions: RequestInit = {
+          method,
+          signal: signal ? AbortSignal.any([retryTimeoutSignal, signal]) : retryTimeoutSignal,
+          headers,
+        }
+        if (body) {
+          retryOptions.body = JSON.stringify(body)
+        }
+        resp = await fetch(getApiUrl(path), retryOptions)
+      }
 
       if (!resp.ok) {
         const errData = await resp.json().catch(() => null)
