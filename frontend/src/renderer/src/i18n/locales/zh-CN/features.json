@@ -42,7 +42,7 @@
       "clearKnowledge": "清空知识记忆",
       "clearDailies": "清空对话历史",
       "clearSummary": "重置AI总结",
-      "resetAll": "清空全部记忆 ⚠️"
+      "resetAll": "清空全部记忆"
     },
     "tracks": {
       "owner": "博主自身记忆",
@@ -125,12 +125,12 @@
       "pinned": "已置顶",
       "pin": "置顶（始终注入）",
       "unpin": "取消置顶",
-      "scopeGlobal": "🌐 全局",
-      "scopePrivate": "🔒 私密",
-      "scopeGroup": "👥 群聊",
-      "scopeOptionGlobal": "🌐 全局公开",
-      "scopeOptionPrivate": "🔒 私密心事",
-      "scopeOptionGroup": "👥 群聊专属",
+      "scopeGlobal": "全局",
+      "scopePrivate": "私密",
+      "scopeGroup": "群聊",
+      "scopeOptionGlobal": "全局公开",
+      "scopeOptionPrivate": "私密心事",
+      "scopeOptionGroup": "群聊专属",
       "scopeTitle": "隐私隔离",
       "scopePrivateTip": "私聊专属隐私：群聊中绝不泄露",
       "scopeGroupTip": "群聊公开互动",

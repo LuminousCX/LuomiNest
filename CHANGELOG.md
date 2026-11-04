@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 2026-11-05 · 审计修复批（ebd060b）+ 桌宠聊天窗令牌化与去 emoji（11-03 审计 §二 P1/§六/§九-1/10/11 前半）
+
+- **Added · `/auth/change-password` 改密端点（P1-8，ebd060b）**：需登录态，旧密码校验（async）+
+  新密码复用注册策略，成功后 token_version +1 全量吊销旧会话；找回密码按产品裁定不做
+  （本地单用户场景走云端通行证侧，裁定入档）
+- **Fixed · 客户端接通会话续期（ebd060b）**：useApi 收 401 且持有 refresh token 时
+  POST `/auth/refresh` 换新会话并重试原请求一次，失败清死 token；文档债补齐——
+  refresh 进程内锁的单进程部署约束、FIFO=10 的误伤语义（第 11 端淘汰最旧 jti 后
+  该端刷新被判重放→全量吊销）均有注释说明
+- **Fixed · 10-30 审计修复批入账**（代码已在 6c74dc0/7730b82）：P0-2 打包根因
+  （avatar-manifest 随 PyInstaller 打包 + 三层静默失败转显式诊断通道 + 工坊错误卡片挂载 +
+  extraResources 补 webp/gif + thumbnail 死引用清理）；P1-9 refresh 轮换 + 重放全量吊销 +
+  存量库 ALTER 补列；登录/注册 bcrypt 切 async 变体不再阻塞事件循环
+- **Changed · 桌宠聊天窗令牌化（P1，本批）**：DesktopPetChatView.vue 整套硬编码色值
+  （#a78cdd/#8066d1/#d75f78 等十余处+渐变）全部改消费既有 `--lumi-*` 语义令牌
+  （brand-gradient/danger/text 系），气泡底色与浮窗投影无对应语义故新增
+  `--pet-bubble-bg`/`--pet-bar-shadow` 令牌（亮/暗值配对，随 data-theme 切换）；
+  完成后该文件 0 处裸 hex
+- **Removed · 用户可见 emoji 清理（P2，本批）**：i18n 三语 features.json 21 处
+  （⚠️/🌐/🔒/👥 当图标）删除 emoji 保留文字（scope 三徽章已有配色类区分，
+  scopeOption 三项位于 `<select>` 无法挂图标）；backend `explore_tools.py` 工具分类名
+  8 处 emoji 改纯文本
+- 验证：vue-tsc 0 错误；`py_compile explore_tools.py` 通过；三语 features.json `json.load` 可解析
+
 ## [0.8.5] - 2026-10-13
 
 > 返修批：修复主智能体设置页共享样式引用路径错误（同一错误曾令 v0.8.4 三平台打包全部失败，并在 dev 模式下毒害 vite 模块图——报错遮罩挡住全部交互、定时任务时间轴样式塌陷）；站内信从左上角窄弹层改为居中弹窗。

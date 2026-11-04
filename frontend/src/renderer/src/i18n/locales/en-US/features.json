@@ -42,7 +42,7 @@
       "clearKnowledge": "Clear knowledge memory",
       "clearDailies": "Clear chat history",
       "clearSummary": "Reset AI summary",
-      "resetAll": "Clear all memory ⚠️"
+      "resetAll": "Clear all memory"
     },
     "tracks": {
       "owner": "Blogger Core",
@@ -125,12 +125,12 @@
       "pinned": "Pinned",
       "pin": "Pin (always injected)",
       "unpin": "Unpin",
-      "scopeGlobal": "🌐 Global",
-      "scopePrivate": "🔒 Private",
-      "scopeGroup": "👥 Group",
-      "scopeOptionGlobal": "🌐 Global (public)",
-      "scopeOptionPrivate": "🔒 Private thoughts",
-      "scopeOptionGroup": "👥 Group only",
+      "scopeGlobal": "Global",
+      "scopePrivate": "Private",
+      "scopeGroup": "Group",
+      "scopeOptionGlobal": "Global (public)",
+      "scopeOptionPrivate": "Private thoughts",
+      "scopeOptionGroup": "Group only",
       "scopeTitle": "Privacy isolation",
       "scopePrivateTip": "Private 1-on-1 only: never revealed in group chats",
       "scopeGroupTip": "Public within group chats",

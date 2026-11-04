@@ -42,7 +42,7 @@
       "clearKnowledge": "知識メモリをクリア",
       "clearDailies": "会話履歴をクリア",
       "clearSummary": "AI サマリーをリセット",
-      "resetAll": "すべてのメモリをクリア ⚠️"
+      "resetAll": "すべてのメモリをクリア"
     },
     "tracks": {
       "owner": "配信者自身のメモリ",
@@ -125,12 +125,12 @@
       "pinned": "ピン済み",
       "pin": "ピン留め（常に注入）",
       "unpin": "ピン留め解除",
-      "scopeGlobal": "🌐 グローバル",
-      "scopePrivate": "🔒 非公開",
-      "scopeGroup": "👥 グループ",
-      "scopeOptionGlobal": "🌐 グローバル公開",
-      "scopeOptionPrivate": "🔒 個人的な秘密",
-      "scopeOptionGroup": "👥 グループ限定",
+      "scopeGlobal": "グローバル",
+      "scopePrivate": "非公開",
+      "scopeGroup": "グループ",
+      "scopeOptionGlobal": "グローバル公開",
+      "scopeOptionPrivate": "個人的な秘密",
+      "scopeOptionGroup": "グループ限定",
       "scopeTitle": "プライバシー分離",
       "scopePrivateTip": "1対1の非公開：グループチャットでは決して公開されません",
       "scopeGroupTip": "グループチャット内で公開",

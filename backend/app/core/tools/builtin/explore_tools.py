@@ -137,14 +137,14 @@ class ToolExploreTool(ToolBase):
                 categorized["other"].append(entry)
 
         cat_names = {
-            "memory": "🧠 记忆系统工具 (Memory)",
-            "browser": "🌐 浏览器观察工具 (Browser)",
-            "platform": "💬 跨平台操作工具 (QQ/微信/Discord/Telegram/MC)",
-            "iot": "🏠 IoT 与智能硬件 (MQTT/传感器/终端)",
-            "schedule": "⏰ 定时任务与调度 (Schedule)",
-            "file": "📁 文件与路径检索 (File & Search)",
-            "basic": "⚡ 日常轻量工具 (Time / Weather / CLI)",
-            "other": "🔧 扩展与其它工具 (Other)",
+            "memory": "记忆系统工具 (Memory)",
+            "browser": "浏览器观察工具 (Browser)",
+            "platform": "跨平台操作工具 (QQ/微信/Discord/Telegram/MC)",
+            "iot": "IoT 与智能硬件 (MQTT/传感器/终端)",
+            "schedule": "定时任务与调度 (Schedule)",
+            "file": "文件与路径检索 (File & Search)",
+            "basic": "日常轻量工具 (Time / Weather / CLI)",
+            "other": "扩展与其它工具 (Other)",
         }
 
         if category and category in categorized:

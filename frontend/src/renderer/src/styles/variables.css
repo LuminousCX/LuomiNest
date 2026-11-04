@@ -329,6 +329,12 @@
   --glass-blur: blur(calc(var(--lumi-glass-intensity) * 30px)) saturate(150%);
   --glass-blur-strong: blur(calc(var(--lumi-glass-intensity) * 40px)) saturate(170%);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.50);
+
+  /* ========== 桌宠聊天窗（DesktopPetChatView）专属变量 ==========
+     桌宠气泡底色/浮窗投影无既有语义对应，故设 --pet-* 档；
+     其余（描边/文字/按钮）直接消费 --lumi-* 语义令牌 */
+  --pet-bubble-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.97), rgba(248, 244, 255, 0.95));
+  --pet-bar-shadow: 0 12px 34px rgba(60, 43, 93, 0.22), inset 0 1px rgba(255, 255, 255, 0.90);
 }
 
 /* =========================================================
@@ -471,6 +477,10 @@
   --glass-blur: blur(calc(var(--lumi-glass-intensity) * 30px)) saturate(150%);
   --glass-blur-strong: blur(calc(var(--lumi-glass-intensity) * 40px)) saturate(170%);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+  /* ========== 桌宠聊天窗专属变量（深色） ========== */
+  --pet-bubble-bg: linear-gradient(145deg, rgba(32, 32, 38, 0.97), rgba(24, 24, 30, 0.95));
+  --pet-bar-shadow: 0 12px 34px rgba(0, 0, 0, 0.60), inset 0 1px rgba(255, 255, 255, 0.08);
 
   /* 皮肤强度变量在深色模式下保持由 JS 设置 */
 }
